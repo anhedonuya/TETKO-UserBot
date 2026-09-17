@@ -66,7 +66,7 @@ class KernelLifecycleMixin:
             return
 
         # ═══ Очищаем экран ═══
-        # sys.stdout.write("\033[2J\033[H")  # временно отключено для отладки
+        sys.stdout.write("\033[2J\033[H")
 
         # ═══ Баннер с градиентом ═══
         try:
@@ -187,7 +187,7 @@ class KernelLifecycleMixin:
         import logging
 
         # Draw the fixed UI before any startup output so logs never appear above the banner.
-        # self._boot_status_begin() — заменён на финальный вывод
+        self._boot_status_begin()
         if getattr(self, "logger", None):
             self.logger.debug("TETKO starting")
 
