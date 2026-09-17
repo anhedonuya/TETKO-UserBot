@@ -360,7 +360,7 @@ class KernelLifecycleMixin:
             except Exception:
                 pass
 
-        self.client.set_protection_mode("safe")
+        # set_protection_mode — убран (свой форк Telethon-Tetko)
         modules_start = time.time()
 
         try:

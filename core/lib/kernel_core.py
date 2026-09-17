@@ -24,17 +24,8 @@ except Exception:
         pass
 
 
-# Telethon installation check (KEEP CRASH)────
-try:
-    from telethon import _check_mcub_installation
-
-    _check_mcub_installation()
-except Exception:
-    raise McubTelethonError(
-        "YOU is not install telethon-mcub, please run: "
-        "'pip install -U telethon-mcub' and 'pip uninstall telethon -y'! "
-        "(or update telethon-mcub)"
-    ) from None
+# Telethon installation check — убран (используется свой форк Telethon-Tetko)
+# Для работы требуется: pip install git+https://github.com/anhedonuya/Telethon-Tetko.git
 
 # Core lib imports (graceful - each can fail independently)
 try:
