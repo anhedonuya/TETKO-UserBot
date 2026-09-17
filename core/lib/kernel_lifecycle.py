@@ -24,7 +24,12 @@ try:
     from utils.html_parser import HTML_PARSER_AVAILABLE
 except ImportError:
     HTML_PARSER_AVAILABLE = False
-from telethon import events, install_uvloop
+from telethon import events
+
+
+def install_uvloop():
+    """Заглушка для совместимости. В Telethon-Tetko нет install_uvloop."""
+    return False
 
 from core.lib.loader.kernel_proxy import wrap_event_for_module
 from core.lib.utils import purge_caches
