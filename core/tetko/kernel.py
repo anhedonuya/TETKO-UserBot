@@ -17,7 +17,7 @@ log = logging.getLogger("TETKO.tetko.kernel")
 
 
 class Kernel:
-    """Ядро tetko-compat 0.0.9.0."""
+    """Ядро TETKO (tetko-compat API 0.0.9.0)."""
 
     def __init__(
         self,
@@ -55,7 +55,7 @@ class Kernel:
 
     async def start(self) -> None:
         """Запуск ядра, загрузка модулей и старт событий."""
-        log.info("🚀 Запуск ядра tetko-compat...")
+        log.info("🚀 Запуск ядра TETKO...")
 
         # 1. Загружаем модули из папки modules/
         count = await self.loader.load_all()

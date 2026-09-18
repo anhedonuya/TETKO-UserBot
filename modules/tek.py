@@ -17,7 +17,7 @@ class Tek(Module):
         "show_hidden_count": True,
     }
 
-    @command("tek", aliases=["modules", "mods"], doc="Показать список загруженных модулей")
+    @command("tek", doc="Показать список загруженных модулей")
     async def cmd_tek(self, event):
         loader = getattr(self.client, "loader", None)
         registry = getattr(self.kernel, "registry", None) if hasattr(self, "kernel") and self.kernel else None
@@ -29,7 +29,7 @@ class Tek(Module):
 
         visible_mods = [m for name, m in loaded_mods.items() if name not in hidden]
 
-        text = "🔻 **tetko-compat — Список модулей**\n\n"
+        text = "🔻 **TETKO — Список модулей**\n\n"
         if self.cfg.get("show_hidden_count"):
             text += f"📦 Всего загружено: **{len(loaded_mods)}** | Скрыто: **{len(hidden)}**\n\n"
 
@@ -90,7 +90,7 @@ class Tek(Module):
             f"⏱ **Время работы:** `{hours}ч {minutes}м {seconds}с`\n"
             f"📦 **Активные модули:** `{total_mods}`\n"
             f"🐍 **Версия Python:** `{sys.version.split()[0]}`\n"
-            f"⚡ **Стандарт:** `tetko-compat 0.0.9.0`\n"
+            f"⚡ **Стиль модулей:** `tetko-compat 0.0.9.0`\n"
             f"👥 **Создатели:** @anhedonuya, @flexownerAL"
         )
         await event.edit(text)

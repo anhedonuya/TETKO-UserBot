@@ -14,13 +14,13 @@ class PingModule(Module):
         msg = await event.edit("🔻 **TETKO Pinging...**")
         end = time.perf_counter()
         ms = round((end - start) * 1000, 2)
-        await msg.edit(f"🔻 **tetko-compat**\n⚡ **Пинг:** `{ms} ms`")
+        await msg.edit(f"🔻 **TETKO**\n⚡ **Пинг:** `{ms} ms`")
 
     @command(name="info", description="Информация о системе TETKO")
     async def info_cmd(self, event):
         text = (
             "🔻 **TETKO UserBot**\n"
-            "▫️ **Формат модулей:** tetko-compat v1.0\n"
+            "▫️ **Стиль модулей:** tetko-compat 0.0.9.0\n"
             "▫️ **Авторы:** @anhedonuya, @flexownerAL\n"
             "▫️ **Движок:** Telethon (Pure)"
         )

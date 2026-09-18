@@ -61,3 +61,8 @@ data/tetko_db/
 token.txt
 secrets.json
 tetko.session
+
+# ─── Пользовательские модули (не публикуются) ───
+modules_custom/
+modules_custom/**/*.py
+modules_custom/*.bak

@@ -9,9 +9,12 @@ from pathlib import Path
 from telethon import TelegramClient
 
 from core.tetko import Kernel
+from core.tetko.bot import BotClient
 from core.tetko.banner import render_banner
 
 
+# Приглушаем Telethon (много служебных сообщений)
+logging.getLogger("telethon").setLevel(logging.WARNING)
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - [%(levelname)s] - %(name)s: %(message)s",
@@ -115,6 +118,24 @@ async def main():
     kernel = Kernel(client=client, prefix=prefix, config=cfg)
 
     await kernel.start()
+
+    # ── Запуск inline-бота (если есть токен) ──
+    bot_client = None
+    bot_token = cfg.get("inline_bot_token")
+    if bot_token:
+        try:
+            bot_client = BotClient(
+                api_id=api_id,
+                api_hash=api_hash,
+                bot_token=bot_token,
+                kernel=kernel,
+            )
+            await bot_client.start()
+            kernel.bot_client = bot_client
+            log.info(f"🤖 Inline-бот подключён: @{bot_client.username}")
+        except Exception as e:
+            log.error(f"❌ Не удалось запустить inline-бота: {e}")
+            bot_client = None
 
     os.system("clear")
 

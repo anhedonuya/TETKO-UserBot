@@ -1,4 +1,4 @@
-tetko-compat 0.0.9.0 — Module Writing Guide
+Module Writing Guide for the TETKO kernel (tetko-compat 0.0.9.0)
 ===========================================
 
 This is the module style for TETKO UserBot. If you want to rewrite an old
