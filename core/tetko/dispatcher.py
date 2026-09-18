@@ -74,10 +74,27 @@ class EventDispatcher:
                 log.exception(f"Ошибка ватчера в модуле {module.name}: {e}")
 
     async def handle_callback(self, client: Any, event: Any) -> None:
-        """Обработка inline-кнопок (callback query)."""
+        """Обработка inline-кнопок (callback query).
+
+        Приоритет:
+          1. Временные хендлеры kernel.inline (make_button/form).
+          2. Модульные @callback-хендлеры.
+        """
         data = getattr(event, "data", b"") or b""
         if isinstance(data, bytes):
             data = data.decode("utf-8", errors="replace")
+
+        kernel = getattr(client, "kernel", None)
+        if kernel is not None and hasattr(kernel, "inline"):
+            h = kernel.inline.get_handler(data)
+            if h is not None:
+                func = h["func"]
+                args = h["args"]
+                try:
+                    await func(event, *args)
+                except Exception as e:
+                    log.exception(f"Ошибка inline-хендлера: {e}")
+                return
 
         for module, callback_func in self.registry.list_callbacks():
             try:

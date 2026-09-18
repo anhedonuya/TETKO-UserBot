@@ -9,6 +9,7 @@ from telethon import TelegramClient, events
 
 from core.tetko.context import Context
 from core.tetko.dispatcher import EventDispatcher
+from core.tetko.inline import Inline
 from core.tetko.loader import ModuleLoader
 from core.tetko.registry import Registry
 
@@ -43,6 +44,7 @@ class Kernel:
             prefix=self.prefix,
             context=self.context,
         )
+        self.inline = Inline(kernel=self)
         self._loop_tasks: list[asyncio.Task] = []
 
         # Связываем важные объекты с клиентом Telethon для быстрого доступа из модулей
@@ -63,6 +65,10 @@ class Kernel:
         @self.client.on(events.NewMessage(outgoing=True))
         async def message_handler(event):
             await self.dispatcher.handle_message(self.client, event)
+
+        @self.client.on(events.CallbackQuery())
+        async def callback_handler(event):
+            await self.dispatcher.handle_callback(self.client, event)
 
         # 3. Запускаем фоновые задачи модулей (@loop)
         self._start_loops()

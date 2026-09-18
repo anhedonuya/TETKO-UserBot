@@ -27,6 +27,8 @@ from core.tetko.db import db_get, db_set, db_del, db_list, db_clear
 
 from core.tetko.context import Context
 
+from core.tetko.inline import Inline
+
 __all__ = [
     "Module",
     "command",
@@ -55,4 +57,5 @@ __all__ = [
     "db_list",
     "db_clear",
     "Context",
+    "Inline",
 ]
