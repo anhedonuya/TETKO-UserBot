@@ -1,4 +1,4 @@
-TETKO-COMPAT 0.0.9.0 — Module Writing Guide
+tetko-compat 0.0.9.0 — Module Writing Guide
 ===========================================
 
 This is the module style for TETKO UserBot. If you want to rewrite an old
@@ -181,7 +181,7 @@ If not owner — reply: "🚫 This command is for the owner only."
 9. Full example
 ---------------
 
-    """MyModule — TETKO-COMPAT example module."""
+    """MyModule — tetko-compat example module."""
     from __future__ import annotations
 
     from core.tetko import Module, command, loop, db_get, db_set

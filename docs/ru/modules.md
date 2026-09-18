@@ -1,4 +1,4 @@
-TETKO-COMPAT 0.0.9.0 — гайд по написанию модулей
+tetko-compat 0.0.9.0 — гайд по написанию модулей
 ================================================
 
 Это стиль модулей для TETKO UserBot. Если хочешь переписать старый модуль
@@ -180,7 +180,7 @@ Namespace — обычно имя модуля.
 9. Полный пример
 ----------------
 
-    """MyModule — пример модуля TETKO-COMPAT."""
+    """MyModule — пример модуля tetko-compat."""
     from __future__ import annotations
 
     from core.tetko import Module, command, loop, db_get, db_set

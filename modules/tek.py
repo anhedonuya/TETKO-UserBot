@@ -29,7 +29,7 @@ class Tek(Module):
 
         visible_mods = [m for name, m in loaded_mods.items() if name not in hidden]
 
-        text = "🔻 **TETKO KOMPAT — Список модулей**\n\n"
+        text = "🔻 **tetko-compat — Список модулей**\n\n"
         if self.cfg.get("show_hidden_count"):
             text += f"📦 Всего загружено: **{len(loaded_mods)}** | Скрыто: **{len(hidden)}**\n\n"
 
@@ -90,7 +90,7 @@ class Tek(Module):
             f"⏱ **Время работы:** `{hours}ч {minutes}м {seconds}с`\n"
             f"📦 **Активные модули:** `{total_mods}`\n"
             f"🐍 **Версия Python:** `{sys.version.split()[0]}`\n"
-            f"⚡ **Стандарт:** `TETKO-COMPAT 0.0.9.0`\n"
+            f"⚡ **Стандарт:** `tetko-compat 0.0.9.0`\n"
             f"👥 **Создатели:** @anhedonuya, @flexownerAL"
         )
         await event.edit(text)

@@ -1,4 +1,4 @@
-"""Утилиты сравнения версий для TETKO-COMPAT."""
+"""Утилиты сравнения версий для tetko-compat."""
 from __future__ import annotations
 
 

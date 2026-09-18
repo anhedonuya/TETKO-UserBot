@@ -11,8 +11,8 @@ class Loader(Module):
     version = "1.0.0"
     author = "@anhedonuya & @flexownerAL"
     description = {
-        "ru": "Динамическая загрузка, обновление и выгрузка модулей TETKO-COMPAT",
-        "en": "Dynamic loader for TETKO-COMPAT modules",
+        "ru": "Динамическая загрузка, обновление и выгрузка модулей tetko-compat",
+        "en": "Dynamic loader for tetko-compat modules",
     }
     config = {
         "auto_install_reqs": True,

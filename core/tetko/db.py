@@ -1,4 +1,4 @@
-"""Простое JSON-хранилище для модулей TETKO-COMPAT.
+"""Простое JSON-хранилище для модулей tetko-compat.
 
 Данные раскладываются по namespace (отдельный JSON-файл на каждый).
 Путь по умолчанию: data/tetko_db/{namespace}.json

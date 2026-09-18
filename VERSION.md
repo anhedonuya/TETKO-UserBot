@@ -1,7 +1,7 @@
 # TETKO Version History
 
 ## 0.0.9.5 (2026-09-18)
-- First working release of TETKO-COMPAT kernel
+- First working release of tetko-compat kernel
 - core/tetko: registry, loader, dispatcher, decorators, kernel, module, config
 - main.py reads config.json, session 'tetko'
 - Fixed kernel._start_loops, graceful shutdown, precise sys.modules cleanup

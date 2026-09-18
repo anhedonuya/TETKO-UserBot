@@ -13,7 +13,7 @@
 
     python main.py
 
-## Формат модуля TETKO-COMPAT
+## Формат модуля tetko-compat
 
     from core.tetko import Module, command
 

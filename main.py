@@ -123,7 +123,7 @@ async def main():
     print("  \033[1;92m[>]\033[0m Kernel:  loaded successfully")
     modules = list(kernel.registry.list_modules().keys()) or ["none"]
     print(f"  \033[1;92m[>]\033[0m Modules: {len(modules)} ({', '.join(modules)})")
-    print("  \033[1;92m[>]\033[0m Compat:  TETKO-COMPAT 0.0.9.0")
+    print("  \033[1;92m[>]\033[0m Compat:  tetko-compat 0.0.9.0")
     print(f"  \033[1;92m[>]\033[0m Owner:   {kernel.context.admin_id}")
     print()
     print("\033[1;92mTETKO loaded\033[0m")

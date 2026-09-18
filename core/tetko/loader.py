@@ -19,7 +19,7 @@ log = logging.getLogger("TETKO.tetko.loader")
 
 
 class ModuleLoader:
-    """Загрузчик модулей TETKO-COMPAT."""
+    """Загрузчик модулей tetko-compat."""
 
     def __init__(self, registry: Registry, kernel: Optional[Any] = None):
         self.registry = registry
@@ -64,14 +64,14 @@ class ModuleLoader:
                 f"В файле {path.name} не найден класс, унаследованный от Module"
             )
 
-        # ── Проверка совместимости TETKO-COMPAT ──
+        # ── Проверка совместимости tetko-compat ──
         required = getattr(module_class, "__compat__", None)
         if required:
             from core.tetko import __compat__ as kernel_compat
             from core.tetko.version_utils import check_compat
             if not check_compat(required, kernel_compat):
                 raise ModuleValidationError(
-                    f"Модуль {mod_name} требует TETKO-COMPAT >= {required}, "
+                    f"Модуль {mod_name} требует tetko-compat >= {required}, "
                     f"а ядро предоставляет {kernel_compat}"
                 )
 
