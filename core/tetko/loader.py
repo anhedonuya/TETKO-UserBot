@@ -1,189 +1,137 @@
-"""Loader — загрузчик TETKO-модулей."""
+"""Loader — загрузчик модулей TETKO."""
 from __future__ import annotations
 
 import importlib.util
-import inspect
 import logging
 import sys
-import traceback
 from pathlib import Path
 from typing import Any, Optional
 
-from core.tetko.module import Module
-from core.tetko.registry import Registry, Command
 from core.tetko.exceptions import (
     ModuleLoadError,
+    ModuleNotFoundError,
     ModuleValidationError,
 )
+from core.tetko.module import Module
+from core.tetko.registry import Command, Registry
 
 log = logging.getLogger("TETKO.tetko.loader")
 
 
-class Loader:
-    """Загрузчик модулей TETKO."""
+class ModuleLoader:
+    """Загрузчик модулей TETKO-COMPAT."""
 
-    def __init__(self, registry: Registry, kernel: Optional[Any] = None,
-                 modules_dir: str = "modules",
-                 custom_dir: str = "modules_custom"):
+    def __init__(self, registry: Registry, kernel: Optional[Any] = None):
         self.registry = registry
         self.kernel = kernel
-        self.modules_dir = Path(modules_dir)
-        self.custom_dir = Path(custom_dir)
-        self._loaded_files: dict[str, Path] = {}  # module_name → file_path
+        self.modules_dir = Path("modules")
+        self.modules_dir.mkdir(parents=True, exist_ok=True)
 
-    # ═══════════════════════════════════════
-    #   ЗАГРУЗКА
-    # ═══════════════════════════════════════
-    def load_all(self) -> int:
-        """Загрузить все модули из modules/ и modules_custom/."""
-        count = 0
-        for directory in (self.modules_dir, self.custom_dir):
-            if not directory.exists():
-                continue
-            for path in sorted(directory.glob("*.py")):
-                if path.name.startswith("_"):
-                    continue
-                if self._load_file(path):
-                    count += 1
-        log.info(f"[loader] Загружено модулей: {count}")
-        return count
+    async def load_module_from_file(self, file_path: str | Path) -> Module:
+        """Загрузить модуль из .py файла."""
+        path = Path(file_path)
+        if not path.exists():
+            raise ModuleNotFoundError(f"Файл {path} не найден")
 
-    def load_file(self, path: str | Path) -> bool:
-        """Загрузить один модуль."""
-        p = Path(path)
-        if not p.exists():
-            p = self.modules_dir / p
-        if not p.exists():
-            raise ModuleLoadError(f"Файл не найден: {path}")
-        return self._load_file(p)
-
-    # ═══════════════════════════════════════
-    #   ВНУТРЕННЕЕ
-    # ═══════════════════════════════════════
-    def _load_file(self, path: Path) -> bool:
-        """Импортировать файл, найти классы Module, зарегистрировать."""
-        module_name = f"tetko_mod_{path.stem}"
+        mod_name = path.stem
+        module_spec_name = f"tetko_user_modules.{mod_name}"
 
         try:
-            spec = importlib.util.spec_from_file_location(module_name, path)
+            spec = importlib.util.spec_from_file_location(module_spec_name, path)
             if spec is None or spec.loader is None:
-                raise ModuleLoadError(f"Не могу создать spec для {path}")
+                raise ModuleLoadError(f"Не удалось создать spec для {path}")
 
-            mod = importlib.util.module_from_spec(spec)
-
-            # Инжектим тетко-API в модуль (для удобства)
-            mod.__dict__["tetko_module"] = Module
-            from core.tetko.decorators import command, watcher, callback, loop
-            mod.__dict__["command"] = command
-            mod.__dict__["watcher"] = watcher
-            mod.__dict__["callback"] = callback
-            mod.__dict__["loop"] = loop
-
-            sys.modules[module_name] = mod
-            spec.loader.exec_module(mod)
+            py_module = importlib.util.module_from_spec(spec)
+            sys.modules[module_spec_name] = py_module
+            spec.loader.exec_module(py_module)
         except Exception as e:
-            log.error(f"[!] Ошибка импорта {path.name}:\n{traceback.format_exc()}")
-            return False
+            log.error(f"Ошибка выполнения файла {path}: {e}")
+            raise ModuleLoadError(f"Ошибка синтаксиса/выполнения {mod_name}: {e}") from e
 
-        # Ищем классы-наследники Module
-        found_any = False
-        for _, obj in inspect.getmembers(mod, inspect.isclass):
-            if obj is Module:
-                continue
-            if not issubclass(obj, Module):
-                continue
+        module_class = None
+        for attr_name in dir(py_module):
+            attr = getattr(py_module, attr_name)
+            if (
+                isinstance(attr, type)
+                and issubclass(attr, Module)
+                and attr is not Module
+            ):
+                module_class = attr
+                break
 
-            try:
-                instance = obj(self.kernel)
-                self._register_instance(instance)
-                found_any = True
-            except Exception as e:
-                log.error(f"[!] Ошибка создания {obj.__name__}: {e}")
-                log.error(traceback.format_exc())
-
-        if not found_any:
-            log.warning(f"[?] В {path.name} не найден класс-наследник Module")
-
-        return found_any
-
-    def _register_instance(self, module: Module) -> None:
-        """Зарегистрировать модуль и его команды в Registry."""
-        # Валидация
-        if not module.name or module.name == "Unnamed":
+        if not module_class:
             raise ModuleValidationError(
-                f"Модуль {module.__class__.__name__} без имени"
+                f"В файле {path.name} не найден класс, унаследованный от Module"
             )
 
-        # Регистрация модуля
-        self.registry.register_module(module)
+        mod_instance = module_class(kernel=self.kernel)
+        self.registry.register_module(mod_instance)
 
-        # Собираем команды / watchers / callbacks / loops
-        for attr_name in dir(module):
-            attr = getattr(module, attr_name)
+        for attr_name in dir(mod_instance):
+            attr = getattr(mod_instance, attr_name)
 
-            # Команды
-            meta = getattr(attr, "__tetko_command__", None)
-            if meta:
+            cmd_meta = getattr(attr, "__tetko_command__", None)
+            if cmd_meta:
                 cmd = Command(
-                    name=meta["name"],
+                    name=cmd_meta["name"],
                     func=attr,
-                    module=module,
-                    aliases=meta["aliases"],
-                    doc=meta["doc"],
-                    **meta.get("kwargs", {}),
+                    module=mod_instance,
+                    aliases=cmd_meta["aliases"],
+                    doc=cmd_meta["doc"],
+                    **cmd_meta["kwargs"],
                 )
-                try:
-                    self.registry.register_command(cmd)
-                except Exception as e:
-                    log.error(f"[!] Не могу зарегистрировать .{cmd.name}: {e}")
+                self.registry.register_command(cmd)
 
-            # Watchers
-            if getattr(attr, "__tetko_watcher__", None):
-                self.registry.register_watcher(module, attr)
+            if hasattr(attr, "__tetko_watcher__"):
+                self.registry.register_watcher(mod_instance, attr)
 
-            # Callbacks
-            if getattr(attr, "__tetko_callback__", None):
-                self.registry.register_callback(module, attr)
+            if hasattr(attr, "__tetko_callback__"):
+                self.registry.register_callback(mod_instance, attr)
 
-            # Loops
             loop_meta = getattr(attr, "__tetko_loop__", None)
             if loop_meta:
                 self.registry.register_loop(
-                    module, attr, loop_meta.get("interval", 60)
+                    mod_instance, attr, loop_meta["interval"]
                 )
 
-    # ═══════════════════════════════════════
-    #   ВЫГРУЗКА
-    # ═══════════════════════════════════════
-    async def unload(self, module_name: str) -> bool:
-        """Выгрузить модуль (снять с регистрации + on_unload)."""
-        module = self.registry.get_module(module_name)
-        if module is None:
-            log.warning(f"[loader] Модуль {module_name} не найден")
+        try:
+            await mod_instance.on_load()
+        except Exception as e:
+            log.error(f"Ошибка в on_load модуля {mod_instance.name}: {e}")
+
+        log.info(f"✅ Модуль {mod_instance.name} успешно загружен")
+        return mod_instance
+
+    async def unload_module(self, name: str) -> bool:
+        """Выгрузить модуль по имени."""
+        mod = self.registry.get_module(name)
+        if not mod:
             return False
 
         try:
-            await module.on_unload()
+            await mod.on_unload()
         except Exception as e:
-            log.error(f"[!] on_unload упал в {module_name}: {e}")
+            log.error(f"Ошибка в on_unload модуля {name}: {e}")
 
-        self.registry.unregister_module(module_name)
+        self.registry.unregister_module(name)
+
+        to_del = [m for m in sys.modules if m.startswith("tetko_user_modules.")]
+        for m in to_del:
+            if m.endswith(f".{name}") or name in m:
+                del sys.modules[m]
+
+        log.info(f"🗑 Модуль {name} выгружен")
         return True
 
-    async def reload(self, module_name: str) -> bool:
-        """Перезагрузить модуль (нужно имя файла, не класса)."""
-        module = self.registry.get_module(module_name)
-        if module is None:
-            log.warning(f"[loader] Модуль {module_name} не найден")
-            return False
-
-        # Ищем файл по имени класса
-        filename = f"{module_name.lower()}.py"
-        for d in (self.modules_dir, self.custom_dir):
-            path = d / filename
-            if path.exists():
-                await self.unload(module_name)
-                return self._load_file(path)
-
-        log.warning(f"[loader] Файл для {module_name} не найден")
-        return False
+    async def load_all(self) -> int:
+        """Загрузить все .py модули из папки modules/."""
+        count = 0
+        for p in self.modules_dir.glob("*.py"):
+            if p.name.startswith("_"):
+                continue
+            try:
+                await self.load_module_from_file(p)
+                count += 1
+            except Exception as e:
+                log.error(f"Ошибка загрузки {p.name}: {e}")
+        return count
