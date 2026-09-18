@@ -7,6 +7,7 @@ from core.tetko import Module, command
 
 class Loader(Module):
     name = "Loader"
+    __compat__ = "0.0.9.0"
     version = "1.0.0"
     author = "@anhedonuya & @flexownerAL"
     description = {

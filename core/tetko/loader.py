@@ -64,6 +64,17 @@ class ModuleLoader:
                 f"В файле {path.name} не найден класс, унаследованный от Module"
             )
 
+        # ── Проверка совместимости TETKO-COMPAT ──
+        required = getattr(module_class, "__compat__", None)
+        if required:
+            from core.tetko import __compat__ as kernel_compat
+            from core.tetko.version_utils import check_compat
+            if not check_compat(required, kernel_compat):
+                raise ModuleValidationError(
+                    f"Модуль {mod_name} требует TETKO-COMPAT >= {required}, "
+                    f"а ядро предоставляет {kernel_compat}"
+                )
+
         mod_instance = module_class(kernel=self.kernel)
         self.registry.register_module(mod_instance)
 

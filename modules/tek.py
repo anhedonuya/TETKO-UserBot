@@ -6,6 +6,7 @@ START_TIME = time.time()
 
 class Tek(Module):
     name = "Tek"
+    __compat__ = "0.0.9.0"
     version = "1.0.0"
     author = "@anhedonuya & @flexownerAL"
     description = {

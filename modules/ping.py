@@ -3,6 +3,7 @@ from core.tetko import Module, command
 
 class PingModule(Module):
     name = "Ping"
+    __compat__ = "0.0.9.0"
     description = "Проверка задержки и состояния TETKO Юзербота"
     author = "@anhedonuya"
     version = "1.0.0"
