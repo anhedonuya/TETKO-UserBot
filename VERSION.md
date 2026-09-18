@@ -1,5 +1,12 @@
 # TETKO Version History
 
+## 0.0.9.6 (2026-09-19)
+- Inline menus with edit-in-place
+- naming: TETKO = kernel, tetko-compat = module style
+- DLM: inline + auto-update + edit-in-place
+- loader: unlm command
+- .gitignore: modules_custom/
+
 ## 0.0.9.5 (2026-09-18)
 - First working release of tetko-compat kernel
 - core/tetko: registry, loader, dispatcher, decorators, kernel, module, config
