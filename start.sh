@@ -1,3 +1,3 @@
-#!/data/data/com.termux/files/usr/bin/bash
-cd ~/TETKO_developing
+#!/usr/bin/env bash
+cd "$(dirname "$0")"
 exec python main.py
