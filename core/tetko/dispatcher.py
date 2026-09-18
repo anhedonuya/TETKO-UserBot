@@ -2,8 +2,9 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, Optional
 
+from core.tetko.context import Context
 from core.tetko.registry import Registry
 
 log = logging.getLogger("TETKO.tetko.dispatcher")
@@ -12,9 +13,15 @@ log = logging.getLogger("TETKO.tetko.dispatcher")
 class EventDispatcher:
     """Диспетчер команд, ватчеров и колбэков."""
 
-    def __init__(self, registry: Registry, prefix: str = "."):
+    def __init__(
+        self,
+        registry: Registry,
+        prefix: str = ".",
+        context: Optional[Context] = None,
+    ):
         self.registry = registry
         self.prefix = prefix
+        self.context = context
 
     async def handle_message(self, client: Any, event: Any) -> None:
         """Обработка входящих сообщений Telegram."""
@@ -30,8 +37,18 @@ class EventDispatcher:
 
                 command = self.registry.find_command(cmd_name)
                 if command:
+                    # ── Проверка прав ──
+                    if command.only_for == "owner":
+                        sender_id = getattr(event, "sender_id", None)
+                        if self.context is None or not self.context.is_owner(sender_id):
+                            try:
+                                await event.edit("🚫 Эта команда только для владельца.")
+                            except Exception:
+                                pass
+                            return
+
                     try:
-                        # Прокидываем client в модуль (некоторые модули его ждут)
+                        # Прокидываем client в модуль
                         if hasattr(command.module, "client"):
                             try:
                                 command.module.client = client
@@ -49,7 +66,7 @@ class EventDispatcher:
                             pass
                     return
 
-        # 2. Watchers (реакция на все сообщения)
+        # 2. Watchers
         for module, watcher_func in self.registry.list_watchers():
             try:
                 await watcher_func(event)

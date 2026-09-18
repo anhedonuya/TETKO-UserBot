@@ -22,6 +22,7 @@ class Command:
         module: Any,
         aliases: list[str] | None = None,
         doc: Any = "",
+        only_for: str | None = None,
         **kwargs: Any,
     ):
         self.name = name
@@ -29,6 +30,7 @@ class Command:
         self.module = module
         self.aliases: list[str] = list(aliases or [])
         self.doc = doc
+        self.only_for = only_for
         self.kwargs = kwargs
 
     async def call(self, client, event, args: list[str]):

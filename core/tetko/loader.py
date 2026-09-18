@@ -89,6 +89,7 @@ class ModuleLoader:
                     module=mod_instance,
                     aliases=cmd_meta["aliases"],
                     doc=cmd_meta["doc"],
+                    only_for=cmd_meta.get("only_for"),
                     **cmd_meta["kwargs"],
                 )
                 self.registry.register_command(cmd)

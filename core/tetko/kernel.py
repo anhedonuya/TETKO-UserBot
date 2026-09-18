@@ -7,6 +7,7 @@ from typing import Any, Optional
 
 from telethon import TelegramClient, events
 
+from core.tetko.context import Context
 from core.tetko.dispatcher import EventDispatcher
 from core.tetko.loader import ModuleLoader
 from core.tetko.registry import Registry
@@ -21,18 +22,34 @@ class Kernel:
         self,
         client: TelegramClient,
         prefix: str = ".",
+        config: dict | None = None,
     ):
         self.client = client
         self.prefix = prefix
+        self.config = dict(config or {})
+
+        # Контекст ядра: admin_id, prefix, language, config, handle_error
+        self.context = Context(
+            admin_id=self.config.get("admin_id") or self.config.get("owner_id"),
+            prefix=prefix,
+            language=self.config.get("language", "ru"),
+            config=self.config,
+        )
+
         self.registry = Registry()
         self.loader = ModuleLoader(registry=self.registry, kernel=self)
-        self.dispatcher = EventDispatcher(registry=self.registry, prefix=self.prefix)
+        self.dispatcher = EventDispatcher(
+            registry=self.registry,
+            prefix=self.prefix,
+            context=self.context,
+        )
         self._loop_tasks: list[asyncio.Task] = []
 
         # Связываем важные объекты с клиентом Telethon для быстрого доступа из модулей
         self.client.kernel = self
         self.client.loader = self.loader
         self.client.registry = self.registry
+        self.client.context = self.context
 
     async def start(self) -> None:
         """Запуск ядра, загрузка модулей и старт событий."""

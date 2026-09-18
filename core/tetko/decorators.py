@@ -10,6 +10,7 @@ def command(
     aliases: Optional[list[str]] = None,
     doc: Any = "",
     description: Any = None,
+    only_for: Optional[str] = None,
     **kwargs: Any,
 ) -> Callable:
     """@command — регистрация команды.
@@ -18,16 +19,17 @@ def command(
         name: имя команды (без префикса). Если не задано — берётся из имени функции.
         aliases: список альтернативных имён.
         doc / description: описание команды (синонимы).
+        only_for: "owner" — только владелец может вызвать; None — всем.
         **kwargs: дополнительные параметры (передаются в Command).
     """
     def decorator(func: Callable) -> Callable:
         cmd_name = name or func.__name__.replace("cmd_", "")
-        # description — приоритетнее, но если не задан, берём doc
         final_doc = description if description is not None else doc
         func.__tetko_command__ = {
             "name": cmd_name,
             "aliases": list(aliases or []),
             "doc": final_doc,
+            "only_for": only_for,
             "kwargs": kwargs,
         }
         return func

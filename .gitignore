@@ -55,3 +55,9 @@ session/
 *.session
 *.session-journal
 *.token_marker
+
+# ─── TETKO: дополнительные защиты ───
+data/tetko_db/
+token.txt
+secrets.json
+tetko.session
