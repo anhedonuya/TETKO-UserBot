@@ -47,7 +47,6 @@ desktop.ini
 *.tmp
 .cache/
 .pytest_cache/
-.release_version
 
 # ─── Sessions (никогда не пушить!) ───
 sessions/
