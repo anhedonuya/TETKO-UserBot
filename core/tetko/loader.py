@@ -115,10 +115,8 @@ class ModuleLoader:
 
         self.registry.unregister_module(name)
 
-        to_del = [m for m in sys.modules if m.startswith("tetko_user_modules.")]
-        for m in to_del:
-            if m.endswith(f".{name}") or name in m:
-                del sys.modules[m]
+        full_name = f"tetko_user_modules.{name}"
+        sys.modules.pop(full_name, None)
 
         log.info(f"🗑 Модуль {name} выгружен")
         return True

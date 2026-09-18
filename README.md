@@ -1,9 +1,26 @@
 # TETKO UserBot
 
-Test update для автообновления. Версия 0.0.7.0.
+Версия **0.0.9.5**. Юзербот для Telegram на базе Telethon-Tetko.
 
-Юзербот для Telegram на базе Telethon-MCUB.
+Ядро: **TETKO 0.0.9.0**
 
 ## Авторы
+
 - @flexownerAL
 - @anhedonuya
+
+## Запуск
+
+    python main.py
+
+## Формат модуля TETKO-COMPAT
+
+    from core.tetko import Module, command
+
+    class MyModule(Module):
+        name = "MyModule"
+        version = "1.0.0"
+
+        @command(name="hello")
+        async def hello_cmd(self, event):
+            await event.edit("Привет!")

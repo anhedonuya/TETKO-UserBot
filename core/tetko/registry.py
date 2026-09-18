@@ -6,7 +6,7 @@ from typing import Any, Callable, Optional
 
 from core.tetko.exceptions import (
     ModuleRegistrationError,
-    CommandError,
+    CommandRegistrationError,
 )
 
 log = logging.getLogger("TETKO.tetko.registry")
@@ -32,16 +32,22 @@ class Command:
         self.kwargs = kwargs
 
     async def call(self, client, event, args: list[str]):
-        """Вызвать команду."""
+        """Вызвать команду, подбирая аргументы по её сигнатуре."""
         import inspect
         sig = inspect.signature(self.func)
         params = list(sig.parameters.values())
-        
-        # func(self, event) — bound method
-        # func(self, event, args)
-        if len(params) >= 2:
-            return await self.func(event, args)
-        return await self.func(event)
+
+        # bound method — self уже связан, params содержит только реальные аргументы
+        # Ожидаемые варианты:
+        #   (event)          → func(event)
+        #   (event, args)    → func(event, args)
+        #   (event, text)    → func(event, args)   # args как список
+        if len(params) == 0:
+            return await self.func()
+        if len(params) == 1:
+            return await self.func(event)
+        # >= 2 — передаём event + args
+        return await self.func(event, args)
 
     def __repr__(self) -> str:
         return f"<Command .{self.name} ({self.module.name})>"
@@ -113,7 +119,7 @@ class Registry:
         key = cmd.name.lower()
         if key in self._commands:
             existing = self._commands[key]
-            raise CommandError(
+            raise CommandRegistrationError(
                 f"Команда .{key} уже зарегистрирована "
                 f"модулем {existing.module.name!r}"
             )

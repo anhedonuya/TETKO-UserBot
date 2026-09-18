@@ -52,7 +52,7 @@ class Kernel:
 
         log.info("✅ Ядро TETKO полностью инициализировано и готово!")
 
-    def _start_loops() -> None:
+    def _start_loops(self) -> None:
         """Запуск фоновых периодических функций модулей."""
         for module, func, interval in self.registry.list_loops():
             async def loop_runner(m=module, f=func, i=interval):
@@ -71,8 +71,12 @@ class Kernel:
     async def stop(self) -> None:
         """Остановка ядра и корректная выгрузка модулей."""
         log.info("🛑 Остановка ядра TETKO...")
+
+        # Отменяем фоновые задачи и ждём их завершения
         for task in self._loop_tasks:
             task.cancel()
+        if self._loop_tasks:
+            await asyncio.gather(*self._loop_tasks, return_exceptions=True)
         self._loop_tasks.clear()
 
         # Выгружаем модули

@@ -12,7 +12,7 @@ import time
 import aiohttp
 
 # version kernel TETKO
-__version__ = "0.0.8.8"
+__version__ = "0.0.9.5"
 VERSION = __version__
 
 
