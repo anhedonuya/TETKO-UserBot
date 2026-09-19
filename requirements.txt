@@ -5,3 +5,4 @@ psutil==7.2.2
 python-socks[asyncio]==2.8.1
 pysocks==1.7.1
 cryptg==0.6.0
+Pillow>=10.0.0

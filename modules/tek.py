@@ -8,6 +8,15 @@ from core.tetko import Module, command, db_get, db_set
 START_TIME = time.time()
 log = logging.getLogger("TETKO.module.tek")
 
+
+def _esc(text) -> str:
+    """HTML escape."""
+    return (
+        str(text).replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+    )
+
 # Премиум-эмодзи
 EMOJI_SYS = '<tg-emoji emoji-id="6012473147998084083">🙏</tg-emoji>'
 EMOJI_USER = '<tg-emoji emoji-id="5208774197278447727">❤️</tg-emoji>'
@@ -425,6 +434,65 @@ class Tek(Module):
             )
 
     # ── ИНФО О СИСТЕМЕ ──
+    @command(
+        name="setprefix",
+        aliases=["prefix"],
+        description="Сменить префикс команд",
+        only_for="owner",
+    )
+    async def cmd_setprefix(self, event, args):
+        """Сменить префикс команд. Использование: .setprefix <символ>"""
+        if not args:
+            cur = self.kernel.prefix
+            await event.edit(
+                f"ℹ️ Текущий префикс: <code>{_esc(cur)}</code>\n"
+                "Использование: <code>.setprefix &lt;символ&gt;</code>",
+                parse_mode="html",
+            )
+            return
+
+        new_prefix = args[0].strip()
+
+        # проверки
+        if not new_prefix:
+            await event.edit("❌ Префикс не может быть пустым", parse_mode="html")
+            return
+        if len(new_prefix) > 3:
+            await event.edit("❌ Префикс слишком длинный (макс 3 символа)", parse_mode="html")
+            return
+        if new_prefix.isspace():
+            await event.edit("❌ Префикс не может быть пробелом", parse_mode="html")
+            return
+
+        old_prefix = self.kernel.prefix
+
+        # применяем в рантайме
+        self.kernel.prefix = new_prefix
+        self.kernel.context.prefix = new_prefix
+        if hasattr(self.kernel, "dispatcher"):
+            self.kernel.dispatcher.prefix = new_prefix
+
+        # сохраняем в config.json
+        try:
+            import json
+            from pathlib import Path as _Path
+            cfg_path = _Path("config.json")
+            if cfg_path.exists():
+                cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+                cfg["command_prefix"] = new_prefix
+                cfg_path.write_text(
+                    json.dumps(cfg, ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
+        except Exception as e:
+            self.log.warning(f"setprefix: save failed: {e}")
+
+        await event.edit(
+            f"✅ Префикс изменён: <code>{_esc(old_prefix)}</code> → "
+            f"<code>{_esc(new_prefix)}</code>",
+            parse_mode="html",
+        )
+
     @command(name="tekcfg", description="Состояние системы")
     async def cmd_tekcfg(self, event, args):
         uptime = round(time.time() - START_TIME)
