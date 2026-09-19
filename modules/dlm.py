@@ -334,6 +334,18 @@ class DLMModule(Module):
         if bot is None:
             return
 
+        # topic_id — для форумов
+        topic_id = None
+        try:
+            rt = getattr(cb_event, "reply_to", None)
+            if rt is not None:
+                topic_id = (
+                    getattr(rt, "reply_to_top_id", None)
+                    or getattr(rt, "reply_to_msg_id", None)
+                )
+        except Exception:
+            pass
+
         # chat_id = 0 у inline-callback → не валидный
         peer = getattr(cb_event, "chat_id", None)
 
@@ -377,6 +389,7 @@ class DLMModule(Module):
                     key=f"dlm_menu_{int(time.time())}",
                     text=text,
                     buttons=buttons,
+                    topic_id=topic_id,
                 )
         except Exception as e:
             self.log.warning(f"_send_menu_via_bot failed: {e}")

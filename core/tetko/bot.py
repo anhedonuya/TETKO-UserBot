@@ -195,6 +195,7 @@ class BotClient:
         text: str,
         buttons: list[list[dict]],
         query: str | None = None,
+        topic_id: int | None = None,
     ):
         """Отправить меню в чат через inline-бота.
 
@@ -240,7 +241,21 @@ class BotClient:
             InlineResult(userbot, r, results.query_id)
             for r in results.results
         ]
-        message = await inline_results[0].click(chat_id)
+        # если topic_id — используем reply_to с top_msg_id
+        if topic_id:
+            from telethon.tl.types import InputReplyToMessage
+            reply_to_obj = InputReplyToMessage(
+                reply_to_msg_id=topic_id,
+                top_msg_id=topic_id,
+            )
+            message = await userbot(SendInlineBotResultRequest(
+                peer=peer,
+                query_id=results.query_id,
+                id=results.results[0].id,
+                reply_to=reply_to_obj,
+            ))
+        else:
+            message = await inline_results[0].click(chat_id)
 
         # ждём inline_message_id из UpdateBotInlineSend
         imid = None

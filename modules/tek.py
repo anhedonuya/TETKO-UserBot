@@ -91,6 +91,21 @@ def _parse_folder(name: str) -> str:
 
 
 class Tek(Module):
+
+    @staticmethod
+    def _get_topic_id(event) -> int | None:
+        """Извлечь top_msg_id топика (для форумов)."""
+        try:
+            rt = getattr(event, "reply_to", None)
+            if rt is None:
+                return None
+            return (
+                getattr(rt, "reply_to_top_id", None)
+                or getattr(rt, "reply_to_msg_id", None)
+            )
+        except Exception:
+            return None
+
     name = "Tek"
     __compat__ = "0.0.9.0"
     version = "2.0.0"
@@ -177,6 +192,7 @@ class Tek(Module):
         await self._show_help(event)
 
     async def _show_help(self, event_or_cb, is_cb: bool = False):
+        topic_id = self._get_topic_id(event_or_cb)
         """Главное меню: с какими модулями нужна помощь?"""
         bot = getattr(self.kernel, "bot_client", None)
         if bot is None:
@@ -218,6 +234,7 @@ class Tek(Module):
                 key=f"tek_help_{int(time.time())}",
                 text=text,
                 buttons=buttons,
+                topic_id=topic_id,
             )
 
     # ── СПИСОК МОДУЛЕЙ ──
@@ -326,6 +343,7 @@ class Tek(Module):
         await self._show_hide(event)
 
     async def _show_hide(self, event_or_cb, is_cb: bool = False, page: int = 0):
+        topic_id = self._get_topic_id(event_or_cb)
         bot = getattr(self.kernel, "bot_client", None)
         if bot is None:
             return
@@ -431,6 +449,7 @@ class Tek(Module):
                 key=f"tek_hide_{int(time.time())}",
                 text=text,
                 buttons=rows,
+                topic_id=topic_id,
             )
 
     # ── ИНФО О СИСТЕМЕ ──
