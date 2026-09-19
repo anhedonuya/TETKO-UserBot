@@ -7,22 +7,41 @@ import os
 import sys
 from pathlib import Path
 
-from core.tetko import Module, command
+from core.tetko import Module, command, db_get, db_set, db_del
 
 log = logging.getLogger("TETKO.module.updates")
 
-# корень проекта (../ от modules/)
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 class UpdatesModule(Module):
     name = "Updates"
     __compat__ = "0.0.9.0"
-    version = "1.0.0"
+    version = "1.1.0"
     author = "@anhedonuya"
     description = "Авто-обновление и перезапуск TETKO"
 
-    # ── emoji ──
+    async def on_load(self):
+        pending = db_get("updates", "pending_reload")
+        if not pending:
+            return
+        chat_id = pending.get("chat_id")
+        message_id = pending.get("message_id")
+        if chat_id is None or message_id is None:
+            db_del("updates", "pending_reload")
+            return
+        try:
+            await self.client.edit_message(
+                chat_id,
+                message_id,
+                "<blockquote><b>✅ Ваша тетенька успешно перезагрузилась!!</b></blockquote>",
+                parse_mode="html",
+            )
+            log.info(f"updates: pending reload message edited ({chat_id}/{message_id})")
+        except Exception as e:
+            log.warning(f"updates: pending reload edit failed: {e}")
+        db_del("updates", "pending_reload")
+
     def _emoji(self) -> dict:
         premium = bool(getattr(self.kernel.context, "user_premium", False))
         if premium:
@@ -45,7 +64,6 @@ class UpdatesModule(Module):
             "err": "👾",
         }
 
-    # ── helpers ──
     def _branch(self) -> str:
         try:
             return self.kernel.config.get("branch", "main")
@@ -53,7 +71,6 @@ class UpdatesModule(Module):
             return "main"
 
     def _restart(self):
-        """Полный перезапуск процесса (main.py)."""
         try:
             os.execv(sys.executable, [sys.executable, str(REPO_ROOT / "main.py")])
         except Exception as e:
@@ -67,7 +84,6 @@ class UpdatesModule(Module):
             .replace(">", "&gt;")
         )
 
-    # ── .update ──
     @command(
         name="update",
         aliases=["upd"],
@@ -79,11 +95,10 @@ class UpdatesModule(Module):
         branch = self._branch()
 
         await event.edit(
-            f"{e['think']} <b>Щаща погоди я обновы сматрю!!</b> {e['hourglass']}",
+            f"<blockquote>{e['think']} <b>Щаща погоди я обновы сматрю!!</b> {e['hourglass']}</blockquote>",
             parse_mode="html",
         )
 
-        # git pull
         try:
             proc = await asyncio.create_subprocess_exec(
                 "git", "pull", "origin", branch,
@@ -99,10 +114,9 @@ class UpdatesModule(Module):
                 proc.kill()
                 await proc.communicate()
                 await event.edit(
-                    f"{e['err']} <b>Ошибка:</b> <code>git pull timeout (60s)</code>",
+                    f"<blockquote>{e['err']} <b>Ошибка:</b> <code>git pull timeout (60s)</code></blockquote>",
                     parse_mode="html",
                 )
-                self.log_to_chat(f"⬆️ update: git pull timeout")
                 return
 
             stdout = stdout_b.decode(errors="replace")
@@ -112,47 +126,39 @@ class UpdatesModule(Module):
         except Exception as ex:
             log.exception("update: git pull failed")
             await event.edit(
-                f"{e['err']} <b>Ошибка:</b> <code>{self._esc(str(ex))}</code>",
+                f"<blockquote>{e['err']} <b>Ошибка:</b> <code>{self._esc(str(ex))}</code></blockquote>",
                 parse_mode="html",
             )
-            await self.kernel.log_to_chat(f"👾 update failed: {ex}")
             return
 
         if rc != 0:
             err_text = (stderr or stdout).strip()[:300]
             await event.edit(
-                f"{e['err']} <b>git pull failed:</b>\n<code>{self._esc(err_text)}</code>",
+                f"<blockquote>{e['err']} <b>git pull failed:</b>\n"
+                f"<code>{self._esc(err_text)}</code></blockquote>",
                 parse_mode="html",
-            )
-            await self.kernel.log_to_chat(
-                f"👾 update: git pull failed:\n<code>{self._esc(err_text)}</code>"
             )
             return
 
-        # проверка на "Already up to date"
         combined = (stdout + stderr).lower()
         if "already up to date" in combined or "already up-to-date" in combined:
             await event.edit(
-                f"{e['ok']} <b>Зачем???? У тя последняя версия TETKO!!!</b>",
+                f"<blockquote>{e['ok']} <b>Зачем???? У тя последняя версия TETKO!!!</b></blockquote>",
                 parse_mode="html",
-            )
-            await self.kernel.log_to_chat(
-                f"👍 update: уже актуально ({branch})"
             )
             return
 
-        # успех
+        # сохраняем сообщение, чтобы после рестарта отредактировать
+        db_set("updates", "pending_reload", {
+            "chat_id": event.chat_id,
+            "message_id": event.message.id,
+        })
+
         await event.edit(
-            f"{e['ok']} <b>Обновление успешно!</b>\n"
-            f"{e['tetko']} <b>Перезапуск...</b>",
+            f"<blockquote>{e['ok']} <b>Обновление успешно!</b>\n"
+            f"{e['tetko']} <b>Перезапуск...</b></blockquote>",
             parse_mode="html",
-        )
-        await self.kernel.log_to_chat(
-            f"👍 update: успешно ({branch})\n"
-            f"<pre>{self._esc(stdout[:500])}</pre>"
         )
 
         await asyncio.sleep(2)
         self._restart()
-
-    # .restart — удалён, используйте .restart из loader.py
