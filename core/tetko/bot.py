@@ -259,12 +259,42 @@ class BotClient:
                 for btn in row:
                     token = btn["token"]
                     self._inlines[token] = imid
+
+            # если в тексте есть <tg-emoji> — пересылаем через edit
+            # (InputBotInlineMessageText игнорирует custom_emoji)
+            if "<tg-emoji" in text:
+                try:
+                    result = await self.edit_inline_menu(imid, text, buttons)
+                except Exception as e:
+                    import traceback
         return message
 
     # ─── Обработчики ───
     async def _handle_inline(self, event) -> None:
         """Обработка inline-запросов от юзербота."""
         query = (event.text or "").strip()
+
+        # ── ТЕСТ премиум emoji ──
+        if query == "test_emoji":
+            from telethon.tl.types import MessageEntityCustomEmoji
+            text = "❤️ TETKO ❤️"
+            entities = [
+                MessageEntityCustomEmoji(offset=0, length=2, document_id=5282797322969852134),
+                MessageEntityCustomEmoji(offset=8, length=2, document_id=5208814909273445904),
+            ]
+            results = [InputBotInlineResult(
+                id="test",
+                type="article",
+                title="Test emoji",
+                description="Test",
+                send_message=InputBotInlineMessageText(
+                    message=text,
+                    entities=entities,
+                ),
+            )]
+            await event.answer(results, cache_time=0, gallery=False)
+            return
+        # ── /ТЕСТ ──
 
         # ищем меню по ключу
         menu = self._menus.get(query)
@@ -321,6 +351,7 @@ class BotClient:
             "message": msg_text,
             "reply_markup": markup,
         }
+
         if entities:
             kwargs["entities"] = entities
 

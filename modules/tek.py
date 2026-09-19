@@ -294,9 +294,7 @@ class Tek(Module):
                     message="🗑 Меню закрыто",
                     reply_markup=None,
                 ))
-                log.info("[TEK] close: отредактировано в закрыто")
             except Exception as e:
-                log.warning(f"[TEK] close edit failed: {e}")
 
         trash = FB_TRASH
         rows.append([
@@ -395,9 +393,7 @@ class Tek(Module):
                     message="🗑 <i>Меню закрыто</i>",
                     reply_markup=None,
                 ))
-                log.info("[TEK] close: отредактировано в закрыто")
             except Exception as e:
-                log.warning(f"[TEK] close edit failed: {e}")
 
         trash = FB_TRASH
         rows.append([
