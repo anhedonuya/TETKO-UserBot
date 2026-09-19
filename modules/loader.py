@@ -201,6 +201,86 @@ class Loader(Module):
                 parse_mode="html",
             )
 
+    @command(
+        name="um",
+        aliases=["delmod"],
+        description="Удалить модуль из modules_custom/",
+        only_for="owner",
+    )
+    async def cmd_um(self, event, args):
+        """Удалить модуль из локальной папки modules_custom/ + выгрузить."""
+        import os as _os
+
+        def _list_user_modules() -> list[str]:
+            if not _os.path.isdir("modules_custom"):
+                return []
+            return sorted(
+                f[:-3] for f in _os.listdir("modules_custom")
+                if f.endswith(".py") and not f.startswith("_")
+            )
+
+        def _find_user_module(name: str) -> str | None:
+            candidate = _os.path.join("modules_custom", f"{name}.py")
+            return candidate if _os.path.exists(candidate) else None
+
+        if not args:
+            installed = _list_user_modules()
+            if not installed:
+                await event.edit(
+                    "📂 <b>Нет пользовательских модулей</b>",
+                    parse_mode="html",
+                )
+                return
+            text = (
+                "📂 <b>Пользовательские модули</b>\n\n"
+                + "\n".join(f"• <code>{name}</code>" for name in installed)
+                + "\n\n<i>Использование:</i> <code>.um &lt;имя&gt;</code>"
+            )
+            await event.edit(text, parse_mode="html")
+            return
+
+        name = args[0].strip()
+        if name.endswith(".py"):
+            name = name[:-3]
+
+        path = _find_user_module(name)
+        if not path:
+            # проверяем, не системный ли
+            if _os.path.exists(_os.path.join("modules", f"{name}.py")):
+                await event.edit(
+                    f"❌ <code>{name}</code> — системный модуль, нельзя удалить",
+                    parse_mode="html",
+                )
+                return
+            await event.edit(
+                f"❌ Модуль <code>{name}</code> не найден",
+                parse_mode="html",
+            )
+            return
+
+        # выгружаем из реестра
+        loader = getattr(self.client, "loader", None)
+        if loader is not None:
+            try:
+                await loader.unload_module(name)
+            except Exception as e:
+                self.log.warning(f"um: unload {name} failed: {e}")
+
+        # удаляем файл
+        try:
+            _os.remove(path)
+        except Exception as e:
+            await event.edit(
+                f"❌ Ошибка удаления: <code>{e}</code>",
+                parse_mode="html",
+            )
+            return
+
+        await event.edit(
+            f"🗑 Модуль <code>{name}</code> удалён",
+            parse_mode="html",
+        )
+
     @command("restart", doc="Перезапустить процесс TETKO")
     async def cmd_restart(self, event):
         await event.edit("🔄 **Перезапуск TETKO UserBot...**")
