@@ -157,40 +157,66 @@ class Inline:
         text: str,
         buttons: list[list[dict]] | None = None,
     ):
-        """Отредактировать сообщение (опционально с новыми кнопками)."""
+        """Отредактировать сообщение (inline или обычное)."""
         if buttons is None:
-            return await event.edit(text, parse_mode="html")
-
-        from telethon.tl.functions.messages import EditMessageRequest
-
-        markup = self._build_markup(buttons)
-
-        # парсим HTML
-        message_text = text
-        entities = None
-        try:
-            parsed, entities = await self.kernel.client._parse_message_text(text, "html")
-            message_text = parsed
-        except Exception:
-            pass
-
-        try:
-            peer = await event.get_input_chat()
-            kwargs = {
-                "peer": peer,
-                "id": event.message_id,
-                "message": message_text,
-                "reply_markup": markup,
-            }
-            if entities:
-                kwargs["entities"] = entities
-            await self.kernel.client(EditMessageRequest(**kwargs))
-        except Exception as e:
-            log.warning(f"edit через raw request не сработал, fallback: {e}")
             try:
-                await event.edit(text, parse_mode="html")
+                return await event.edit(text, parse_mode="html")
             except Exception:
-                pass
+                return None
+
+        # markup
+        from telethon.tl.custom import Button
+        rows = []
+        for row in buttons:
+            btn_row = []
+            for b in row:
+                data = b["token"]
+                if isinstance(data, str):
+                    data = data.encode("utf-8")
+                if len(data) > 64:
+                    data = data[:64]
+                btn_row.append(Button.inline(b["label"], data=data))
+            rows.append(btn_row)
+
+        # попробовать через bot_client (inline edit)
+        bot = getattr(self.kernel, "bot_client", None)
+        imid = None
+        # 1. из события
+        imid = getattr(event, "inline_message_id", None)
+        # 2. из кэша _inlines по token кнопки
+        if not imid:
+            data = getattr(event, "data", b"")
+            if isinstance(data, bytes):
+                data = data.decode("utf-8", errors="replace")
+            if bot is not None and hasattr(bot, "get_inline_message_id"):
+                imid = bot.get_inline_message_id(data)
+
+        if imid and bot is not None:
+            try:
+                await bot.edit_inline_menu(
+                    inline_message_id=imid,
+                    text=text,
+                    buttons=buttons,
+                )
+                # обновим imid для новых токенов
+                if not hasattr(bot, "_inlines"):
+                    bot._inlines = {}
+                for row in buttons:
+                    for b in row:
+                        bot._inlines[b["token"]] = imid
+                return
+            except Exception as e:
+                log.warning(f"inline.edit через bot не сработал: {e}")
+
+        # fallback: обычный edit
+        try:
+            return await event.edit(text, buttons=rows, parse_mode="html")
+        except Exception as e:
+            log.warning(f"inline.edit fallback тоже не сработал: {e}")
+            try:
+                return await event.edit(text, parse_mode="html")
+            except Exception:
+                return None
 
     async def answer(self, event: Any, text: str = "", alert: bool = False):
         try:

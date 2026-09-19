@@ -60,7 +60,7 @@ class Kernel:
         # проверяем premium у владельца
         try:
             me = await self.client.get_me()
-            self.context.user_premium = False  # TEMP TEST
+            self.context.user_premium = bool(getattr(me, "premium", False))
             log.info(f"👑 Premium: {self.context.user_premium}")
         except Exception as e:
             log.warning(f"Не удалось проверить premium: {e}")
