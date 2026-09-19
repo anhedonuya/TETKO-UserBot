@@ -357,16 +357,14 @@ class _SubInline:
         return getattr(k, "bot_client", None) or getattr(k, "_k", None) and getattr(getattr(k, "_k"), "bot_client", None)
 
     async def rich_form(self, event, text, **kwargs):
-        """Отправить rich-сообщение.
+        """Rich-сообщение через Telethon-MCUB.
 
-        Порядок:
-        1. Telethon-MCUB: bot_client.send_rich_message
-        2. HTTP Bot API: POST /sendRichMessage с rich_message.html
-        3. Fallback: bot_client.send_message
-        4. Fallback: client.send_message (юзербот)
+        Поддерживает:
+        - bot_client.send_rich_message(chat_id, html=...)
+        - bot_client.send_rich_message_draft(chat_id, html=...) — стриминг
+        - fallback на обычный send_message, если rich-API нет
         """
         import logging
-        import aiohttp
         log = logging.getLogger("TETKO.mcub_compat.subinline")
 
         k = getattr(self._module, "kernel", None)
@@ -376,58 +374,52 @@ class _SubInline:
         chat_id = getattr(event, "chat_id", None)
         reply_to = kwargs.get("reply_to")
         text = str(text or "")
+        draft = kwargs.get("draft", False)  # стримить как черновик
 
         bot = getattr(kk, "bot_client", None)
-        token = None
-        cfg = getattr(kk, "config", {}) or {}
-        token = cfg.get("inline_bot_token") or cfg.get("bot_token")
+        if bot is None:
+            log.warning("rich_form: bot_client отсутствует")
+            client = getattr(kk, "client", None)
+            if client is not None and chat_id is not None:
+                return await client.send_message(chat_id, text, parse_mode="html", reply_to=reply_to)
+            return None
 
-        # 1. Telethon-MCUB
-        if bot is not None:
-            for name in ("send_rich_message", "send_rich_form", "send_rich_message_draft"):
-                method = getattr(bot, name, None)
-                if method is None:
-                    continue
+        # Telethon-MCUB rich API
+        rich_method = None
+        if draft:
+            rich_method = getattr(bot, "send_rich_message_draft", None)
+        if rich_method is None:
+            rich_method = getattr(bot, "send_rich_message", None)
+
+        if rich_method is not None:
+            try:
+                log.info(f"rich_form: {rich_method.__name__} draft={draft}")
+                result = rich_method(chat_id, html=text)
+                if hasattr(result, "__await__"):
+                    return await result
+                return result
+            except TypeError:
+                # некоторые версии хотят text=, а не html=
                 try:
-                    log.info(f"rich_form: bot.{name}")
-                    result = method(chat_id, html=text)
+                    result = rich_method(chat_id, text=text)
                     if hasattr(result, "__await__"):
                         return await result
                     return result
                 except Exception as e:
-                    log.warning(f"rich_form bot.{name}: {e}")
-
-        # 2. HTTP Bot API
-        if token and chat_id is not None:
-            payload = {
-                "chat_id": chat_id,
-                "rich_message": {"html": text},
-            }
-            if reply_to is not None:
-                payload["reply_parameters"] = {"message_id": reply_to}
-            url = f"https://api.telegram.org/bot{token}/sendRichMessage"
-            try:
-                async with aiohttp.ClientSession() as session:
-                    async with session.post(url, json=payload, timeout=30) as resp:
-                        data = await resp.json()
-                        if data.get("ok"):
-                            log.info("rich_form: HTTP Bot API OK")
-                            return data.get("result")
-                        log.warning(f"rich_form HTTP: {data}")
+                    log.warning(f"rich_form {rich_method.__name__}(text=): {type(e).__name__}: {e}")
             except Exception as e:
-                log.warning(f"rich_form HTTP error: {e}")
+                log.warning(f"rich_form {rich_method.__name__}: {type(e).__name__}: {e}")
 
-        # 3. Fallback: обычное сообщение ботом
-        if bot is not None:
-            try:
-                log.info("rich_form: fallback bot.send_message")
-                return await bot.send_message(chat_id, text, parse_mode="html", reply_to=reply_to)
-            except Exception as e:
-                log.warning(f"rich_form bot.send_message: {e}")
+        # fallback: обычное сообщение ботом
+        log.info("rich_form: fallback bot.send_message")
+        try:
+            return await bot.send_message(chat_id, text, parse_mode="html", reply_to=reply_to)
+        except Exception as e:
+            log.warning(f"rich_form bot.send_message: {type(e).__name__}: {e}")
 
-        # 4. Fallback: юзербот
         client = getattr(kk, "client", None)
         if client is not None and chat_id is not None:
+            log.info("rich_form: fallback client.send_message")
             return await client.send_message(chat_id, text, parse_mode="html", reply_to=reply_to)
         return None
 
