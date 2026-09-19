@@ -9,11 +9,61 @@ from telethon import TelegramClient, events
 
 from core.tetko.context import Context
 from core.tetko.dispatcher import EventDispatcher
-from core.tetko.inline import Inline
+# MCUB-compat: используем полноценный InlineHandlers и InlineBot
+try:
+    from core_inline.handlers import InlineHandlers
+except Exception as _e:
+    InlineHandlers = None
+try:
+    from core_inline.bot import InlineBot
+except Exception as _e:
+    InlineBot = None
+# Fallback на старый tetko Inline
+from core.tetko.inline import Inline as _TetkoInline
 from core.tetko.loader import ModuleLoader
 from core.tetko.registry import Registry
 
 log = logging.getLogger("TETKO.tetko.kernel")
+
+
+
+    async def setup_mcub_inline(self):
+        """Подключить MCUB InlineBot + InlineHandlers к ядру."""
+        if InlineBot is None or InlineHandlers is None:
+            import logging
+            logging.getLogger("TETKO.tetko.kernel").warning(
+                "MCUB core_inline недоступен, остаёмся на старом Inline"
+            )
+            return
+
+        import logging
+        log = logging.getLogger("TETKO.tetko.kernel")
+
+        token = (self.config or {}).get("inline_bot_token")
+        if not token:
+            log.warning("inline_bot_token не задан — MCUB inline не стартует")
+            return
+
+        try:
+            bot_manager = InlineBot(self)
+            await bot_manager.setup()
+            self._mcub_inline_bot = bot_manager
+
+            bot_client = getattr(bot_manager, "bot_client", None)
+            if bot_client is None:
+                log.warning("InlineBot не создал bot_client")
+                return
+
+            handlers = InlineHandlers(self, bot_client)
+            self._mcub_inline_handlers = handlers
+
+            self.bot_client = bot_client
+            self.inline_bot = bot_manager
+
+            await handlers.register_handlers()
+            log.info("MCUB inline запущен, bot_client=%s", type(bot_client).__name__)
+        except Exception as e:
+            log.exception(f"Не удалось запустить MCUB inline: {e}")
 
 
 class Kernel:
@@ -44,7 +94,17 @@ class Kernel:
             prefix=self.prefix,
             context=self.context,
         )
-        self.inline = Inline(kernel=self)
+        # Старый inline для обратной совместимости
+        self.inline = _TetkoInline(kernel=self)
+        # MCUB InlineHandlers подключается после старта bot_client
+        self._mcub_inline_handlers = None
+        self._mcub_inline_bot = None
+        # Ссылка на inline_callback_map (для make_cb_button и InlineHandlers)
+        if not hasattr(self, "inline_callback_map"):
+            self.inline_callback_map = {}
+        if not hasattr(self, "_inline_cb_lock"):
+            import threading as _th
+            self._inline_cb_lock = _th.Lock()
         self._loop_tasks: list[asyncio.Task] = []
 
         # лог-чат
@@ -59,6 +119,8 @@ class Kernel:
     async def start(self) -> None:
         """Запуск ядра, загрузка модулей и старт событий."""
         log.info("🚀 Запуск ядра TETKO...")
+        # MCUB inline (bot + InlineHandlers)
+        await self.setup_mcub_inline()
 
         # проверяем premium у владельца
         try:

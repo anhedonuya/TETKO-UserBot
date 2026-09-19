@@ -436,37 +436,76 @@ class _SubInline:
 
     # --- публичный API ---
     async def rich_form(self, event, text, **kwargs):
+        """Rich-сообщение через бота (плашка via @bot) через MCUB InlineHandlers.
+
+        Порядок:
+        1. kernel._mcub_inline_handlers.create_inline_form(rich_text=...) + send_inline_menu
+        2. fallback: send_rich_message юзерботом
+        3. fallback: bot.send_message
+        4. fallback: client.send_message
+        """
         import logging
+        import time as _time
         log = logging.getLogger("TETKO.mcub_compat.subinline")
 
+        kk = self._kk()
         chat_id = getattr(event, "chat_id", None)
         if chat_id is None:
             return None
         text = str(text or "")
         reply_to = kwargs.get("reply_to")
 
-        found = self._find_rich_client()
-        if found is None:
-            return None
-
-        tg, is_rich = found
-        if is_rich:
+        # 1. MCUB InlineHandlers
+        handlers = getattr(kk, "_mcub_inline_handlers", None)
+        bot = getattr(kk, "bot_client", None)
+        if handlers is not None and bot is not None and hasattr(bot, "send_inline_menu"):
             try:
-                log.warning("rich_form: send_rich_message")
-                result = tg.send_rich_message(chat_id, html=text)
-                if hasattr(result, "__await__"):
-                    result = await result
-                log.warning("rich_form: send_rich_message OK")
-                return result
+                form_id = handlers.create_inline_form(
+                    text="",
+                    rich_text=text,
+                    rich_parse_mode="html",
+                    ttl=kwargs.get("ttl", 3600),
+                )
+                key = f"rich_{int(_time.time() * 1000)}"
+                # регистрируем меню с этим form_id (form_xxx → в query)
+                await bot.send_inline_menu(
+                    chat_id=chat_id,
+                    key=form_id,
+                    text=text,
+                    buttons=[],
+                    rich=True,
+                )
+                log.warning(f"rich_form: MCUB inline → OK (form_id={form_id})")
+                return None
             except Exception as e:
-                log.warning(f"rich_form send_rich_message: {type(e).__name__}: {e}")
+                log.warning(f"rich_form MCUB inline: {type(e).__name__}: {e}")
 
-        try:
-            log.warning("rich_form: send_message (не rich)")
-            return await tg.send_message(chat_id, text, parse_mode="html", reply_to=reply_to)
-        except Exception as e:
-            log.warning(f"rich_form send_message: {type(e).__name__}: {e}")
-            return None
+        # 2. send_rich_message юзерботом (работает, но от юзербота)
+        found = self._find_rich_client()
+        if found is not None:
+            tg, is_rich = found
+            if is_rich:
+                try:
+                    result = tg.send_rich_message(chat_id, html=text)
+                    if hasattr(result, "__await__"):
+                        result = await result
+                    log.warning("rich_form: send_rich_message юзерботом")
+                    return result
+                except Exception as e:
+                    log.warning(f"rich_form send_rich_message: {e}")
+
+        # 3. bot.send_message
+        if bot is not None:
+            try:
+                return await bot.send_message(chat_id, text, parse_mode="html", reply_to=reply_to)
+            except Exception as e:
+                log.warning(f"rich_form bot.send_message: {e}")
+
+        # 4. client.send_message
+        c = self.client
+        if c is not None:
+            return await c.send_message(chat_id, text, parse_mode="html", reply_to=reply_to)
+        return None
 
 
     async def form(self, chat_id, text, buttons=None, **kwargs):
