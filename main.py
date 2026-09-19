@@ -139,7 +139,7 @@ async def main():
 
     os.system("clear")
 
-    print(render_banner(version="0.0.9.7", codename="native"))
+    print(render_banner(version="0.0.9.8", codename="native"))
     print()
     print("  \033[1;92m[>]\033[0m Kernel:  loaded successfully")
     modules = list(kernel.registry.list_modules().keys()) or ["none"]

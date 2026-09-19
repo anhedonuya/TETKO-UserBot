@@ -12,8 +12,23 @@ import time
 import aiohttp
 
 # version kernel TETKO
-__version__ = "0.0.9.7"
+__version__ = "0.0.9.8"
 VERSION = __version__
+
+
+def bump_version(v: str | None = None) -> str:
+    """Увеличить версию на 1 (build+1; при 20 → patch+1, build=0)."""
+    if v is None:
+        v = __version__
+    parts = [int(x) for x in v.split(".")]
+    while len(parts) < 4:
+        parts.append(0)
+    parts[3] += 1
+    for i in range(3, 0, -1):
+        if parts[i] >= 20:
+            parts[i] = 0
+            parts[i - 1] += 1
+    return ".".join(str(p) for p in parts)
 
 
 class VersionManager:
