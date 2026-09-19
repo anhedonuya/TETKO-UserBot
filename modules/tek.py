@@ -73,7 +73,6 @@ class Tek(Module):
         "en": "Modules, commands, hiding, info",
     }
 
-    # ── БАЗА ──
     def _get_hidden(self) -> list:
         data = db_get("tek", "hidden", [])
         return list(data) if isinstance(data, list) else []
@@ -98,7 +97,7 @@ class Tek(Module):
             pass
         return False
 
-    def _modules_split(self) -> tuple:
+    def _modules_split(self):
         registry = self.kernel.registry
         hidden = self._get_hidden()
         sys_mods, user_mods = [], []
@@ -153,7 +152,6 @@ class Tek(Module):
             return "—"
         return str(t).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
-    # ── ГЛАВНОЕ МЕНЮ ──
     @command(name="tek", description="Модули и команды")
     async def cmd_tek(self, event, args):
         if args:
@@ -194,25 +192,18 @@ class Tek(Module):
                     if doc:
                         line += f" — {self._esc(doc)}"
                 cmd_lines.append(line)
-            cmds_block = "
-".join(cmd_lines)
+            cmds_block = "\n".join(cmd_lines)
         else:
             cmds_block = "<i>нет команд</i>"
 
         text = (
-            f"<blockquote><b>✅ Модуль {self._esc(mod.name)}</b> <code>v{self._esc(ver)}</code> <i>({kind})</i></blockquote>
-"
-            f"<blockquote><b>💡 Описание:</b> <i>{self._esc(desc)}</i></blockquote>
-"
-            f"<blockquote><b>🧩 Команды ({len(cmds)}):</b>
-{cmds_block}</blockquote>
-"
-            f"<blockquote><b>💖 Автор:</b> {self._esc(author)}
-"
+            f"<blockquote><b>✅ Модуль {self._esc(mod.name)}</b> <code>v{self._esc(ver)}</code> <i>({kind})</i></blockquote>\n"
+            f"<blockquote><b>💡 Описание:</b> <i>{self._esc(desc)}</i></blockquote>\n"
+            f"<blockquote><b>🧩 Команды ({len(cmds)}):</b>\n{cmds_block}</blockquote>\n"
+            f"<blockquote><b>💖 Автор:</b> {self._esc(author)}\n"
             f"<b>⚙️ Компат:</b> <code>{self._esc(compat)}</code></blockquote>"
         )
         await event.edit(text, parse_mode="html")
-
 
     async def _show_help(self, event_or_cb, is_cb: bool = False):
         bot = getattr(self.kernel, "bot_client", None)
@@ -346,7 +337,6 @@ class Tek(Module):
 
         await self.kernel.inline.edit(cb_event, text, rows)
 
-    # ── СКРЫТИЕ ──
     @command(name="tekhide", description="Скрыть/показать модуль")
     async def cmd_tekhide(self, event, args):
         await self._show_hide(event)
@@ -455,7 +445,6 @@ class Tek(Module):
                 buttons=rows,
             )
 
-    # ── ИНФО О СИСТЕМЕ ──
     @command(name="tekcfg", description="Состояние системы")
     async def cmd_tekcfg(self, event, args):
         uptime = round(time.time() - START_TIME)
