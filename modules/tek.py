@@ -8,16 +8,6 @@ from core.tetko import Module, command, db_get, db_set
 START_TIME = time.time()
 log = logging.getLogger("TETKO.module.tek")
 
-
-def _esc(text) -> str:
-    """HTML escape."""
-    return (
-        str(text).replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-    )
-
-# Премиум-эмодзи
 EMOJI_SYS = '<tg-emoji emoji-id="6012473147998084083">🙏</tg-emoji>'
 EMOJI_USER = '<tg-emoji emoji-id="5208774197278447727">❤️</tg-emoji>'
 EMOJI_Q = '<tg-emoji emoji-id="6010208325843557447">❔</tg-emoji>'
@@ -25,18 +15,16 @@ EMOJI_TRASH = '<tg-emoji emoji-id="5348118479847333898">🗑</tg-emoji>'
 EMOJI_HEART1 = '<tg-emoji emoji-id="5282797322969852134">❤️</tg-emoji>'
 EMOJI_HEART2 = '<tg-emoji emoji-id="5208814909273445904">❤️</tg-emoji>'
 
-# Fallback (без премиума)
 FB_SYS = '🔧'
 FB_USER = '👤'
 FB_Q = '❔'
 FB_TRASH = '🗑'
 
-PAGE_SIZE = 10  # модулей на страницу
-CMD_LIMIT = 3   # команд показывать
+PAGE_SIZE = 10
+CMD_LIMIT = 3
 
 
 def _lang(kernel) -> str:
-    """Определить язык."""
     try:
         lang = kernel.config.get("language", "ru")
         return "en" if lang == "en" else "ru"
@@ -45,7 +33,6 @@ def _lang(kernel) -> str:
 
 
 def _texts(lang: str) -> dict:
-    """Строки для ru/en."""
     if lang == "en":
         return {
             "help_title": "Which modules do you need help with?",
@@ -70,49 +57,23 @@ def _texts(lang: str) -> dict:
 
 
 def _premium(kernel) -> bool:
-    """Премиум у владельца?"""
     try:
         return bool(getattr(kernel.context, "user_premium", False))
     except Exception:
         return False
 
 
-def _parse_folder(name: str) -> str:
-    """Определить папку модуля: 'modules' или 'modules_custom'."""
-    try:
-        mod_obj = None
-        for m in getattr(_parse_folder, "_registry", {}).values() if hasattr(_parse_folder, "_registry") else []:
-            pass
-    except Exception:
-        pass
-    return ""
-
-
 class Tek(Module):
-
-    @staticmethod
-    def _get_topic_id(event) -> int | None:
-        """Извлечь top_msg_id топика (для форумов)."""
-        try:
-            rt = getattr(event, "reply_to", None)
-            if rt is None:
-                return None
-            return (
-                getattr(rt, "reply_to_top_id", None)
-                or getattr(rt, "reply_to_msg_id", None)
-            )
-        except Exception:
-            return None
-
     name = "Tek"
     __compat__ = "0.0.9.0"
-    version = "2.0.0"
+    version = "2.1.0"
     author = "@anhedonuya & @flexownerAL"
     description = {
         "ru": "Модули, команды, скрытие, инфо",
         "en": "Modules, commands, hiding, info",
     }
 
+    # ── БАЗА ──
     def _get_hidden(self) -> list:
         data = db_get("tek", "hidden", [])
         return list(data) if isinstance(data, list) else []
@@ -121,7 +82,6 @@ class Tek(Module):
         db_set("tek", "hidden", list(hidden))
 
     def _is_system(self, mod) -> bool:
-        """Системный модуль? (из modules/)"""
         mod_file = getattr(mod, "__module__", "") or ""
         try:
             import sys as _sys
@@ -138,8 +98,7 @@ class Tek(Module):
             pass
         return False
 
-    def _modules_split(self) -> tuple[list, list]:
-        """Вернуть (системные, пользовательские) — без скрытых."""
+    def _modules_split(self) -> tuple:
         registry = self.kernel.registry
         hidden = self._get_hidden()
         sys_mods, user_mods = [], []
@@ -153,7 +112,6 @@ class Tek(Module):
         return sys_mods, user_mods
 
     def _cmds_for_module(self, mod) -> list:
-        """Команды модуля."""
         registry = self.kernel.registry
         result = []
         for cmd in registry._commands.values():
@@ -163,32 +121,88 @@ class Tek(Module):
         return result
 
     def _module_line(self, mod, lang: str) -> str:
-        """Строка модуля с командами."""
         cmds = self._cmds_for_module(mod)
         if not cmds:
             t = _texts(lang)
             return f"▫️ <b>{mod.name}</b>: <i>{t['no_cmds']}</i>"
-
-        prefix = self.kernel.context.prefix  # ← фикс префикса
 
         parts = []
         for i, cmd in enumerate(cmds):
             if i >= CMD_LIMIT:
                 parts.append(f"(+{len(cmds) - CMD_LIMIT})")
                 break
-            s = f"<code>{prefix}{cmd.name}</code>"
+            s = f"<code>.{cmd.name}</code>"
             if cmd.aliases:
-                aliases = ", ".join(f"{prefix}{a}" for a in cmd.aliases)
+                aliases = ", ".join(f".{a}" for a in cmd.aliases)
                 s += f" [<i>{aliases}</i>]"
             parts.append(s)
         return f"▫️ <b>{mod.name}</b>: " + ", ".join(parts)
 
+    def _find_module(self, name: str):
+        registry = self.kernel.registry
+        if name in registry._modules:
+            return registry._modules[name]
+        low = name.lower()
+        for n, m in registry._modules.items():
+            if n.lower() == low:
+                return m
+        return None
+
+    def _esc(self, t) -> str:
+        if t is None:
+            return "—"
+        return str(t).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+    # ── ГЛАВНОЕ МЕНЮ ──
     @command(name="tek", description="Модули и команды")
     async def cmd_tek(self, event, args):
+        if args:
+            await self._show_module_info(event, args[0])
+            return
         await self._show_help(event)
 
+    async def _show_module_info(self, event, name: str):
+        mod = self._find_module(name)
+        if mod is None:
+            await event.edit(
+                f"<blockquote>Модуль <code>{self._esc(name)}</code> не найден</blockquote>",
+                parse_mode="html",
+            )
+            return
+
+        desc = mod.get_description(_lang(self.kernel)) if hasattr(mod, "get_description") else getattr(mod, "description", "—")
+        ver = getattr(mod, "version", "—")
+        author = getattr(mod, "author", "—")
+        compat = getattr(mod, "__compat__", "—")
+        is_sys = self._is_system(mod)
+        kind = "системный" if is_sys else "пользовательский"
+
+        cmds = self._cmds_for_module(mod)
+        if cmds:
+            cmd_lines = []
+            for c in cmds:
+                line = f"<code>.{self._esc(c.name)}</code>"
+                if c.aliases:
+                    aliases = ", ".join(f".{self._esc(a)}" for a in c.aliases)
+                    line += f" [<i>{aliases}</i>]"
+                if c.only_for:
+                    line += f" <i>({self._esc(c.only_for)})</i>"
+                cmd_lines.append(line)
+            cmds_block = "\n".join(cmd_lines)
+        else:
+            cmds_block = "<i>нет команд</i>"
+
+        text = (
+            f"<blockquote><b>{self._esc(mod.name)}</b> <code>v{self._esc(ver)}</code></blockquote>\n"
+            f"<blockquote><i>Описание</i>: {self._esc(desc)}\n"
+            f"<i>Автор</i>: {self._esc(author)}\n"
+            f"<i>Компат</i>: <code>{self._esc(compat)}</code>\n"
+            f"<i>Тип</i>: {kind}</blockquote>\n"
+            f"<blockquote><b>Команды ({len(cmds)})</b>\n{cmds_block}</blockquote>"
+        )
+        await event.edit(text, parse_mode="html")
+
     async def _show_help(self, event_or_cb, is_cb: bool = False):
-        topic_id = self._get_topic_id(event_or_cb)
         bot = getattr(self.kernel, "bot_client", None)
         if bot is None:
             return
@@ -227,7 +241,6 @@ class Tek(Module):
                 key=f"tek_help_{int(time.time())}",
                 text=text,
                 buttons=buttons,
-                topic_id=topic_id,
             )
 
     async def _show_list(self, cb_event, kind: str, page: int):
@@ -321,12 +334,12 @@ class Tek(Module):
 
         await self.kernel.inline.edit(cb_event, text, rows)
 
+    # ── СКРЫТИЕ ──
     @command(name="tekhide", description="Скрыть/показать модуль")
     async def cmd_tekhide(self, event, args):
         await self._show_hide(event)
 
     async def _show_hide(self, event_or_cb, is_cb: bool = False, page: int = 0):
-        topic_id = self._get_topic_id(event_or_cb)
         bot = getattr(self.kernel, "bot_client", None)
         if bot is None:
             return
@@ -428,65 +441,9 @@ class Tek(Module):
                 key=f"tek_hide_{int(time.time())}",
                 text=text,
                 buttons=rows,
-                topic_id=topic_id,
             )
 
-    @command(
-        name="setprefix",
-        aliases=["prefix"],
-        description="Сменить префикс команд",
-        only_for="owner",
-    )
-    async def cmd_setprefix(self, event, args):
-        """Сменить префикс команд."""
-        if not args:
-            cur = self.kernel.prefix
-            await event.edit(
-                f"ℹ️ Текущий префикс: <code>{_esc(cur)}</code>\n"
-                f"Использование: <code>{self.kernel.context.prefix}setprefix &lt;символ&gt;</code>",
-                parse_mode="html",
-            )
-            return
-
-        new_prefix = args[0].strip()
-
-        if not new_prefix:
-            await event.edit("❌ Префикс не может быть пустым", parse_mode="html")
-            return
-        if len(new_prefix) > 3:
-            await event.edit("❌ Префикс слишком длинный (макс 3 символа)", parse_mode="html")
-            return
-        if new_prefix.isspace():
-            await event.edit("❌ Префикс не может быть пробелом", parse_mode="html")
-            return
-
-        old_prefix = self.kernel.prefix
-
-        self.kernel.prefix = new_prefix
-        self.kernel.context.prefix = new_prefix
-        if hasattr(self.kernel, "dispatcher"):
-            self.kernel.dispatcher.prefix = new_prefix
-
-        try:
-            import json
-            from pathlib import Path as _Path
-            cfg_path = _Path("config.json")
-            if cfg_path.exists():
-                cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
-                cfg["command_prefix"] = new_prefix
-                cfg_path.write_text(
-                    json.dumps(cfg, ensure_ascii=False, indent=2),
-                    encoding="utf-8",
-                )
-        except Exception as e:
-            log.warning(f"setprefix: save failed: {e}")
-
-        await event.edit(
-            f"✅ Префикс изменён: <code>{_esc(old_prefix)}</code> → "
-            f"<code>{_esc(new_prefix)}</code>",
-            parse_mode="html",
-        )
-
+    # ── ИНФО О СИСТЕМЕ ──
     @command(name="tekcfg", description="Состояние системы")
     async def cmd_tekcfg(self, event, args):
         uptime = round(time.time() - START_TIME)
