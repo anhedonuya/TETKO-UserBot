@@ -8,8 +8,6 @@
 
 - [@flexownerAL](https://github.com/flexOwnerAL)
 - [@anhedonuya](https://github.com/anhedonuya)
-- [@notflack](https://github.com/sudo-notflack)
-
 ## Требования
 
 - **Python 3.10+**
