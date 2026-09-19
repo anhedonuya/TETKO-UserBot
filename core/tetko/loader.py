@@ -33,29 +33,24 @@ class ModuleLoader:
         self.custom_dir.mkdir(parents=True, exist_ok=True)
 
     async def load_module_from_file(self, file_path: str | Path) -> Module:
-        """Загрузить модуль из .py файла."""
+        """Загрузить модуль из .py файла (тетко или mcub)."""
         path = Path(file_path)
         if not path.exists():
             raise ModuleNotFoundError(f"Файл {path} не найден")
 
         mod_name = path.stem
+
+        # ── MCUB compat: если модуль mcub-стиля, отдаём его compat-слою
+        try:
+            _code = path.read_text(encoding="utf-8")
+            if is_mcub_module(_code):
+                return await load_mcub_module(self.kernel, path, mod_name)
+        except Exception as e:
+            log.warning(f"[loader] mcub-детект для {mod_name}: {e}")
+
         module_spec_name = f"tetko_user_modules.{mod_name}"
 
         try:
-            # ── MCUB compat: если модуль mcub-стиля, отдаём его compat-слою
-
-            try:
-
-                _code = path.read_text(encoding="utf-8")
-
-                if is_mcub_module(_code):
-
-                    return await load_mcub_module(self.kernel, path, mod_name)
-
-            except Exception:
-
-                pass
-
             spec = importlib.util.spec_from_file_location(module_spec_name, path)
             if spec is None or spec.loader is None:
                 raise ModuleLoadError(f"Не удалось создать spec для {path}")
@@ -130,8 +125,9 @@ class ModuleLoader:
         except Exception as e:
             log.error(f"Ошибка в on_load модуля {mod_instance.name}: {e}")
 
-        log.info(f"✅ Модуль {mod_instance.name} успешно загружен")
+        log.info(f"[OK] Модуль {mod_instance.name} загружен")
         return mod_instance
+
 
     async def unload_module(self, name: str) -> bool:
         """Выгрузить модуль по имени (класса) или по имени файла."""
