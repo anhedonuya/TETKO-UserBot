@@ -47,6 +47,9 @@ class Kernel:
         self.inline = Inline(kernel=self)
         self._loop_tasks: list[asyncio.Task] = []
 
+        # лог-чат
+        self.log_chat_id = self.config.get("log_chat_id") or None
+
         # Связываем важные объекты с клиентом Telethon для быстрого доступа из модулей
         self.client.kernel = self
         self.client.loader = self.loader
@@ -115,3 +118,16 @@ class Kernel:
             await self.loader.unload_module(mod_name)
 
         log.info("👋 Ядро TETKO остановлено.")
+
+    async def log_to_chat(self, text: str):
+        """Отправить сообщение в log_chat_id (если задан)."""
+        if not self.log_chat_id:
+            return
+        try:
+            await self.client.send_message(
+                self.log_chat_id,
+                text,
+                parse_mode="html",
+            )
+        except Exception as e:
+            log.warning(f"log_to_chat failed: {e}")
