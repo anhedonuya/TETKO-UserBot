@@ -14,6 +14,7 @@ from core.tetko.exceptions import (
 )
 from core.tetko.module import Module
 from core.tetko.registry import Command, Registry
+from core.tetko.mcub_compat import is_mcub_module, load_mcub_module
 
 log = logging.getLogger("TETKO.tetko.loader")
 
@@ -41,6 +42,20 @@ class ModuleLoader:
         module_spec_name = f"tetko_user_modules.{mod_name}"
 
         try:
+            # ── MCUB compat: если модуль mcub-стиля, отдаём его compat-слою
+
+            try:
+
+                _code = path.read_text(encoding="utf-8")
+
+                if is_mcub_module(_code):
+
+                    return await load_mcub_module(self.kernel, path, mod_name)
+
+            except Exception:
+
+                pass
+
             spec = importlib.util.spec_from_file_location(module_spec_name, path)
             if spec is None or spec.loader is None:
                 raise ModuleLoadError(f"Не удалось создать spec для {path}")
