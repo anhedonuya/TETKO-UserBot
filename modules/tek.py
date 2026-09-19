@@ -165,7 +165,7 @@ class Tek(Module):
         mod = self._find_module(name)
         if mod is None:
             await event.edit(
-                f"<blockquote>Модуль <code>{self._esc(name)}</code> не найден</blockquote>",
+                f"<blockquote>🫥 Модуль <code>{self._esc(name)}</code> не найден</blockquote>",
                 parse_mode="html",
             )
             return
@@ -181,26 +181,38 @@ class Tek(Module):
         if cmds:
             cmd_lines = []
             for c in cmds:
-                line = f"<code>.{self._esc(c.name)}</code>"
+                line = f"🪬 <code>.{self._esc(c.name)}</code>"
                 if c.aliases:
                     aliases = ", ".join(f".{self._esc(a)}" for a in c.aliases)
                     line += f" [<i>{aliases}</i>]"
                 if c.only_for:
                     line += f" <i>({self._esc(c.only_for)})</i>"
+                if c.doc:
+                    doc = c.doc if isinstance(c.doc, str) else (
+                        c.doc.get(_lang(self.kernel)) or c.doc.get("ru") or c.doc.get("en") or ""
+                    )
+                    if doc:
+                        line += f" — {self._esc(doc)}"
                 cmd_lines.append(line)
-            cmds_block = "\n".join(cmd_lines)
+            cmds_block = "
+".join(cmd_lines)
         else:
             cmds_block = "<i>нет команд</i>"
 
         text = (
-            f"<blockquote><b>{self._esc(mod.name)}</b> <code>v{self._esc(ver)}</code></blockquote>\n"
-            f"<blockquote><i>Описание</i>: {self._esc(desc)}\n"
-            f"<i>Автор</i>: {self._esc(author)}\n"
-            f"<i>Компат</i>: <code>{self._esc(compat)}</code>\n"
-            f"<i>Тип</i>: {kind}</blockquote>\n"
-            f"<blockquote><b>Команды ({len(cmds)})</b>\n{cmds_block}</blockquote>"
+            f"<blockquote><b>✅ Модуль {self._esc(mod.name)}</b> <code>v{self._esc(ver)}</code> <i>({kind})</i></blockquote>
+"
+            f"<blockquote><b>💡 Описание:</b> <i>{self._esc(desc)}</i></blockquote>
+"
+            f"<blockquote><b>🧩 Команды ({len(cmds)}):</b>
+{cmds_block}</blockquote>
+"
+            f"<blockquote><b>💖 Автор:</b> {self._esc(author)}
+"
+            f"<b>⚙️ Компат:</b> <code>{self._esc(compat)}</code></blockquote>"
         )
         await event.edit(text, parse_mode="html")
+
 
     async def _show_help(self, event_or_cb, is_cb: bool = False):
         bot = getattr(self.kernel, "bot_client", None)
