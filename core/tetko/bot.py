@@ -289,6 +289,36 @@ class BotClient:
         """Обработка inline-запросов от юзербота."""
         query = (event.text or "").strip()
 
+        # ── Rich-via-bot: query вида "rich:<html>" ──
+        if query.startswith("rich:"):
+            from telethon.tl.types import (
+                InputBotInlineResult,
+                InputBotInlineMessageRichMessage,
+                InputRichMessageHTML,
+            )
+            html_text = query[len("rich:"):]
+            try:
+                rich = InputRichMessageHTML(html=html_text)
+            except Exception as e:
+                log.warning(f"_handle_inline: InputRichMessageHTML failed: {e}")
+                rich = None
+
+            if rich is not None:
+                try:
+                    result = InputBotInlineResult(
+                        id=f"rich_{secrets.token_hex(4)}",
+                        type="article",
+                        title="Rich",
+                        description=html_text[:80],
+                        send_message=InputBotInlineMessageRichMessage(
+                            rich_message=rich,
+                        ),
+                    )
+                    await event.answer([result], cache_time=0, gallery=False)
+                    return
+                except Exception as e:
+                    log.warning(f"_handle_inline: rich result failed: {e}")
+
         # ── ТЕСТ премиум emoji ──
         if query == "test_emoji":
             from telethon.tl.types import MessageEntityCustomEmoji
