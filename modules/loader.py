@@ -33,6 +33,40 @@ class Loader(Module):
                 )
                 await proc.communicate()
 
+    def _extract_meta(self, code: str) -> dict:
+        """Вытащить name / version / author / description / __compat__ из кода модуля."""
+        meta = {}
+
+        def grab(pattern):
+            m = re.search(pattern, code, re.MULTILINE)
+            return m.group(1).strip() if m else None
+
+        meta["name"] = grab(r'^\s*name\s*=\s*["\']([^"\']+)["\']')
+        meta["version"] = grab(r'^\s*version\s*=\s*["\']([^"\']+)["\']')
+        meta["author"] = grab(r'^\s*author\s*=\s*["\']([^"\']+)["\']')
+        meta["compat"] = grab(r'^\s*__compat__\s*=\s*["\']([^"\']+)["\']')
+
+        # description может быть строкой или dict {"ru": "...", "en": "..."}
+        desc_str = grab(r'^\s*description\s*=\s*["\']([^"\']+)["\']')
+        if desc_str:
+            meta["description"] = desc_str
+        else:
+            desc_ru = grab(r'^\s*description\s*=\s*\{[^}]*["\']ru["\']\s*:\s*["\']([^"\']+)["\']')
+            desc_en = grab(r'^\s*description\s*=\s*\{[^}]*["\']en["\']\s*:\s*["\']([^"\']+)["\']')
+            meta["description"] = desc_ru or desc_en or "—"
+
+        return meta
+
+    def _esc(self, text) -> str:
+        if text is None:
+            return "—"
+        return (
+            str(text)
+            .replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+        )
+
     @command("load", aliases=["dlmod"], doc="Загрузить модуль по файлу, коду или ссылке")
     async def cmd_load(self, event, args):
         loader = getattr(self.client, "loader", None)
@@ -51,7 +85,7 @@ class Loader(Module):
             )
             if file_name and file_name.endswith(".py"):
                 await event.edit("📥 Скачивание файла модуля...")
-                file_path = await self.client.download_media(reply, file="modules_custom/")
+                file_path = await self.client.download_media(reply, file="modules/")
                 mod_name = os.path.basename(file_path)[:-3]
                 with open(file_path, "r", encoding="utf-8") as f:
                     code_content = f.read()
@@ -71,7 +105,7 @@ class Loader(Module):
                     if resp.status == 200:
                         code_content = await resp.text()
                         mod_name = url.split("/")[-1].replace(".py", "").split("?")[0]
-                        file_path = os.path.join("modules_custom", f"{mod_name}.py")
+                        file_path = os.path.join("modules", f"{mod_name}.py")
                         with open(file_path, "w", encoding="utf-8") as f:
                             f.write(code_content)
                     else:
@@ -92,12 +126,26 @@ class Loader(Module):
             try:
                 from pathlib import Path
                 await loader.load_module_from_file(Path("modules_custom") / f"{mod_name}.py")
-                await event.edit(f"✅ Модуль `{mod_name}` успешно загружен в TETKO!")
+
+                # ── Вытаскиваем метаданные из кода ──
+                meta = self._extract_meta(code_content or "")
+                shown_name = meta.get("name") or mod_name
+                shown_desc = meta.get("description") or "—"
+                shown_compat = meta.get("compat") or "—"
+                shown_author = meta.get("author") or "—"
+
+                text = (
+                    f"<blockquote><b>Модуль <i>{self._esc(shown_name)}</i> загружен!!</b></blockquote>\n\n"
+                    f"<blockquote><i>Описание</i>: {self._esc(shown_desc)}\n"
+                    f"Компат: <code>{self._esc(shown_compat)}</code></blockquote>\n\n"
+                    f"<blockquote>Автор: {self._esc(shown_author)}</blockquote>"
+                )
+                await event.edit(text, parse_mode="html")
             except Exception as e:
                 await event.edit(f"❌ Ошибка при инициализации модуля `{mod_name}`:\n`{e}`")
         else:
             await event.edit(
-                f"✅ Файл `modules_custom/{mod_name}.py` сохранён. Перезапустите бота."
+                f"✅ Файл `modules/{mod_name}.py` сохранён. Перезапустите бота."
             )
 
     @command("unload", doc="Выгрузить и удалить модуль")
@@ -113,13 +161,8 @@ class Loader(Module):
         if loader and hasattr(loader, "unload_module"):
             await loader.unload_module(mod_name)
 
-        file_path = None
-        for base in ("modules_custom", "modules"):
-            candidate = os.path.join(base, f"{mod_name}.py")
-            if os.path.exists(candidate):
-                file_path = candidate
-                break
-        if file_path:
+        file_path = os.path.join("modules", f"{mod_name}.py")
+        if os.path.exists(file_path):
             os.remove(file_path)
 
         await event.edit(f"🗑 Модуль `{mod_name}` выгружен и удалён.")
@@ -131,33 +174,19 @@ class Loader(Module):
         only_for="owner",
     )
     async def cmd_unlm(self, event, args):
-        """Отправить файл модуля в чат.
+        """Выгрузить файл модуля из modules/ прямо в чат.
 
         Использование:
-          .unlm <имя>    — отправить <имя>.py
+          .unlm <имя>    — отправить modules/<имя>.py
           .unlm          — список доступных модулей
         """
-        def _find_module(name: str) -> str | None:
-            for base in ("modules_custom", "modules"):
-                candidate = os.path.join(base, f"{name}.py")
-                if os.path.exists(candidate):
-                    return candidate
-            return None
-
-        def _list_modules() -> list[str]:
-            result = []
-            for base in ("modules_custom", "modules"):
-                if not os.path.isdir(base):
-                    continue
-                for f in os.listdir(base):
-                    if f.endswith(".py") and not f.startswith("_"):
-                        nm = f[:-3]
-                        if nm not in result:
-                            result.append(nm)
-            return sorted(result)
+        modules_dir = "modules"
 
         if not args:
-            installed = _list_modules()
+            installed = sorted([
+                f[:-3] for f in os.listdir(modules_dir)
+                if f.endswith(".py") and not f.startswith("_")
+            ]) if os.path.isdir(modules_dir) else []
             if not installed:
                 await event.edit("📂 Нет установленных модулей")
                 return
@@ -173,8 +202,8 @@ class Loader(Module):
         if name.endswith(".py"):
             name = name[:-3]
 
-        path = _find_module(name)
-        if not path:
+        path = os.path.join(modules_dir, f"{name}.py")
+        if not os.path.exists(path):
             await event.edit(
                 f"❌ Модуль <code>{name}</code> не найден",
                 parse_mode="html",
@@ -200,86 +229,6 @@ class Loader(Module):
                 f"❌ Ошибка отправки: <code>{e}</code>",
                 parse_mode="html",
             )
-
-    @command(
-        name="um",
-        aliases=["delmod"],
-        description="Удалить модуль из modules_custom/",
-        only_for="owner",
-    )
-    async def cmd_um(self, event, args):
-        """Удалить модуль из локальной папки modules_custom/ + выгрузить."""
-        import os as _os
-
-        def _list_user_modules() -> list[str]:
-            if not _os.path.isdir("modules_custom"):
-                return []
-            return sorted(
-                f[:-3] for f in _os.listdir("modules_custom")
-                if f.endswith(".py") and not f.startswith("_")
-            )
-
-        def _find_user_module(name: str) -> str | None:
-            candidate = _os.path.join("modules_custom", f"{name}.py")
-            return candidate if _os.path.exists(candidate) else None
-
-        if not args:
-            installed = _list_user_modules()
-            if not installed:
-                await event.edit(
-                    "📂 <b>Нет пользовательских модулей</b>",
-                    parse_mode="html",
-                )
-                return
-            text = (
-                "📂 <b>Пользовательские модули</b>\n\n"
-                + "\n".join(f"• <code>{name}</code>" for name in installed)
-                + "\n\n<i>Использование:</i> <code>.um &lt;имя&gt;</code>"
-            )
-            await event.edit(text, parse_mode="html")
-            return
-
-        name = args[0].strip()
-        if name.endswith(".py"):
-            name = name[:-3]
-
-        path = _find_user_module(name)
-        if not path:
-            # проверяем, не системный ли
-            if _os.path.exists(_os.path.join("modules", f"{name}.py")):
-                await event.edit(
-                    f"❌ <code>{name}</code> — системный модуль, нельзя удалить",
-                    parse_mode="html",
-                )
-                return
-            await event.edit(
-                f"❌ Модуль <code>{name}</code> не найден",
-                parse_mode="html",
-            )
-            return
-
-        # выгружаем из реестра
-        loader = getattr(self.client, "loader", None)
-        if loader is not None:
-            try:
-                await loader.unload_module(name)
-            except Exception as e:
-                self.log.warning(f"um: unload {name} failed: {e}")
-
-        # удаляем файл
-        try:
-            _os.remove(path)
-        except Exception as e:
-            await event.edit(
-                f"❌ Ошибка удаления: <code>{e}</code>",
-                parse_mode="html",
-            )
-            return
-
-        await event.edit(
-            f"🗑 Модуль <code>{name}</code> удалён",
-            parse_mode="html",
-        )
 
     @command("restart", doc="Перезапустить процесс TETKO")
     async def cmd_restart(self, event):
