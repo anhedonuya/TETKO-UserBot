@@ -272,6 +272,133 @@ class Group(_UIItem):
         self.button_text = button_text or title
 
 
+class Answer(_UIItem):
+    """UI-only: всплывающий ответ при нажатии."""
+    ui_type = "answer"
+
+    def __init__(self, button_text, text="", *, alert=True, key=None, **_kw):
+        super().__init__(key=key, **_kw)
+        self._button_text = button_text
+        self._text = text
+        self.alert = alert
+
+    def get_button_text(self, owner=None):
+        return str(self._button_text or "Info")
+
+    @property
+    def button_text(self):
+        return self.get_button_text()
+
+    def get_text(self, owner=None):
+        return str(self._text or "")
+
+    @property
+    def text(self):
+        return self.get_text()
+
+
+class Status(_UIItem):
+    """UI-only: read-only статус."""
+    ui_type = "status"
+
+    def __init__(self, title, value="", *, key=None, **_kw):
+        super().__init__(key=key, **_kw)
+        self._title = title
+        self._value = value
+
+    def get_button_text(self, owner=None):
+        return str(self._title or "Status")
+
+    @property
+    def button_text(self):
+        return self.get_button_text()
+
+    def get_value(self, owner=None):
+        return self._value
+
+
+class Notice(_UIItem):
+    """UI-only: popup с текстом."""
+    ui_type = "notice"
+
+    def __init__(self, text, *, alert=True, key=None, **_kw):
+        super().__init__(key=key, **_kw)
+        self._text = text
+        self.alert = alert
+
+    def get_text(self, owner=None):
+        return str(self._text or "")
+
+    @property
+    def text(self):
+        return self.get_text()
+
+
+class Callback(_UIItem):
+    """UI-only: одна callback-кнопка."""
+    ui_type = "callback"
+
+    def __init__(self, button_text, on_click=None, *, key=None, **_kw):
+        super().__init__(key=key, **_kw)
+        self._button_text = button_text
+        self.on_click = on_click
+
+    def get_button_text(self, owner=None):
+        return str(self._button_text or "Action")
+
+    @property
+    def button_text(self):
+        return self.get_button_text()
+
+    async def trigger_on_click(self, owner, event):
+        if self.on_click is None:
+            return None
+        import inspect
+        result = self.on_click(owner, event)
+        if inspect.isawaitable(result):
+            await result
+
+
+class Url(_UIItem):
+    """UI-only: URL-кнопка."""
+    ui_type = "url"
+
+    def __init__(self, button_text, url, *, key=None, **_kw):
+        super().__init__(key=key, **_kw)
+        self._button_text = button_text
+        self._url = url
+
+    def get_button_text(self, owner=None):
+        return str(self._button_text or "Link")
+
+    @property
+    def button_text(self):
+        return self.get_button_text()
+
+    def get_url(self, owner=None):
+        return str(self._url or "")
+
+    @property
+    def url(self):
+        return self.get_url()
+
+
+class Divider(_UIItem):
+    """UI-only: разделитель."""
+    ui_type = "divider"
+
+    def __init__(self, text="────────", *, key=None, **_kw):
+        super().__init__(key=key, **_kw)
+        self._text = text
+
+    def get_button_text(self, owner=None):
+        return str(self._text or "────────")
+
+    @property
+    def button_text(self):
+        return self.get_button_text()
+
+
 class Buttons(_UIItem):
     ui_type = "buttons"
     def __init__(self, title, buttons=None, description="", *, button_text=None, key=None, **kw):
