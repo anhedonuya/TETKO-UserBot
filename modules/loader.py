@@ -51,7 +51,7 @@ class Loader(Module):
             )
             if file_name and file_name.endswith(".py"):
                 await event.edit("📥 Скачивание файла модуля...")
-                file_path = await self.client.download_media(reply, file="modules/")
+                file_path = await self.client.download_media(reply, file="modules_custom/")
                 mod_name = os.path.basename(file_path)[:-3]
                 with open(file_path, "r", encoding="utf-8") as f:
                     code_content = f.read()
@@ -71,7 +71,7 @@ class Loader(Module):
                     if resp.status == 200:
                         code_content = await resp.text()
                         mod_name = url.split("/")[-1].replace(".py", "").split("?")[0]
-                        file_path = os.path.join("modules", f"{mod_name}.py")
+                        file_path = os.path.join("modules_custom", f"{mod_name}.py")
                         with open(file_path, "w", encoding="utf-8") as f:
                             f.write(code_content)
                     else:
@@ -91,13 +91,13 @@ class Loader(Module):
         if loader and hasattr(loader, "load_module_from_file"):
             try:
                 from pathlib import Path
-                await loader.load_module_from_file(Path("modules") / f"{mod_name}.py")
+                await loader.load_module_from_file(Path("modules_custom") / f"{mod_name}.py")
                 await event.edit(f"✅ Модуль `{mod_name}` успешно загружен в TETKO!")
             except Exception as e:
                 await event.edit(f"❌ Ошибка при инициализации модуля `{mod_name}`:\n`{e}`")
         else:
             await event.edit(
-                f"✅ Файл `modules/{mod_name}.py` сохранён. Перезапустите бота."
+                f"✅ Файл `modules_custom/{mod_name}.py` сохранён. Перезапустите бота."
             )
 
     @command("unload", doc="Выгрузить и удалить модуль")
@@ -113,8 +113,13 @@ class Loader(Module):
         if loader and hasattr(loader, "unload_module"):
             await loader.unload_module(mod_name)
 
-        file_path = os.path.join("modules", f"{mod_name}.py")
-        if os.path.exists(file_path):
+        file_path = None
+        for base in ("modules_custom", "modules"):
+            candidate = os.path.join(base, f"{mod_name}.py")
+            if os.path.exists(candidate):
+                file_path = candidate
+                break
+        if file_path:
             os.remove(file_path)
 
         await event.edit(f"🗑 Модуль `{mod_name}` выгружен и удалён.")
@@ -126,19 +131,33 @@ class Loader(Module):
         only_for="owner",
     )
     async def cmd_unlm(self, event, args):
-        """Выгрузить файл модуля из modules/ прямо в чат.
+        """Отправить файл модуля в чат.
 
         Использование:
-          .unlm <имя>    — отправить modules/<имя>.py
+          .unlm <имя>    — отправить <имя>.py
           .unlm          — список доступных модулей
         """
-        modules_dir = "modules"
+        def _find_module(name: str) -> str | None:
+            for base in ("modules_custom", "modules"):
+                candidate = os.path.join(base, f"{name}.py")
+                if os.path.exists(candidate):
+                    return candidate
+            return None
+
+        def _list_modules() -> list[str]:
+            result = []
+            for base in ("modules_custom", "modules"):
+                if not os.path.isdir(base):
+                    continue
+                for f in os.listdir(base):
+                    if f.endswith(".py") and not f.startswith("_"):
+                        nm = f[:-3]
+                        if nm not in result:
+                            result.append(nm)
+            return sorted(result)
 
         if not args:
-            installed = sorted([
-                f[:-3] for f in os.listdir(modules_dir)
-                if f.endswith(".py") and not f.startswith("_")
-            ]) if os.path.isdir(modules_dir) else []
+            installed = _list_modules()
             if not installed:
                 await event.edit("📂 Нет установленных модулей")
                 return
@@ -154,8 +173,8 @@ class Loader(Module):
         if name.endswith(".py"):
             name = name[:-3]
 
-        path = os.path.join(modules_dir, f"{name}.py")
-        if not os.path.exists(path):
+        path = _find_module(name)
+        if not path:
             await event.edit(
                 f"❌ Модуль <code>{name}</code> не найден",
                 parse_mode="html",
