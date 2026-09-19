@@ -320,6 +320,16 @@ class MCUBModuleBase:
                     log.warning(f"uninstall hook: {e}")
         self._loaded = False
 
+    @property
+    def subinline(self):
+        """MCUB-совместимый subinline: rich_form / form / send / button.
+
+        Реализация через tetko kernel.inline и bot_client (если есть).
+        """
+        if not hasattr(self, "_subinline") or self._subinline is None:
+            self._subinline = _SubInline(self)
+        return self._subinline
+
     def __getattribute__(self, name):
         if name == "config":
             try: return object.__getattribute__(self, "_get_config")()
@@ -331,3 +341,75 @@ class MCUBModuleBase:
 
 
 __all__ = ["MCUBModuleBase"]
+
+
+class _SubInline:
+    """Реальный subinline: делегирует в tetko kernel.inline / bot_client."""
+
+    def __init__(self, module):
+        self._module = module
+
+    @property
+    def bot(self):
+        k = getattr(self._module, "kernel", None)
+        if k is None:
+            return None
+        return getattr(k, "bot_client", None) or getattr(k, "_k", None) and getattr(getattr(k, "_k"), "bot_client", None)
+
+    async def rich_form(self, event, text, **kwargs):
+        """Fallback: rich-API нет — шлём обычным сообщением с HTML."""
+        k = getattr(self._module, "kernel", None)
+        chat_id = getattr(event, "chat_id", None)
+        if k is None or chat_id is None:
+            return None
+        try:
+            kk = getattr(k, "_k", k)  # развернуть KernelProxy при необходимости
+            inline = getattr(kk, "inline", None)
+            text = str(text or "").strip()
+            if inline is not None and hasattr(inline, "form"):
+                return await inline.form(
+                    chat_id=chat_id,
+                    text=text,
+                    buttons=[],
+                    reply_to=kwargs.get("reply_to"),
+                    parse_mode="html",
+                )
+            client = getattr(kk, "client", None)
+            if client is not None:
+                return await client.send_message(
+                    chat_id, text, parse_mode="html",
+                    reply_to=kwargs.get("reply_to"),
+                )
+        except Exception as e:
+            import logging
+            logging.getLogger("TETKO.mcub_compat.subinline").warning(f"rich_form: {e}")
+        return None
+
+    async def form(self, chat_id, text, buttons=None, **kwargs):
+        k = getattr(self._module, "kernel", None)
+        if k is None:
+            return None
+        kk = getattr(k, "_k", k)
+        inline = getattr(kk, "inline", None)
+        if inline is not None and hasattr(inline, "form"):
+            try:
+                return await inline.form(
+                    chat_id=chat_id, text=str(text or ""),
+                    buttons=buttons or [],
+                    reply_to=kwargs.get("reply_to"),
+                    parse_mode="html",
+                )
+            except Exception as e:
+                import logging
+                logging.getLogger("TETKO.mcub_compat.subinline").warning(f"form: {e}")
+        client = getattr(kk, "client", None)
+        if client is not None:
+            return await client.send_message(chat_id, str(text or ""), parse_mode="html")
+        return None
+
+    def __getattr__(self, name):
+        import logging
+        logging.getLogger("TETKO.mcub_compat.subinline").debug(f"subinline.{name} — не реализовано")
+        async def _stub(*a, **kw):
+            return None
+        return _stub
