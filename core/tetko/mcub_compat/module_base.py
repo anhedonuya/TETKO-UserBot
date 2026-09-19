@@ -1,4 +1,8 @@
-"""Реальный MCUB ModuleBase поверх tetko."""
+"""Реальный MCUB ModuleBase поверх tetko.
+
+Собирает декораторы из `@loader.command/watcher/loop/callback/...` через
+`__init_subclass__`, а в `__init__` регистрирует всё через `kernel.register.*`.
+"""
 from __future__ import annotations
 
 import inspect
@@ -66,7 +70,6 @@ class _ArgsShim:
     def __len__(self): return len(self.args)
     def __getitem__(self, i): return self.args[i]
     def __iter__(self): return iter(self.args)
-    def __repr__(self): return f"<ArgsShim {self.args!r}>"
 
 
 class _ButtonFactoryStub:
@@ -82,6 +85,8 @@ class _ButtonFactoryStub:
 
 
 class MCUBModuleBase:
+    """Базовый класс MCUB-модуля."""
+
     name = "Unnamed"
     version = "0.0.0"
     author = "unknown"
@@ -91,6 +96,36 @@ class MCUBModuleBase:
     strings = {}
     config = None
 
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+
+        # Собираем всё, что помечено декораторами из loader.*
+        registry = {
+            "commands": [],
+            "watchers": [],
+            "callbacks": [],
+            "loops": [],
+            "bot_commands": [],
+            "inlines": [],
+        }
+        for attr_name, attr in cls.__dict__.items():
+            if not callable(attr):
+                continue
+            for pattern, kw in getattr(attr, "_mcub_commands", []):
+                registry["commands"].append((pattern, kw, attr_name))
+            for kw in getattr(attr, "_mcub_watchers", []):
+                registry["watchers"].append((kw, attr_name))
+            for kw in getattr(attr, "_mcub_callbacks", []):
+                registry["callbacks"].append((kw, attr_name))
+            for kw in getattr(attr, "_mcub_loops", []):
+                registry["loops"].append((kw, attr_name))
+            for pattern, kw in getattr(attr, "_mcub_bot_commands", []):
+                registry["bot_commands"].append((pattern, kw, attr_name))
+            for pattern, kw in getattr(attr, "_mcub_inline", []):
+                registry["inlines"].append((pattern, kw, attr_name))
+
+        cls._mcub_registry = registry
+
     def __init__(self, kernel=None, client=None, register=None):
         self.kernel = kernel
         self.client = client
@@ -99,6 +134,52 @@ class MCUBModuleBase:
         self._loaded = False
         self.cache = getattr(kernel, "cache", None)
         self.db = kernel
+
+        try:
+            self._auto_register()
+        except Exception as e:
+            log.warning(f"[{getattr(self, 'name', '?')}] auto-register: {e}")
+
+    def _auto_register(self):
+        registry = getattr(type(self), "_mcub_registry", None)
+        if not registry:
+            return
+        kr = getattr(self.kernel, "register", None)
+        if kr is None:
+            return
+
+        for pattern, kw, attr_name in registry.get("commands", []):
+            bound = getattr(self, attr_name)
+            kr.command(pattern, **kw)(bound)
+
+        for kw, attr_name in registry.get("watchers", []):
+            bound = getattr(self, attr_name)
+            kr.watcher(**kw)(bound)
+
+        for kw, attr_name in registry.get("callbacks", []):
+            bound = getattr(self, attr_name)
+            try:
+                kr.callback(**kw)(bound)
+            except Exception:
+                pass
+
+        for kw, attr_name in registry.get("loops", []):
+            bound = getattr(self, attr_name)
+            kr.loop(**kw)(bound)
+
+        for pattern, kw, attr_name in registry.get("bot_commands", []):
+            bound = getattr(self, attr_name)
+            try:
+                kr.bot_command(pattern, **kw)(bound)
+            except Exception:
+                pass
+
+        for pattern, kw, attr_name in registry.get("inlines", []):
+            bound = getattr(self, attr_name)
+            try:
+                kr.event("inlinequery", pattern=pattern, **kw)(bound)
+            except Exception:
+                pass
 
     def _get_strings(self):
         data = getattr(self, "strings", None) or {}
@@ -161,7 +242,8 @@ class MCUBModuleBase:
             return await self.kernel.register.invoke(command, args, chat_id, reply_to)
         return None
 
-    async def inline(self, chat_id, title, fields=None, buttons=None, auto_send=True, ttl=200, reply_to=None, **kwargs):
+    async def inline(self, chat_id, title, fields=None, buttons=None, auto_send=True,
+                     ttl=200, reply_to=None, **kwargs):
         log.warning("inline() пока не реализован (этап 4)")
         return (False, None)
 

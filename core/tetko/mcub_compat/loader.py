@@ -1,6 +1,7 @@
 """Загрузчик MCUB-модулей поверх TETKO."""
 from __future__ import annotations
 
+import importlib
 import importlib.util
 import logging
 import sys
@@ -17,83 +18,24 @@ log = logging.getLogger("TETKO.mcub_compat.loader")
 
 
 def _install_fakes() -> None:
-    import types
+    """Подменить ModuleBase в core.lib.loader.module_base на MCUBModuleBase.
 
-    # Создаём всю цепочку пакетов, если их нет в sys.modules
-    for pkg in (
-        "core.lib",
-        "core.lib.loader",
-        "core.lib.types",
-        "core.lib.base",
-        "core.lib.utils",
-        "core.lib.time",
-        "core_inline",
-        "core_inline.api",
-        "core_inline.lib",
-    ):
-        if pkg not in sys.modules:
-            mod = types.ModuleType(pkg)
-            mod.__path__ = []
-            sys.modules[pkg] = mod
+    Декораторы (command/watcher/loop/...) остаются РЕАЛЬНЫМИ — они уже
+    вешают `_mcub_*` атрибуты на функции в core/lib/loader/module_base.py.
+    """
+    # 1. Убеждаемся, что реальный модуль core.lib.loader.module_base загружен
+    if "core.lib.loader.module_base" not in sys.modules:
+        importlib.import_module("core.lib.loader.module_base")
 
-    mb = sys.modules.get("core.lib.loader.module_base")
-    if mb is None:
-        mb = types.ModuleType("core.lib.loader.module_base")
-        sys.modules["core.lib.loader.module_base"] = mb
+    mb = sys.modules["core.lib.loader.module_base"]
     mb.ModuleBase = MCUBModuleBase
-    mb.command = _stub_decorator
-    mb.callback = _stub_decorator
-    mb.watcher = _stub_decorator
-    mb.loop = _stub_decorator
-    mb.bot_command = _stub_decorator
-    mb.inline = _stub_decorator
 
-    kp = sys.modules.get("core.lib.loader.kernel_proxy")
-    if kp is None:
-        kp = types.ModuleType("core.lib.loader.kernel_proxy")
-        sys.modules["core.lib.loader.kernel_proxy"] = kp
+    # 2. kernel_proxy — wrap_event_for_module no-op
+    if "core.lib.loader.kernel_proxy" not in sys.modules:
+        importlib.import_module("core.lib.loader.kernel_proxy")
+    kp = sys.modules["core.lib.loader.kernel_proxy"]
     kp.wrap_event_for_module = lambda e, *a, **kw: e
 
-    # core.lib.types
-    t = sys.modules.get("core.lib.types")
-    if t is not None:
-        t.Event = object
-        t.InlineMessage = object
-        t.Message = object
-        t.Kernel = object
-        t.Client = object
-        t.Register = object
-
-    # core.lib.types.event и другие подпакеты — как отдельные модули
-    for sub in ("event", "client", "kernel", "message", "register"):
-        full = f"core.lib.types.{sub}"
-        if full not in sys.modules:
-            m = types.ModuleType(full)
-            sys.modules[full] = m
-        m = sys.modules[full]
-        if sub == "event":
-            m.Event = object
-        elif sub == "client":
-            m.Client = object
-        elif sub == "kernel":
-            m.Kernel = object
-        elif sub == "message":
-            m.Message = object
-        elif sub == "register":
-            m.Register = object
-
-    # core_inline.api.inline — make_cb_button заглушка
-    if "core_inline.api.inline" not in sys.modules:
-        m = types.ModuleType("core_inline.api.inline")
-        sys.modules["core_inline.api.inline"] = m
-    sys.modules["core_inline.api.inline"].make_cb_button = _stub_decorator
-
-    # core_inline.lib.manager — InlineManager заглушка
-    if "core_inline.lib.manager" not in sys.modules:
-        m = types.ModuleType("core_inline.lib.manager")
-        sys.modules["core_inline.lib.manager"] = m
-    if not hasattr(sys.modules["core_inline.lib.manager"], "InlineManager"):
-        sys.modules["core_inline.lib.manager"].InlineManager = type("InlineManager", (), {})
 
 def _stub_decorator(*args, **kwargs):
     def deco(fn):
@@ -120,7 +62,11 @@ def _find_module_class(py_module: Any) -> Any:
     return None
 
 
-async def load_mcub_module(tetko_kernel, file_path, module_name=None):
+async def load_mcub_module(
+    tetko_kernel: Any,
+    file_path: str | Path,
+    module_name: str | None = None,
+) -> Any:
     path = Path(file_path)
     if not path.exists():
         raise FileNotFoundError(f"MCUB-модуль не найден: {path}")
@@ -130,7 +76,9 @@ async def load_mcub_module(tetko_kernel, file_path, module_name=None):
 
     code = path.read_text(encoding="utf-8")
     if not is_mcub_module(code):
-        raise ValueError(f"Файл {path.name} не похож на MCUB-модуль")
+        raise ValueError(
+            f"Файл {path.name} не похож на MCUB-модуль — используй обычный загрузчик"
+        )
 
     _install_fakes()
     try:
@@ -148,10 +96,9 @@ async def load_mcub_module(tetko_kernel, file_path, module_name=None):
     if module_class is None:
         raise ImportError(f"В файле {path.name} не найден класс-наследник ModuleBase")
 
-    # Создаём proxy ДО инстанса, чтобы __init__ модуля уже видел kernel.register
+    # Создаём proxy ДО инстанса, чтобы __init__ модуля видел kernel.register
     proxy = KernelProxy(tetko_kernel, None)
 
-    # Заглушка — чтобы TetkoCommand.__repr__ не падал на module=None
     class _PlaceholderModule:
         name = "Pending"
     proxy.register.module = _PlaceholderModule()
@@ -173,6 +120,15 @@ async def load_mcub_module(tetko_kernel, file_path, module_name=None):
     instance._register = proxy.register
 
     registry = tetko_kernel.registry
+
+    # Если модуль уже загружен — сначала выгружаем
+    existing = registry.get_module(mod_name)
+    if existing is not None:
+        try:
+            await unload_mcub_module(tetko_kernel, mod_name)
+        except Exception as e:
+            log.warning(f"[mcub_compat] unload-existing {mod_name}: {e}")
+
     registry.register_module(instance)
 
     try:
@@ -198,7 +154,7 @@ async def load_mcub_module(tetko_kernel, file_path, module_name=None):
     return instance
 
 
-async def unload_mcub_module(tetko_kernel, module_name):
+async def unload_mcub_module(tetko_kernel: Any, module_name: str) -> bool:
     registry = tetko_kernel.registry
     mod = registry.get_module(module_name)
     if mod is None:

@@ -1,4 +1,4 @@
-"""Заглушка. При загрузке mcub-модуля compat подменяет sys.modules."""
+"""MCUB-совместимый module_base. Декораторы вешают метаданные на функции."""
 from __future__ import annotations
 
 
@@ -19,17 +19,61 @@ class ModuleBase:
     async def on_unload(self): pass
 
 
-def _stub_decorator(*args, **kwargs):
+def command(pattern, **kwargs):
     def deco(fn):
+        meta = list(getattr(fn, "_mcub_commands", []))
+        meta.append((pattern, kwargs))
+        fn._mcub_commands = meta
         return fn
-    if args and callable(args[0]) and not kwargs:
-        return args[0]
     return deco
 
 
-command = _stub_decorator
-callback = _stub_decorator
-watcher = _stub_decorator
-loop = _stub_decorator
-bot_command = _stub_decorator
-inline = _stub_decorator
+def watcher(*args, **kwargs):
+    def deco(fn):
+        meta = list(getattr(fn, "_mcub_watchers", []))
+        meta.append(kwargs)
+        fn._mcub_watchers = meta
+        return fn
+    if args and callable(args[0]) and not kwargs:
+        return deco(args[0])
+    return deco
+
+
+def callback(*args, **kwargs):
+    def deco(fn):
+        meta = list(getattr(fn, "_mcub_callbacks", []))
+        meta.append(kwargs)
+        fn._mcub_callbacks = meta
+        return fn
+    if args and callable(args[0]) and not kwargs:
+        return deco(args[0])
+    return deco
+
+
+def loop(*args, **kwargs):
+    def deco(fn):
+        meta = list(getattr(fn, "_mcub_loops", []))
+        meta.append(kwargs)
+        fn._mcub_loops = meta
+        return fn
+    if args and callable(args[0]) and not kwargs:
+        return deco(args[0])
+    return deco
+
+
+def bot_command(pattern, **kwargs):
+    def deco(fn):
+        meta = list(getattr(fn, "_mcub_bot_commands", []))
+        meta.append((pattern, kwargs))
+        fn._mcub_bot_commands = meta
+        return fn
+    return deco
+
+
+def inline(pattern, **kwargs):
+    def deco(fn):
+        meta = list(getattr(fn, "_mcub_inline", []))
+        meta.append((pattern, kwargs))
+        fn._mcub_inline = meta
+        return fn
+    return deco
