@@ -10,12 +10,15 @@ KEY = "map"
 class Aliases(Module):
     name = "Aliases"
     __compat__ = "0.0.9.0"
-    version = "1.0.0"
+    version = "1.0.1"
     author = "@flexownerAL"
     description = {
         "ru": "Глобальные алиасы для команд",
         "en": "Global command aliases",
     }
+
+    def _prefix(self) -> str:
+        return getattr(self.kernel.context, "prefix", ".") or "."
 
     def _get_map(self) -> dict:
         data = db_get(NS, KEY, {})
@@ -29,12 +32,17 @@ class Aliases(Module):
             return "—"
         return str(t).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
+    def _fmt(self, name: str) -> str:
+        return f"<code>{self._esc(self._prefix())}{self._esc(name)}</code>"
+
     @command("addalias", aliases=["aalias"], description="Add alias to a command")
     async def cmd_addalias(self, event, args):
+        p = self._prefix()
+
         if len(args) < 2:
             await event.edit(
-                "<blockquote>Usage: <code>.addalias &lt;command&gt; &lt;alias&gt;</code>\n"
-                "Example: <code>.addalias ping p</code></blockquote>",
+                f"<blockquote>Usage: <code>{self._esc(p)}addalias &lt;command&gt; &lt;alias&gt;</code>\n"
+                f"Example: <code>{self._esc(p)}addalias ping p</code></blockquote>",
                 parse_mode="html",
             )
             return
@@ -49,14 +57,14 @@ class Aliases(Module):
         registry = self.kernel.registry
         if registry.find_command(alias):
             await event.edit(
-                f"<blockquote><code>.{self._esc(alias)}</code> is already taken</blockquote>",
+                f"<blockquote>{self._fmt(alias)} is already taken</blockquote>",
                 parse_mode="html",
             )
             return
 
         if not registry.find_command(target):
             await event.edit(
-                f"<blockquote>Command <code>.{self._esc(target)}</code> not found</blockquote>",
+                f"<blockquote>Command {self._fmt(target)} not found</blockquote>",
                 parse_mode="html",
             )
             return
@@ -66,15 +74,17 @@ class Aliases(Module):
         self._set_map(m)
 
         await event.edit(
-            f"<blockquote><code>.{self._esc(alias)}</code> → <code>.{self._esc(target)}</code></blockquote>",
+            f"<blockquote>{self._fmt(alias)} → {self._fmt(target)}</blockquote>",
             parse_mode="html",
         )
 
     @command("delalias", aliases=["dalias"], description="Delete alias")
     async def cmd_delalias(self, event, args):
+        p = self._prefix()
+
         if not args:
             await event.edit(
-                "<blockquote>Usage: <code>.delalias &lt;alias&gt;</code></blockquote>",
+                f"<blockquote>Usage: <code>{self._esc(p)}delalias &lt;alias&gt;</code></blockquote>",
                 parse_mode="html",
             )
             return
@@ -84,7 +94,7 @@ class Aliases(Module):
 
         if alias not in m:
             await event.edit(
-                f"<blockquote>Alias <code>.{self._esc(alias)}</code> not found</blockquote>",
+                f"<blockquote>Alias {self._fmt(alias)} not found</blockquote>",
                 parse_mode="html",
             )
             return
@@ -93,7 +103,7 @@ class Aliases(Module):
         self._set_map(m)
 
         await event.edit(
-            f"<blockquote><code>.{self._esc(alias)}</code> (→ <code>.{self._esc(target)}</code>) removed</blockquote>",
+            f"<blockquote>{self._fmt(alias)} (→ {self._fmt(target)}) removed</blockquote>",
             parse_mode="html",
         )
 
@@ -105,7 +115,7 @@ class Aliases(Module):
             return
 
         lines = [
-            f"<code>.{self._esc(a)}</code> → <code>.{self._esc(c)}</code>"
+            f"{self._fmt(a)} → {self._fmt(c)}"
             for a, c in sorted(m.items())
         ]
         body = "\n".join(lines)
@@ -117,7 +127,7 @@ class Aliases(Module):
     @watcher()
     async def watch(self, event):
         text = (event.raw_text or "").strip()
-        prefix = self.kernel.context.prefix
+        prefix = self._prefix()
 
         if not text.startswith(prefix):
             return
