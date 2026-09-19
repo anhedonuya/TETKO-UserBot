@@ -19,15 +19,15 @@ CMD_TIMEOUT = 30
 # Это защита от СЛУЧАЙНОГО разрушения, не от целенаправленной атаки.
 BLACKLIST = [
     # Разрушительные
-    r"rm\s+(-[a-zA-Z]*\s+)*-[a-zA-Z]*[rR][a-zA-Z]*f?\s+/\s*$",   # rm -rf / в конце
-    r"rm\s+(-[a-zA-Z]*\s+)*-[a-zA-Z]*[rR][a-zA-Z]*f?\s+/\*",     # rm -rf /*
-    r"rm\s+(-[a-zA-Z]*\s+)*-r[f]?\s+~",                          # rm -rf ~
-    r"rm\s+(-[a-zA-Z]*\s+)*-r[f]?\s+/sdcard",                    # rm -rf /sdcard
+    r"rm\s+(-[a-zA-Z]*\s+)*-[a-zA-Z]*[rR][a-zA-Z]*f?\s+/\s*$",
+    r"rm\s+(-[a-zA-Z]*\s+)*-[a-zA-Z]*[rR][a-zA-Z]*f?\s+/\*",
+    r"rm\s+(-[a-zA-Z]*\s+)*-r[f]?\s+~",
+    r"rm\s+(-[a-zA-Z]*\s+)*-r[f]?\s+/sdcard",
     r"\bmkfs\b",
-    r"\bdd\s+.*of=/dev/",                                         # dd of=/dev/...
+    r"\bdd\s+.*of=/dev/",
     r"\bdd\s+.*if=/dev/(zero|random|urandom)",
-    r":\(\)\s*\{\s*:\|:&\s*\};:",                                # fork bomb
-    r">\s*/dev/(sd|block|mmcblk)",                                # запись прямо в диск
+    r":\(\)\s*\{\s*:\|:&\s*\};:",
+    r">\s*/dev/(sd|block|mmcblk)",
 
     # Завершение системы
     r"\b(shutdown|reboot|halt|poweroff)\b",
@@ -63,10 +63,23 @@ def _esc(text: str) -> str:
     )
 
 
+def _clean_error(text: str) -> str:
+    """Убрать шум из stderr (пути /path/sh: N:)."""
+    import re as _re
+    cleaned = []
+    for line in text.split("\n"):
+        # убрать префикс "/path/to/sh: N:"
+        line = _re.sub(r"^/[^:]*sh:\s*\d+:\s*", "", line)
+        line = _re.sub(r"^/data/[^:]+:\s*\d+:\s*", "", line)
+        if line.strip():
+            cleaned.append(line.strip())
+    return "\n".join(cleaned) if cleaned else text.strip()
+
+
 class TerminalModule(Module):
     name = "Terminal"
     __compat__ = "0.0.9.0"
-    version = "0.2.0"
+    version = "0.3.0"
     author = "@anhedonuya"
     description = "Выполнение shell-команд (только владелец)"
 
@@ -102,8 +115,10 @@ class TerminalModule(Module):
             log.warning(f"Terminal: blocked command: {cmd!r} (pattern: {reason})")
             return
 
+        # ── executing ──
         await event.edit(
-            f"🖥 <b>Выполняется:</b>\n<code>{_esc(cmd)}</code>",
+            f"<blockquote><b>executing:</b>\n"
+            f"<code>{_esc(cmd)}</code></blockquote>",
             parse_mode="html",
         )
 
@@ -122,8 +137,8 @@ class TerminalModule(Module):
                 proc.kill()
                 await proc.wait()
                 await event.edit(
-                    f"⏱ <b>Таймаут</b> ({CMD_TIMEOUT}s)\n"
-                    f"<code>{_esc(cmd)}</code>",
+                    f"<b>❌ Error:</b>\n"
+                    f"<blockquote><code>timeout ({CMD_TIMEOUT}s)</code></blockquote>",
                     parse_mode="html",
                 )
                 return
@@ -131,28 +146,42 @@ class TerminalModule(Module):
             output = stdout.decode(errors="replace").rstrip()
             exit_code = proc.returncode
 
-            if not output:
-                output = "(нет вывода)"
+            # ── Успех ──
+            if exit_code == 0:
+                if not output:
+                    output = "(no output)"
 
-            truncated = False
-            if len(output) > MAX_OUTPUT:
-                output = output[:MAX_OUTPUT]
-                truncated = True
+                truncated = False
+                if len(output) > MAX_OUTPUT:
+                    output = output[:MAX_OUTPUT]
+                    truncated = True
 
-            status = "✅" if exit_code == 0 else "❌"
-            text = (
-                f"{status} <b>Выполнено:</b> <code>{_esc(cmd)}</code>\n"
-                f"<b>Exit code:</b> <code>{exit_code}</code>\n"
-                f"<blockquote expandable><pre>{_esc(output)}</pre></blockquote>"
+                text = (
+                    f"<b>✅ Successfully:</b>\n"
+                    f"<blockquote><pre>{_esc(output)}</pre></blockquote>"
+                )
+                if truncated:
+                    text += f"\n<i>(truncated to {MAX_OUTPUT} chars)</i>"
+
+                await event.edit(text, parse_mode="html")
+                return
+
+            # ── Ошибка (exit_code != 0) ──
+            err = output or f"exit code {exit_code}"
+            if len(err) > MAX_OUTPUT:
+                err = err[:MAX_OUTPUT]
+
+            err_clean = _clean_error(err)
+            await event.edit(
+                f"<b>❌ Error:</b>\n"
+                f"<blockquote><code>{_esc(err_clean)}</code></blockquote>",
+                parse_mode="html",
             )
-            if truncated:
-                text += f"\n<i>(вывод обрезан до {MAX_OUTPUT} символов)</i>"
-
-            await event.edit(text, parse_mode="html")
 
         except Exception as e:
             log.exception("terminal command failed")
             await event.edit(
-                f"❌ <b>Ошибка:</b> <code>{_esc(str(e))}</code>",
+                f"<b>❌ Error:</b>\n"
+                f"<blockquote><code>{_esc(str(e))}</code></blockquote>",
                 parse_mode="html",
             )
