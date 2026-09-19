@@ -105,10 +105,16 @@ class Tek(Module):
         # если модуль импортирован из modules.tetko_user_modules — попробуем файл
         try:
             import sys as _sys
+            from pathlib import Path as _Path
             real_mod = _sys.modules.get(mod_file)
             if real_mod and hasattr(real_mod, "__file__"):
-                path = str(real_mod.__file__)
-                return "/modules/" in path and "modules_custom" not in path
+                path = _Path(real_mod.__file__).as_posix()  # универсальный /
+                # системный = в modules/, не в modules_custom/
+                parts = path.split("/")
+                if "modules_custom" in parts:
+                    return False
+                if "modules" in parts:
+                    return True
         except Exception:
             pass
         return False
@@ -295,6 +301,7 @@ class Tek(Module):
                     reply_markup=None,
                 ))
             except Exception as e:
+                log.warning(f"[TEK] close edit failed: {e}")
 
         trash = FB_TRASH
         rows.append([
@@ -394,6 +401,7 @@ class Tek(Module):
                     reply_markup=None,
                 ))
             except Exception as e:
+                log.warning(f"[TEK] close edit failed: {e}")
 
         trash = FB_TRASH
         rows.append([
