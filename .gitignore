@@ -67,3 +67,6 @@ modules_custom/**/*.py
 modules_custom/*.bak
 
 bump.sh
+
+# ─── Старые модули (убраны из репо) ───
+modules_legacy/
