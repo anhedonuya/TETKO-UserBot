@@ -1,5 +1,13 @@
+import logging
 import time
+
+from telethon.tl.types import InputMediaWebPage
+
 from core.tetko import Module, command
+
+log = logging.getLogger("TETKO.module.ping")
+
+PING_BANNER = "https://raw.githubusercontent.com/anhedonuya/TETKO-UserBot/main/ping_banner.png"
 
 
 class PingModule(Module):
@@ -7,7 +15,7 @@ class PingModule(Module):
     __compat__ = "0.0.9.0"
     description = "Проверка задержки и состояния TETKO Юзербота"
     author = "@anhedonuya"
-    version = "1.2.0"
+    version = "1.2.1"
 
     @command(name="ping", description="Измерить пинг бота")
     async def ping_cmd(self, event):
@@ -19,7 +27,6 @@ class PingModule(Module):
         end = time.perf_counter()
         ms = round((end - start) * 1000, 2)
 
-        # премиум-флаг установлен ядром при старте
         has_premium = bool(getattr(self.kernel.context, "user_premium", False))
 
         if has_premium:
@@ -38,7 +45,23 @@ class PingModule(Module):
                 f'по пингу все харашо {ms}'
             )
 
-        await event.edit(text, parse_mode="html")
+        try:
+            from telethon.tl.functions.messages import EditMessageRequest
+
+            # парсим HTML в entities
+            parsed, entities = await self.client._parse_message_text(text, "html")
+
+            await self.client(EditMessageRequest(
+                peer=await event.get_input_chat(),
+                id=event.id,
+                message=parsed,
+                entities=entities,
+                media=InputMediaWebPage(PING_BANNER, force_large_media=True, optional=True),
+                invert_media=True,
+            ))
+        except Exception as e:
+            log.warning(f"ping: banner failed: {e}")
+            await event.edit(text, parse_mode="html")
 
     @command(name="info", description="Информация о системе TETKO")
     async def info_cmd(self, event):
