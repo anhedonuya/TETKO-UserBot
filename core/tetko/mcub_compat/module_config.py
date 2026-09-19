@@ -480,25 +480,38 @@ class ModuleConfig:
             self._register_item(item, index)
 
     def _register_item(self, item, index):
+        """Регистрирует любой элемент — ConfigValue, UI-item, или вообще чужой объект."""
+        # ConfigValue
         if isinstance(item, ConfigValue):
             self._values[item.key] = item
             self._items_order.append(item.key)
             return
+
+        # UI-item с ui_only=True
         if getattr(item, "ui_only", False):
             ui_type = getattr(item, "ui_type", "ui")
-            raw_key = item.key or f"{ui_type}_{index}"
+            raw_key = getattr(item, "key", None) or f"{ui_type}_{index}"
             key = raw_key
             self._ui_items[key] = item
             self._items_order.append(key)
             if ui_type == "group":
                 group_order = []
                 self._group_items[key] = group_order
-                for ci, child in enumerate(getattr(item, "items", []) or []):
+                for child in getattr(item, "items", []) or []:
                     if isinstance(child, ConfigValue):
                         self._values[child.key] = child
                         group_order.append(child.key)
             return
-        raise TypeError(f"ModuleConfig: неподдерживаемый элемент {type(item).__name__}")
+
+        # Чужие объекты (Answer из core.lib, Group с другим API, ...) — не роняем модуль
+        import logging
+        log = logging.getLogger("TETKO.mcub_compat.module_config")
+        name = type(item).__name__
+        key = getattr(item, "key", None) or f"unknown_{index}"
+        log.warning(f"ModuleConfig: элемент {name} неизвестен — пропущен как {key}")
+        self._ui_items[key] = item
+        self._items_order.append(key)
+
 
     def bind_owner(self, owner):
         self._owner = owner

@@ -161,6 +161,11 @@ async def load_mcub_module(
         spec.loader.exec_module(py_module)
     except Exception as e:
         log.exception(f"[mcub_compat] ошибка исполнения {path.name}")
+        try:
+            path.unlink()
+            log.warning(f"[mcub_compat] удалён сбойный модуль: {path}")
+        except Exception as _rm_err:
+            log.warning(f"[mcub_compat] не удалось удалить {path}: {_rm_err}")
         raise ImportError(f"Ошибка импорта MCUB-модуля {mod_name}: {e}") from e
 
     module_class = _find_module_class(py_module)
