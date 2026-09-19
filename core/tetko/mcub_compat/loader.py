@@ -135,6 +135,22 @@ async def load_mcub_module(
             f"Файл {path.name} не похож на MCUB-модуль — используй обычный загрузчик"
         )
 
+    # однократная инициализация подсистем mcub_compat
+    if not getattr(tetko_kernel, "_mcub_subsystems_installed", False):
+        try:
+            from .config_ui import install as _install_cfg_ui
+            _install_cfg_ui(tetko_kernel)
+        except Exception as e:
+            log.warning(f"[mcub_compat] config_ui: {e}")
+        try:
+            from .callback_dispatch import install_callback_handler
+            _bot = getattr(tetko_kernel, "bot_client", None)
+            if _bot is not None:
+                install_callback_handler(tetko_kernel, _bot)
+        except Exception as e:
+            log.warning(f"[mcub_compat] callback_dispatch: {e}")
+        tetko_kernel._mcub_subsystems_installed = True
+
     _install_fakes()
     try:
         spec = importlib.util.spec_from_file_location(spec_name, path)

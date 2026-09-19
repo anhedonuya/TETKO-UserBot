@@ -341,8 +341,24 @@ class KernelProxy:
         return (False, None)
 
     async def inline_query_and_click(self, chat_id, query, **kwargs):
-        log.warning("inline_query_and_click пока не реализован (этап 4)")
-        return (False, None)
+        """Выполнить inline-запрос и кликнуть результат (через юзербота)."""
+        try:
+            k = object.__getattribute__(self, "_k")
+            client = getattr(k, "client", None)
+            if client is None:
+                return (False, None)
+            bot_username = (getattr(k, "config", {}) or {}).get("inline_bot_username")
+            if not bot_username:
+                log.warning("inline_bot_username не задан в config")
+                return (False, None)
+            results = await client.inline_query(bot_username, query)
+            if not results:
+                return (False, None)
+            msg = await results[0].click(chat_id, reply_to=kwargs.get("reply_to"))
+            return (True, msg)
+        except Exception as e:
+            log.exception(f"inline_query_and_click: {e}")
+            return (False, None)
 
     async def send_inline(self, chat_id, query, buttons=None):
         return False
@@ -383,3 +399,37 @@ class KernelProxy:
 
 
 __all__ = ["KernelProxy", "_TTLCache"]
+
+
+def _convert_buttons(buttons):
+    """MCUB buttons (list[list[dict|Button]]) → tetko buttons (list[list[Button]])."""
+    if not buttons:
+        return []
+    out = []
+    for row in buttons:
+        if not isinstance(row, list):
+            row = [row]
+        r = []
+        for b in row:
+            if b is None:
+                continue
+            # уже telethon Button — оставляем
+            if type(b).__name__.startswith("KeyboardButton") or hasattr(b, "click"):
+                r.append(b)
+            elif isinstance(b, dict):
+                btype = b.get("type", "callback").lower()
+                text = b.get("text", "…")
+                if btype == "url":
+                    from telethon.tl.custom import Button
+                    r.append(Button.url(text, b.get("url", "")))
+                elif btype == "callback":
+                    from telethon.tl.custom import Button
+                    data = b.get("data") or b.get("token") or ""
+                    if isinstance(data, str):
+                        data = data.encode()
+                    r.append(Button.inline(text, data))
+            else:
+                r.append(b)
+        if r:
+            out.append(r)
+    return out

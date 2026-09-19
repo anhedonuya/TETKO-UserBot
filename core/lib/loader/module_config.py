@@ -40,13 +40,59 @@ class ConfigValue:
 class ModuleConfig:
     def __init__(self, *a, **kw): pass
 class Group:
-    def __init__(self, *a, **kw): pass
+    """UI-stub: принимает любые аргументы."""
+    def __init__(self, *args, **kwargs):
+        self.args = args
+        self.kwargs = kwargs
+
+
 class Row:
-    def __init__(self, *a, **kw): pass
-class Divider: pass
-class Url: pass
-class Callback: pass
-class Status: pass
-class Notice: pass
-class Answer: pass
+    """UI-stub: принимает любые аргументы."""
+    def __init__(self, *args, **kwargs):
+        self.args = args
+        self.kwargs = kwargs
+
+
+class Divider:
+    """UI-stub: принимает любые аргументы."""
+    def __init__(self, *args, **kwargs):
+        self.args = args
+        self.kwargs = kwargs
+
+
+class Url:
+    """UI-stub: принимает любые аргументы."""
+    def __init__(self, *args, **kwargs):
+        self.args = args
+        self.kwargs = kwargs
+
+
+class Callback:
+    """UI-stub: принимает любые аргументы."""
+    def __init__(self, *args, **kwargs):
+        self.args = args
+        self.kwargs = kwargs
+
+
+class Status:
+    """UI-stub: принимает любые аргументы."""
+    def __init__(self, *args, **kwargs):
+        self.args = args
+        self.kwargs = kwargs
+
+
+class Notice:
+    """UI-stub: принимает любые аргументы."""
+    def __init__(self, *args, **kwargs):
+        self.args = args
+        self.kwargs = kwargs
+
+
+class Answer:
+    """UI-stub: принимает любые аргументы."""
+    def __init__(self, *args, **kwargs):
+        self.args = args
+        self.kwargs = kwargs
+
+
 class Buttons: pass
