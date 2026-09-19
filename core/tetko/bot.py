@@ -92,11 +92,11 @@ class BotClient:
         ttl: float = 600,
     ) -> None:
         """Зарегистрировать готовое меню под ключом key."""
-        # Чистим просроченные
         now = time.time()
+        # чистим только меню (dict-и с "created")
         self._menus = {
             k: v for k, v in self._menus.items()
-            if now - v["created"] < v["ttl"]
+            if not isinstance(v, dict) or now - v.get("created", 0) < v.get("ttl", 600)
         }
         self._menus[key] = {
             "text": text,
@@ -141,6 +141,7 @@ class BotClient:
             rows.append(KeyboardButtonRow(buttons=kb_row))
         markup = ReplyInlineMarkup(rows=rows) if rows else None
 
+
         kwargs = {
             "id": inline_message_id,
             "message": msg_text,
@@ -153,9 +154,11 @@ class BotClient:
         # ВАЖНО: редактировать inline-сообщение может ТОЛЬКО бот, не юзербот!
         return await self.client(EditInlineBotMessageRequest(**kwargs))
 
-    def get_inline_message_id(self, token: str) -> str | None:
+    def get_inline_message_id(self, token: str):
         """Получить inline_message_id по token кнопки."""
-        return self._menus.get(f"imid_{token}")
+        if not hasattr(self, "_inlines"):
+            return None
+        return self._inlines.get(token)
 
     def get_message_id(self, token: str):
         """Получить (chat_id, message_id) по token кнопки."""
@@ -250,10 +253,12 @@ class BotClient:
 
         # сохраняем inline_message_id для каждого token
         if imid:
+            if not hasattr(self, "_inlines"):
+                self._inlines: dict = {}
             for row in buttons:
                 for btn in row:
                     token = btn["token"]
-                    self._menus[f"imid_{token}"] = imid
+                    self._inlines[token] = imid
         return message
 
     # ─── Обработчики ───

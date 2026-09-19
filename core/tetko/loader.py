@@ -24,8 +24,12 @@ class ModuleLoader:
     def __init__(self, registry: Registry, kernel: Optional[Any] = None):
         self.registry = registry
         self.kernel = kernel
+        # Системные модули (идут с ядром)
         self.modules_dir = Path("modules")
         self.modules_dir.mkdir(parents=True, exist_ok=True)
+        # Пользовательские модули (скачанные, локальные)
+        self.custom_dir = Path("modules_custom")
+        self.custom_dir.mkdir(parents=True, exist_ok=True)
 
     async def load_module_from_file(self, file_path: str | Path) -> Module:
         """Загрузить модуль из .py файла."""
@@ -115,8 +119,15 @@ class ModuleLoader:
         return mod_instance
 
     async def unload_module(self, name: str) -> bool:
-        """Выгрузить модуль по имени."""
+        """Выгрузить модуль по имени (класса) или по имени файла."""
         mod = self.registry.get_module(name)
+        if not mod:
+            # ищем по имени файла (case-insensitive)
+            for reg_name in list(self.registry._modules.keys()):
+                if reg_name.lower() == name.lower() or reg_name.lower().replace(" ", "") == name.lower():
+                    mod = self.registry.get_module(reg_name)
+                    name = reg_name
+                    break
         if not mod:
             return False
 
@@ -134,9 +145,10 @@ class ModuleLoader:
         return True
 
     async def load_all(self) -> int:
-        """Загрузить все .py модули из папки modules/."""
+        """Загрузить модули из modules/ (системные) и modules_custom/ (пользовательские)."""
         count = 0
-        for p in self.modules_dir.glob("*.py"):
+        # 1. Системные
+        for p in sorted(self.modules_dir.glob("*.py")):
             if p.name.startswith("_"):
                 continue
             try:
@@ -144,4 +156,13 @@ class ModuleLoader:
                 count += 1
             except Exception as e:
                 log.error(f"Ошибка загрузки {p.name}: {e}")
+        # 2. Пользовательские
+        for p in sorted(self.custom_dir.glob("*.py")):
+            if p.name.startswith("_"):
+                continue
+            try:
+                await self.load_module_from_file(p)
+                count += 1
+            except Exception as e:
+                log.error(f"Ошибка загрузки custom/{p.name}: {e}")
         return count

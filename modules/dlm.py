@@ -22,7 +22,8 @@ CATALOG_BRANCH = "main"
 CATALOG_API = f"https://api.github.com/repos/{CATALOG_REPO}/contents/"
 CATALOG_RAW = f"https://raw.githubusercontent.com/{CATALOG_REPO}/{CATALOG_BRANCH}"
 
-MODULES_DIR = Path("modules")
+MODULES_DIR = Path("modules")            # системные модули
+CUSTOM_DIR = Path("modules_custom")       # пользовательские модули
 CACHE_TTL = 300  # 5 минут — кэш каталога
 
 # Версия модуля (по дефолту). Переопредели в модуле.
@@ -135,16 +136,17 @@ class DLMModule(Module):
         return None
 
     def _get_local_version(self, file: str) -> Optional[str]:
-        """Вытащить version из локального modules/<file>."""
-        path = MODULES_DIR / file
-        if not path.exists():
-            return None
-        try:
-            content = path.read_text(encoding="utf-8")
-        except Exception:
-            return None
-        m = VERSION_RE.search(content)
-        return m.group(1) if m else None
+        """Вытащить version из modules/ или modules_custom/."""
+        for base in (CUSTOM_DIR, MODULES_DIR):
+            path = base / file
+            if path.exists():
+                try:
+                    content = path.read_text(encoding="utf-8")
+                    m = VERSION_RE.search(content)
+                    return m.group(1) if m else None
+                except Exception:
+                    pass
+        return None
 
     # ── ПРОВЕРКА ОБНОВЛЕНИЙ ──
     async def _check_updates(self) -> dict:
@@ -192,10 +194,16 @@ class DLMModule(Module):
 
     # ── ОБНОВЛЕНИЕ ──
     async def _update_module(self, file: str) -> bool:
-        """Скачать новую версию модуля и перезагрузить его."""
+        """Скачать новую версию модуля в modules_custom/ и перезагрузить."""
         url = f"{CATALOG_RAW}/{file}"
-        target = MODULES_DIR / file
-        backup = MODULES_DIR / f"{file}.bak"
+        # пользовательские модули — в CUSTOM_DIR, иначе ищем в MODULES_DIR
+        if (CUSTOM_DIR / file).exists() or not (MODULES_DIR / file).exists():
+            target = CUSTOM_DIR / file
+        else:
+            # системный модуль — не перезаписываем
+            log.warning(f"DLM: {file} — системный, обновление пропущено")
+            return False
+        backup = target.parent / f"{file}.bak"
 
         # 1. Скачать
         try:
@@ -356,6 +364,12 @@ class DLMModule(Module):
                     text=text,
                     buttons=buttons,
                 )
+                # ВАЖНО: сохраняем imid для НОВЫХ token'ов кнопок
+                if not hasattr(bot, "_inlines"):
+                    bot._inlines = {}
+                for row in buttons:
+                    for btn in row:
+                        bot._inlines[btn["token"]] = imid
             else:
                 # отправляем новое
                 await bot.send_inline_menu(
@@ -371,7 +385,12 @@ class DLMModule(Module):
         kernel = self.kernel
         catalog = await self._fetch_catalog(force=force_refresh)
 
-        installed = [x for x in catalog if (MODULES_DIR / x["file"]).exists()]
+        def _mod_path(f):
+            for base in (CUSTOM_DIR, MODULES_DIR):
+                if (base / f).exists():
+                    return base
+            return None
+        installed = [x for x in catalog if _mod_path(x["file"])]
 
         if not catalog:
             text = (
@@ -394,7 +413,13 @@ class DLMModule(Module):
             )
             buttons = []
             for item in catalog:
-                mark = "✅ " if (MODULES_DIR / item["file"]).exists() else "📥 "
+                p = _mod_path(item["file"])
+                if p is None:
+                    mark = "📥 "
+                elif p == MODULES_DIR:
+                    mark = "🔵 "  # системный
+                else:
+                    mark = "✅ "  # пользовательский
                 label = f"{mark}{item['name']}"
 
                 async def on_click(cb_event, file=item["file"]):
@@ -447,7 +472,13 @@ class DLMModule(Module):
             await cb_event.answer("Модуль не найден")
             return
 
-        installed = (MODULES_DIR / file).exists()
+        # путь в одной из папок
+        mod_path = None
+        for base in (CUSTOM_DIR, MODULES_DIR):
+            if (base / file).exists():
+                mod_path = base / file
+                break
+        installed = mod_path is not None
         local_v = self._get_local_version(file)
         remote_v = await self._get_remote_version(file)
 
