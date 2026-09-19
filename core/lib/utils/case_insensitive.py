@@ -1,0 +1,1 @@
+CaseInsensitiveDict = dict
