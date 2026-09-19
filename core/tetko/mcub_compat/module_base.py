@@ -11,6 +11,8 @@ from typing import Any, Optional
 
 log = logging.getLogger("TETKO.mcub_compat.module_base")
 
+from .module_config import ModuleConfig
+
 
 class _ModuleLogger:
     def __init__(self, name):
@@ -135,6 +137,16 @@ class MCUBModuleBase:
         self.cache = getattr(kernel, "cache", None)
         self.db = kernel
 
+        # Реальный ModuleConfig из class.config (MCUB-стиль)
+        self._config_obj = None
+        cls_cfg = getattr(type(self), "config", None)
+        if isinstance(cls_cfg, ModuleConfig):
+            self._config_obj = cls_cfg
+            try:
+                self._config_obj.bind_owner(self)
+            except Exception:
+                pass
+
         try:
             self._auto_register()
         except Exception as e:
@@ -194,6 +206,9 @@ class MCUBModuleBase:
         return _DictStrings(active)
 
     def _get_config(self):
+        cfg = getattr(self, "_config_obj", None)
+        if cfg is not None:
+            return cfg
         return _EmptyConfig()
 
     async def save_config(self): return None

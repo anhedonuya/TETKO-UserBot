@@ -36,6 +36,61 @@ def _install_fakes() -> None:
     kp = sys.modules["core.lib.loader.kernel_proxy"]
     kp.wrap_event_for_module = lambda e, *a, **kw: e
 
+    
+    # 4. core_inline.* — подменяем на inline_shim
+    try:
+        from . import inline_shim as _ishim
+        import types as _t2
+        for _mod_name in (
+            "core_inline",
+            "core_inline.lib",
+            "core_inline.lib.manager",
+            "core_inline.api",
+            "core_inline.api.inline",
+            "core_inline.api.core",
+            "core_inline.handlers",
+            "core_inline.bot",
+        ):
+            if _mod_name not in sys.modules:
+                sys.modules[_mod_name] = _t2.ModuleType(_mod_name)
+            _m = sys.modules[_mod_name]
+            # Пихаем весь shim во все подмодули, чтобы любые импорты находились
+            for _n in dir(_ishim):
+                if _n.startswith("_"):
+                    continue
+                setattr(_m, _n, getattr(_ishim, _n))
+    except Exception as _e:
+        log.warning(f"[mcub_compat] core_inline fake: {_e}")
+
+# 3. module_config — подменяем на mcub_compat.module_config
+    import importlib as _il
+    if "core.lib.loader.module_config" not in sys.modules:
+        try:
+            _il.import_module("core.lib.loader.module_config")
+        except Exception:
+            pass
+    try:
+        from . import module_config as _mcm
+        if "core.lib.loader.module_config" in sys.modules:
+            _target = sys.modules["core.lib.loader.module_config"]
+        else:
+            import types as _types
+            _target = _types.ModuleType("core.lib.loader.module_config")
+            sys.modules["core.lib.loader.module_config"] = _target
+        for _name in (
+            "ValidationError", "Validator",
+            "Boolean", "Integer", "Float", "String", "Choice", "List",
+            "DictType", "Secret", "Placeholders", "RegExp", "Link", "TelegramID",
+            "EntityLike", "Emoji", "MultiChoice", "Union", "Hidden", "NoneType",
+            "ConfigValue", "ModuleConfig",
+            "Row", "Divider", "Group", "Buttons",
+        ):
+            if hasattr(_mcm, _name):
+                setattr(_target, _name, getattr(_mcm, _name))
+    except Exception as _e:
+        log.warning(f"[mcub_compat] module_config fake: {_e}")
+
+
 
 def _stub_decorator(*args, **kwargs):
     def deco(fn):
