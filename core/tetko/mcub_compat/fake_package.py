@@ -49,29 +49,7 @@ def _make_module(name: str, attrs: dict[str, Any] | None = None) -> types.Module
 #  Минимальный ModuleBase (реальный класс — нужен для isinstance)
 # ────────────────────────────────────────────────────────────────────
 
-class _MCUB_ModuleBase:
-    """Заглушка базового класса. Реальная реализация — в этапе 3."""
-
-    name: str = "Unnamed"
-    version: str = "0.0.0"
-    author: str = "unknown"
-    description: dict = {}
-    dependencies: list = []
-    banner_url: str | None = None
-    strings: dict = {}
-    config: Any = None
-
-    def __init__(self, kernel=None, client=None, register=None):
-        self.kernel = kernel
-        self.client = client
-        self._register = register
-
-    async def on_load(self) -> None:
-        pass
-
-    async def on_unload(self) -> None:
-        pass
-
+from .module_base import MCUBModuleBase as _MCUB_ModuleBase
 
 def _noop_decorator(*args, **kwargs):
     """Декоратор-заглушка: возвращает функцию без изменений."""
