@@ -376,78 +376,98 @@ class _SubInline:
 
     # --- внутренняя логика ---
     def _find_rich_client(self):
-        """Найти TelegramClient с send_rich_message."""
-        for c in (self.bot, getattr(self.bot, "_client", None), getattr(self.bot, "client", None)):
-            if c is not None and hasattr(c, "send_rich_message"):
-                return c
-        if self.client is not None and hasattr(self.client, "send_rich_message"):
-            return self.client
+        """Найти TelegramClient для отправки.
+
+        Для core/tetko/bot.py BotClient: TelegramClient лежит в bot.client.
+        Возвращает (tg_client, is_rich) или None.
+        """
+        import logging
+        log = logging.getLogger("TETKO.mcub_compat.subinline")
+
+        bot = self.bot
+        if bot is not None:
+            # core/tetko/bot.py — BotClient.client = TelegramClient
+            tg = getattr(bot, "client", None)
+            if tg is not None and hasattr(tg, "send_rich_message"):
+                log.warning(f"rich_form: TelegramClient в bot.client ({type(tg).__name__}) — rich")
+                return (tg, True)
+            if tg is not None and hasattr(tg, "send_message"):
+                log.warning(f"rich_form: клиент в bot.client ({type(tg).__name__}) — без rich")
+                return (tg, False)
+            # _client
+            tg = getattr(bot, "_client", None)
+            if tg is not None and hasattr(tg, "send_message"):
+                log.warning(f"rich_form: клиент в bot._client ({type(tg).__name__})")
+                return (tg, hasattr(tg, "send_rich_message"))
+
+        c = self.client
+        if c is not None and hasattr(c, "send_message"):
+            log.warning(f"rich_form: клиент в kernel.client ({type(c).__name__})")
+            return (c, hasattr(c, "send_rich_message"))
+
+        log.warning("rich_form: TelegramClient не найден")
         return None
 
+
     async def _send_text(self, chat_id, text, **kwargs):
-        """Отправить обычным сообщением — бот, потом юзербот."""
+        import logging
+        log = logging.getLogger("TETKO.mcub_compat.subinline")
         reply_to = kwargs.get("reply_to")
         buttons = kwargs.get("buttons")
         parse_mode = kwargs.get("parse_mode", "html")
 
-        if self.bot is not None:
-            try:
-                return await self.bot.send_message(
-                    chat_id, text,
-                    parse_mode=parse_mode,
-                    buttons=buttons,
-                    reply_to=reply_to,
-                )
-            except TypeError:
-                # старые версии не принимают buttons=
-                try:
-                    return await self.bot.send_message(
-                        chat_id, text, parse_mode=parse_mode, reply_to=reply_to
-                    )
-                except Exception as e:
-                    import logging
-                    logging.getLogger("TETKO.mcub_compat.subinline").warning(f"bot.send_message: {e}")
-            except Exception as e:
-                import logging
-                logging.getLogger("TETKO.mcub_compat.subinline").warning(f"bot.send_message: {e}")
+        found = self._find_rich_client()
+        if found is None:
+            return None
+        tg, _ = found
+        try:
+            return await tg.send_message(
+                chat_id, text, parse_mode=parse_mode,
+                buttons=buttons, reply_to=reply_to,
+            )
+        except TypeError:
+            return await tg.send_message(
+                chat_id, text, parse_mode=parse_mode, reply_to=reply_to
+            )
+        except Exception as e:
+            log.warning(f"_send_text: {type(e).__name__}: {e}")
+            return None
 
-        if self.client is not None:
-            try:
-                return await self.client.send_message(
-                    chat_id, text,
-                    parse_mode=parse_mode,
-                    buttons=buttons,
-                    reply_to=reply_to,
-                )
-            except TypeError:
-                return await self.client.send_message(
-                    chat_id, text, parse_mode=parse_mode, reply_to=reply_to
-                )
-        return None
 
     # --- публичный API ---
     async def rich_form(self, event, text, **kwargs):
-        """Rich-сообщение. Fallback — обычное сообщение."""
+        import logging
+        log = logging.getLogger("TETKO.mcub_compat.subinline")
+
         chat_id = getattr(event, "chat_id", None)
         if chat_id is None:
             return None
         text = str(text or "")
+        reply_to = kwargs.get("reply_to")
 
-        tg = self._find_rich_client()
-        if tg is not None:
+        found = self._find_rich_client()
+        if found is None:
+            return None
+
+        tg, is_rich = found
+        if is_rich:
             try:
+                log.warning("rich_form: send_rich_message")
                 result = tg.send_rich_message(chat_id, html=text)
                 if hasattr(result, "__await__"):
                     result = await result
+                log.warning("rich_form: send_rich_message OK")
                 return result
             except Exception as e:
-                import logging
-                logging.getLogger("TETKO.mcub_compat.subinline").warning(
-                    f"send_rich_message: {type(e).__name__}: {e}"
-                )
+                log.warning(f"rich_form send_rich_message: {type(e).__name__}: {e}")
 
-        # fallback
-        return await self._send_text(chat_id, text, reply_to=kwargs.get("reply_to"))
+        try:
+            log.warning("rich_form: send_message (не rich)")
+            return await tg.send_message(chat_id, text, parse_mode="html", reply_to=reply_to)
+        except Exception as e:
+            log.warning(f"rich_form send_message: {type(e).__name__}: {e}")
+            return None
+
 
     async def form(self, chat_id, text, buttons=None, **kwargs):
         """Форма с кнопками (обычное сообщение)."""
