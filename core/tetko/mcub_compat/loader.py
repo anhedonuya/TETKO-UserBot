@@ -148,16 +148,27 @@ async def load_mcub_module(tetko_kernel, file_path, module_name=None):
     if module_class is None:
         raise ImportError(f"В файле {path.name} не найден класс-наследник ModuleBase")
 
+    # Создаём proxy ДО инстанса, чтобы __init__ модуля уже видел kernel.register
+    proxy = KernelProxy(tetko_kernel, None)
+
+    # Заглушка — чтобы TetkoCommand.__repr__ не падал на module=None
+    class _PlaceholderModule:
+        name = "Pending"
+    proxy.register.module = _PlaceholderModule()
+
     try:
         instance = module_class(
-            kernel=tetko_kernel,
+            kernel=proxy,
             client=getattr(tetko_kernel, "client", None),
-            register=None,
+            register=proxy.register,
         )
     except TypeError:
-        instance = module_class(tetko_kernel)
+        instance = module_class(proxy)
 
-    proxy = KernelProxy(tetko_kernel, instance)
+    # Дописываем module_instance в proxy (нужен register_shim)
+    object.__setattr__(proxy, "_module", instance)
+    proxy.register.module = instance
+
     instance.kernel = proxy
     instance._register = proxy.register
 

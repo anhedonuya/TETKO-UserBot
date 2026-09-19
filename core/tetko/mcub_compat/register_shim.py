@@ -157,7 +157,6 @@ class RegisterShim:
     def __init__(self, tetko_kernel, module_instance):
         self.kernel = tetko_kernel
         self.module = module_instance
-        self.module_name = getattr(module_instance, "name", type(module_instance).__name__)
         self._tetko_registry = tetko_kernel.registry
         self._commands = {}
         self._bot_commands = {}
@@ -170,6 +169,14 @@ class RegisterShim:
         self._on_load_fn = None
         self._on_install_fn = None
         self._uninstall_fn = None
+
+
+    @property
+    def module_name(self):
+        m = self.module
+        if m is None:
+            return "Unknown"
+        return getattr(m, "name", type(m).__name__)
 
     def command(self, pattern, **kwargs):
         def decorator(fn):
