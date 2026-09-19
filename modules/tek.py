@@ -79,10 +79,8 @@ def _premium(kernel) -> bool:
 
 def _parse_folder(name: str) -> str:
     """Определить папку модуля: 'modules' или 'modules_custom'."""
-    # пробуем по __file__ модуля
     try:
         mod_obj = None
-        # найдём модуль по имени в registry
         for m in getattr(_parse_folder, "_registry", {}).values() if hasattr(_parse_folder, "_registry") else []:
             pass
     except Exception:
@@ -115,7 +113,6 @@ class Tek(Module):
         "en": "Modules, commands, hiding, info",
     }
 
-    # ── БАЗА ──
     def _get_hidden(self) -> list:
         data = db_get("tek", "hidden", [])
         return list(data) if isinstance(data, list) else []
@@ -126,14 +123,12 @@ class Tek(Module):
     def _is_system(self, mod) -> bool:
         """Системный модуль? (из modules/)"""
         mod_file = getattr(mod, "__module__", "") or ""
-        # если модуль импортирован из modules.tetko_user_modules — попробуем файл
         try:
             import sys as _sys
             from pathlib import Path as _Path
             real_mod = _sys.modules.get(mod_file)
             if real_mod and hasattr(real_mod, "__file__"):
-                path = _Path(real_mod.__file__).as_posix()  # универсальный /
-                # системный = в modules/, не в modules_custom/
+                path = _Path(real_mod.__file__).as_posix()
                 parts = path.split("/")
                 if "modules_custom" in parts:
                     return False
@@ -174,26 +169,26 @@ class Tek(Module):
             t = _texts(lang)
             return f"▫️ <b>{mod.name}</b>: <i>{t['no_cmds']}</i>"
 
+        prefix = self.kernel.context.prefix  # ← фикс префикса
+
         parts = []
         for i, cmd in enumerate(cmds):
             if i >= CMD_LIMIT:
                 parts.append(f"(+{len(cmds) - CMD_LIMIT})")
                 break
-            s = f"<code>.{cmd.name}</code>"
+            s = f"<code>{prefix}{cmd.name}</code>"
             if cmd.aliases:
-                aliases = ", ".join(f".{a}" for a in cmd.aliases)
+                aliases = ", ".join(f"{prefix}{a}" for a in cmd.aliases)
                 s += f" [<i>{aliases}</i>]"
             parts.append(s)
         return f"▫️ <b>{mod.name}</b>: " + ", ".join(parts)
 
-    # ── ГЛАВНОЕ МЕНЮ ──
     @command(name="tek", description="Модули и команды")
     async def cmd_tek(self, event, args):
         await self._show_help(event)
 
     async def _show_help(self, event_or_cb, is_cb: bool = False):
         topic_id = self._get_topic_id(event_or_cb)
-        """Главное меню: с какими модулями нужна помощь?"""
         bot = getattr(self.kernel, "bot_client", None)
         if bot is None:
             return
@@ -202,14 +197,12 @@ class Tek(Module):
         t = _texts(lang)
         premium = _premium(self.kernel)
 
-        # В КНОПКАХ премиум-эмодзи не работают — только обычные
         sys_emoji = FB_SYS
         user_emoji = FB_USER
         q_emoji = EMOJI_Q if premium else FB_Q
 
         text = f"{t['help_title']} {q_emoji}{q_emoji}"
 
-        # кнопки: система / юзер
         async def on_sys(cb):
             await self._show_list(cb, "system", 0)
 
@@ -237,9 +230,7 @@ class Tek(Module):
                 topic_id=topic_id,
             )
 
-    # ── СПИСОК МОДУЛЕЙ ──
     async def _show_list(self, cb_event, kind: str, page: int):
-        """Показать список модулей (kind = 'system' | 'user')."""
         bot = getattr(self.kernel, "bot_client", None)
         if bot is None:
             return
@@ -257,7 +248,6 @@ class Tek(Module):
         start = page * PAGE_SIZE
         page_mods = mods[start:start + PAGE_SIZE]
 
-        # заголовок
         h1 = EMOJI_HEART1 if premium else "❤️"
         h2 = EMOJI_HEART2 if premium else "❤️"
         text = (
@@ -269,7 +259,6 @@ class Tek(Module):
             text += self._module_line(mod, lang) + "\n"
         text += "</blockquote>"
 
-        # кнопки пагинации
         rows = []
         nav = []
         if page > 0:
@@ -277,16 +266,14 @@ class Tek(Module):
                 await self._show_list(cb, k, p)
             nav.append(self.kernel.inline.make_button("<", on_prev, ttl=600))
 
-        # текущая точка
         async def on_noop(cb):
             await cb.answer()
         nav.append(self.kernel.inline.make_button("•", on_noop, ttl=600))
 
-        # страницы (все)
         for i in range(total_pages):
             if i == page:
                 continue
-            if len(nav) > 6:  # ограничим количество
+            if len(nav) > 6:
                 break
             async def on_page(cb, k=kind, p=i):
                 await self._show_list(cb, k, p)
@@ -299,17 +286,14 @@ class Tek(Module):
 
         rows.append(nav)
 
-        # назад + закрыть
         async def on_back(cb):
             await self._show_help(cb, is_cb=True)
 
         async def on_close(cb):
-            """Закрыть: отредактировать в "Меню закрыто" и убрать кнопки."""
             try:
                 await cb.answer()
             except Exception:
                 pass
-            # получить imid
             bot = getattr(self.kernel, "bot_client", None)
             if bot is None:
                 return
@@ -337,7 +321,6 @@ class Tek(Module):
 
         await self.kernel.inline.edit(cb_event, text, rows)
 
-    # ── СКРЫТИЕ ──
     @command(name="tekhide", description="Скрыть/показать модуль")
     async def cmd_tekhide(self, event, args):
         await self._show_hide(event)
@@ -387,7 +370,6 @@ class Tek(Module):
 
             rows.append([self.kernel.inline.make_button(label, on_toggle, ttl=600)])
 
-        # пагинация
         nav = []
         if page > 0:
             async def on_prev(cb, p=page - 1):
@@ -400,17 +382,14 @@ class Tek(Module):
         if nav:
             rows.append(nav)
 
-        # назад + закрыть
         async def on_back(cb):
             await self._show_help(cb, is_cb=True)
 
         async def on_close(cb):
-            """Закрыть: отредактировать в "Меню закрыто" и убрать кнопки."""
             try:
                 await cb.answer()
             except Exception:
                 pass
-            # получить imid
             bot = getattr(self.kernel, "bot_client", None)
             if bot is None:
                 return
@@ -452,7 +431,6 @@ class Tek(Module):
                 topic_id=topic_id,
             )
 
-    # ── ИНФО О СИСТЕМЕ ──
     @command(
         name="setprefix",
         aliases=["prefix"],
@@ -460,19 +438,18 @@ class Tek(Module):
         only_for="owner",
     )
     async def cmd_setprefix(self, event, args):
-        """Сменить префикс команд. Использование: .setprefix <символ>"""
+        """Сменить префикс команд."""
         if not args:
             cur = self.kernel.prefix
             await event.edit(
                 f"ℹ️ Текущий префикс: <code>{_esc(cur)}</code>\n"
-                "Использование: <code>.setprefix &lt;символ&gt;</code>",
+                f"Использование: <code>{self.kernel.context.prefix}setprefix &lt;символ&gt;</code>",
                 parse_mode="html",
             )
             return
 
         new_prefix = args[0].strip()
 
-        # проверки
         if not new_prefix:
             await event.edit("❌ Префикс не может быть пустым", parse_mode="html")
             return
@@ -485,13 +462,11 @@ class Tek(Module):
 
         old_prefix = self.kernel.prefix
 
-        # применяем в рантайме
         self.kernel.prefix = new_prefix
         self.kernel.context.prefix = new_prefix
         if hasattr(self.kernel, "dispatcher"):
             self.kernel.dispatcher.prefix = new_prefix
 
-        # сохраняем в config.json
         try:
             import json
             from pathlib import Path as _Path
@@ -504,7 +479,7 @@ class Tek(Module):
                     encoding="utf-8",
                 )
         except Exception as e:
-            self.log.warning(f"setprefix: save failed: {e}")
+            log.warning(f"setprefix: save failed: {e}")
 
         await event.edit(
             f"✅ Префикс изменён: <code>{_esc(old_prefix)}</code> → "
