@@ -284,5 +284,15 @@ class Loader(Module):
 
     @command("restart", doc="Перезапустить процесс TETKO", only_for="owner")
     async def cmd_restart(self, event):
-        await event.edit("🔄 Перезапуск TETKO UserBot...", parse_mode="html")
+        from core.tetko import db_set
+        db_set("updates", "pending_reload", {
+            "chat_id": event.chat_id,
+            "message_id": event.message.id,
+        })
+        await event.edit(
+            "<blockquote><b>🔄 Перезапуск TETKO UserBot...</b></blockquote>",
+            parse_mode="html",
+        )
+        await asyncio.sleep(2)
         os.execv(sys.executable, [sys.executable] + sys.argv)
+
