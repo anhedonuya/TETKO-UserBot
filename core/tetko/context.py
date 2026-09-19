@@ -29,6 +29,8 @@ class Context:
         self.prefix = prefix
         self.language = language
         self.config = dict(config or {})
+        # заполняется при kernel.start() — есть ли у владельца Telegram Premium
+        self.user_premium: bool = False
 
         # Хук на централизованную обработку ошибок (можно переопределить)
         self._error_handler = None

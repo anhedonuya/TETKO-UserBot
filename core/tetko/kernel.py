@@ -57,6 +57,14 @@ class Kernel:
         """Запуск ядра, загрузка модулей и старт событий."""
         log.info("🚀 Запуск ядра TETKO...")
 
+        # проверяем premium у владельца
+        try:
+            me = await self.client.get_me()
+            self.context.user_premium = False  # TEMP TEST
+            log.info(f"👑 Premium: {self.context.user_premium}")
+        except Exception as e:
+            log.warning(f"Не удалось проверить premium: {e}")
+
         # 1. Загружаем модули из папки modules/
         count = await self.loader.load_all()
         log.info(f"📦 Успешно загружено модулей: {count}")
