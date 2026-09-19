@@ -52,7 +52,8 @@ class Command:
         return await self.func(event, args)
 
     def __repr__(self) -> str:
-        return f"<Command .{self.name} ({self.module.name})>"
+        module_name = getattr(self.module, "name", "?") if self.module else "?"
+        return f"<Command .{self.name} ({module_name})>"
 
 
 class Registry:
