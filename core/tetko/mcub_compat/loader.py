@@ -19,6 +19,23 @@ log = logging.getLogger("TETKO.mcub_compat.loader")
 def _install_fakes() -> None:
     import types
 
+    # Создаём всю цепочку пакетов, если их нет в sys.modules
+    for pkg in (
+        "core.lib",
+        "core.lib.loader",
+        "core.lib.types",
+        "core.lib.base",
+        "core.lib.utils",
+        "core.lib.time",
+        "core_inline",
+        "core_inline.api",
+        "core_inline.lib",
+    ):
+        if pkg not in sys.modules:
+            mod = types.ModuleType(pkg)
+            mod.__path__ = []
+            sys.modules[pkg] = mod
+
     mb = sys.modules.get("core.lib.loader.module_base")
     if mb is None:
         mb = types.ModuleType("core.lib.loader.module_base")
@@ -37,6 +54,46 @@ def _install_fakes() -> None:
         sys.modules["core.lib.loader.kernel_proxy"] = kp
     kp.wrap_event_for_module = lambda e, *a, **kw: e
 
+    # core.lib.types
+    t = sys.modules.get("core.lib.types")
+    if t is not None:
+        t.Event = object
+        t.InlineMessage = object
+        t.Message = object
+        t.Kernel = object
+        t.Client = object
+        t.Register = object
+
+    # core.lib.types.event и другие подпакеты — как отдельные модули
+    for sub in ("event", "client", "kernel", "message", "register"):
+        full = f"core.lib.types.{sub}"
+        if full not in sys.modules:
+            m = types.ModuleType(full)
+            sys.modules[full] = m
+        m = sys.modules[full]
+        if sub == "event":
+            m.Event = object
+        elif sub == "client":
+            m.Client = object
+        elif sub == "kernel":
+            m.Kernel = object
+        elif sub == "message":
+            m.Message = object
+        elif sub == "register":
+            m.Register = object
+
+    # core_inline.api.inline — make_cb_button заглушка
+    if "core_inline.api.inline" not in sys.modules:
+        m = types.ModuleType("core_inline.api.inline")
+        sys.modules["core_inline.api.inline"] = m
+    sys.modules["core_inline.api.inline"].make_cb_button = _stub_decorator
+
+    # core_inline.lib.manager — InlineManager заглушка
+    if "core_inline.lib.manager" not in sys.modules:
+        m = types.ModuleType("core_inline.lib.manager")
+        sys.modules["core_inline.lib.manager"] = m
+    if not hasattr(sys.modules["core_inline.lib.manager"], "InlineManager"):
+        sys.modules["core_inline.lib.manager"].InlineManager = type("InlineManager", (), {})
 
 def _stub_decorator(*args, **kwargs):
     def deco(fn):
