@@ -24,7 +24,8 @@ CATALOG_RAW = f"https://raw.githubusercontent.com/{CATALOG_REPO}/{CATALOG_BRANCH
 
 MODULES_DIR = Path("modules")            # системные модули
 CUSTOM_DIR = Path("modules_custom")       # пользовательские модули
-CACHE_TTL = 300  # 5 минут — кэш каталога
+CACHE_TTL = 300   # 5 минут — кэш каталога
+PAGE_SIZE = 5     # модулей на странице в DLM
 
 # Версия модуля (по дефолту). Переопредели в модуле.
 VERSION_RE = re.compile(r'^\s*version\s*=\s*["\']([^"\']+)["\']', re.MULTILINE)
@@ -394,7 +395,7 @@ class DLMModule(Module):
         except Exception as e:
             self.log.warning(f"_send_menu_via_bot failed: {e}")
 
-    async def _show_main(self, event_or_cb, is_cb: bool = False, force_refresh: bool = False):
+    async def _show_main(self, event_or_cb, is_cb: bool = False, force_refresh: bool = False, page: int = 0):
         kernel = self.kernel
         catalog = await self._fetch_catalog(force=force_refresh)
 
@@ -403,6 +404,7 @@ class DLMModule(Module):
                 if (base / f).exists():
                     return base
             return None
+
         installed = [x for x in catalog if _mod_path(x["file"])]
 
         if not catalog:
@@ -414,25 +416,35 @@ class DLMModule(Module):
 
             async def on_refresh_empty(cb_event):
                 await cb_event.answer("Обновляю...")
-                await self._show_main(cb_event, is_cb=True, force_refresh=True)
+                await self._show_main(cb_event, is_cb=True, force_refresh=True, page=0)
 
             buttons = [[kernel.inline.make_button("🔄 Обновить", on_refresh_empty, ttl=600)]]
         else:
+            total = len(catalog)
+            total_pages = max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE)
+            page = max(0, min(page, total_pages - 1))
+
+            start_i = page * PAGE_SIZE
+            page_items = catalog[start_i:start_i + PAGE_SIZE]
+
             text = (
                 "📦 <b>DLM — Dynamic Loader of Modules</b>\n\n"
-                f"В каталоге: <code>{len(catalog)}</code>\n"
-                f"Установлено: <code>{len(installed)}</code>\n\n"
+                f"В каталоге: <code>{total}</code>\n"
+                f"Установлено: <code>{len(installed)}</code>\n"
+                f"Страница: <code>{page + 1}/{total_pages}</code>\n\n"
                 f"<i>Источник: {CATALOG_REPO}</i>"
             )
             buttons = []
-            for item in catalog:
+
+            # список модулей (5 на странице)
+            for item in page_items:
                 p = _mod_path(item["file"])
                 if p is None:
                     mark = "📥 "
                 elif p == MODULES_DIR:
-                    mark = "🔵 "  # системный
+                    mark = "🔵 "
                 else:
-                    mark = "✅ "  # пользовательский
+                    mark = "✅ "
                 label = f"{mark}{item['name']}"
 
                 async def on_click(cb_event, file=item["file"]):
@@ -440,42 +452,75 @@ class DLMModule(Module):
 
                 buttons.append([kernel.inline.make_button(label, on_click, ttl=600)])
 
-            async def on_refresh(cb_event):
-                await cb_event.answer("Обновляю...")
-                await self._show_main(cb_event, is_cb=True, force_refresh=True)
+            # пагинация
+            nav = []
+            if page > 0:
+                async def on_prev(cb, p=page - 1):
+                    await self._show_main(cb, is_cb=True, page=p)
+                nav.append(kernel.inline.make_button("<", on_prev, ttl=600))
+
+            async def on_noop(cb):
+                await cb.answer()
+            nav.append(kernel.inline.make_button("•", on_noop, ttl=600))
+
+            for i in range(total_pages):
+                if i == page:
+                    continue
+                if len(nav) > 6:
+                    break
+                async def on_page(cb, p=i):
+                    await self._show_main(cb, is_cb=True, page=p)
+                nav.append(kernel.inline.make_button(str(i + 1), on_page, ttl=600))
+
+            if page < total_pages - 1:
+                async def on_next(cb, p=page + 1):
+                    await self._show_main(cb, is_cb=True, page=p)
+                nav.append(kernel.inline.make_button(">", on_next, ttl=600))
+
+            buttons.append(nav)
+
+            async def on_refresh(cb):
+                await cb.answer("Обновляю...")
+                await self._show_main(cb, is_cb=True, force_refresh=True, page=page)
 
             buttons.append([kernel.inline.make_button("🔄 Обновить", on_refresh, ttl=600)])
 
-
+        # topic_id
+        topic_id = None
         try:
-            if is_cb:
-                # inline-сообщения нельзя edit'ать — отправляем новое
-                await self._send_menu_via_bot(event_or_cb, text, buttons)
-            else:
-                chat_id = event_or_cb.chat_id
-                try:
-                    await event_or_cb.delete()
-                except Exception:
-                    pass
-
-                # Отправляем inline-меню через бота (работает в любом чате)
-                bot = getattr(kernel, "bot_client", None)
-                if bot is not None:
-                    try:
-                        menu_key = f"dlm_main_{int(time.time())}"
-                        await bot.send_inline_menu(
-                            chat_id=chat_id,
-                            key=menu_key,
-                            text=text,
-                            buttons=buttons,
-                        )
-                        return
-                    except Exception as e:
-                        log.warning(f"DLM: send_inline_menu failed: {e}, fallback")
-                # fallback — обычная отправка (без кнопок)
-                await kernel.inline.form(chat_id, text, buttons)
+            rt = getattr(event_or_cb, "reply_to", None)
+            if rt is not None:
+                topic_id = (
+                    getattr(rt, "reply_to_top_id", None)
+                    or getattr(rt, "reply_to_msg_id", None)
+                )
         except Exception:
-            log.exception("DLM: ошибка в form/edit")
+            pass
+
+        if is_cb:
+            await self._send_menu_via_bot(event_or_cb, text, buttons)
+        else:
+            chat_id = event_or_cb.chat_id
+            try:
+                await event_or_cb.delete()
+            except Exception:
+                pass
+
+            bot = getattr(kernel, "bot_client", None)
+            if bot is not None:
+                try:
+                    menu_key = f"dlm_main_{int(time.time())}"
+                    await bot.send_inline_menu(
+                        chat_id=chat_id,
+                        key=menu_key,
+                        text=text,
+                        buttons=buttons,
+                        topic_id=topic_id,
+                    )
+                    return
+                except Exception as e:
+                    log.warning(f"DLM: send_inline_menu failed: {e}, fallback")
+            await kernel.inline.form(chat_id, text, buttons)
 
     # ── МЕНЮ МОДУЛЯ ──
     async def _show_module(self, cb_event, file: str):

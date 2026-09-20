@@ -1,22 +1,14 @@
-"""MCUB-совместимый module_base. Декораторы вешают метаданные на функции."""
+"""MCUB-совместимый module_base.
+
+ModuleBase = настоящий MCUBModuleBase (с __init_subclass__,
+который собирает _mcub_registry из @command-декораторов).
+Декораторы command/watcher/callback/loop/bot_command/inline
+оставлены здесь для совместимости импортов MCUB-модулей.
+"""
 from __future__ import annotations
 
-
-class ModuleBase:
-    name = "Unnamed"
-    version = "0.0.0"
-    author = "unknown"
-    description = {}
-    dependencies = []
-    banner_url = None
-    strings = {}
-    config = None
-
-    def __init__(self, *args, **kwargs):
-        pass
-
-    async def on_load(self): pass
-    async def on_unload(self): pass
+# Реэкспорт настоящего класса
+from core.tetko.mcub_compat.module_base import MCUBModuleBase as ModuleBase
 
 
 def command(pattern, **kwargs):
@@ -77,3 +69,6 @@ def inline(pattern, **kwargs):
         fn._mcub_inline = meta
         return fn
     return deco
+
+
+__all__ = ["ModuleBase", "command", "watcher", "callback", "loop", "bot_command", "inline"]

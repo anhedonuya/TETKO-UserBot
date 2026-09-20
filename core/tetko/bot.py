@@ -23,6 +23,10 @@ from telethon.tl.types import (
     UpdateBotInlineSend,
     InputBotInlineResult,
     InputBotInlineMessageText,
+    InputBotInlineMessageRichMessage,
+    InputRichMessageHTML,
+    InputReplyToMessage,
+    MessageEntityCustomEmoji,
     ReplyInlineMarkup,
     KeyboardButtonRow,
     KeyboardButtonCallback,
@@ -243,7 +247,6 @@ class BotClient:
         ]
         # если topic_id — используем reply_to с top_msg_id
         if topic_id:
-            from telethon.tl.types import InputReplyToMessage
             reply_to_obj = InputReplyToMessage(
                 reply_to_msg_id=topic_id,
                 top_msg_id=topic_id,
@@ -291,11 +294,6 @@ class BotClient:
 
         # ── Rich-via-bot: query вида "rich:<html>" ──
         if query.startswith("rich:"):
-            from telethon.tl.types import (
-                InputBotInlineResult,
-                InputBotInlineMessageRichMessage,
-                InputRichMessageHTML,
-            )
             html_text = query[len("rich:"):]
             try:
                 rich = InputRichMessageHTML(html=html_text)
@@ -319,9 +317,46 @@ class BotClient:
                 except Exception as e:
                     log.warning(f"_handle_inline: rich result failed: {e}")
 
+        # ── Table-via-bot: query вида "table:Заголовок1|Заголовок2\nданные" ──
+        if query.startswith("table:"):
+            body = query[len("table:"):].strip()
+            lines = [ln.strip() for ln in body.split("\n") if ln.strip()]
+            if not lines:
+                return
+            rows = [ln.split("|") for ln in lines]
+            header = rows[0]
+            data = rows[1:]
+            html_parts = ["<table>"]
+            html_parts.append("<tr>" + "".join(f"<th>{h.strip()}</th>" for h in header) + "</tr>")
+            for row in data:
+                html_parts.append("<tr>" + "".join(f"<td>{c.strip()}</td>" for c in row) + "</tr>")
+            html_parts.append("</table>")
+            html_text = "".join(html_parts)
+
+            try:
+                rich = InputRichMessageHTML(html=html_text)
+            except Exception as e:
+                log.warning(f"_handle_inline: table HTML failed: {e}")
+                rich = None
+
+            if rich is not None:
+                try:
+                    result = InputBotInlineResult(
+                        id=f"table_{secrets.token_hex(4)}",
+                        type="article",
+                        title="Table",
+                        description=body[:80],
+                        send_message=InputBotInlineMessageRichMessage(
+                            rich_message=rich,
+                        ),
+                    )
+                    await event.answer([result], cache_time=0, gallery=False)
+                    return
+                except Exception as e:
+                    log.warning(f"_handle_inline: table result failed: {e}")
+
         # ── ТЕСТ премиум emoji ──
         if query == "test_emoji":
-            from telethon.tl.types import MessageEntityCustomEmoji
             text = "❤️ TETKO ❤️"
             entities = [
                 MessageEntityCustomEmoji(offset=0, length=2, document_id=5282797322969852134),
