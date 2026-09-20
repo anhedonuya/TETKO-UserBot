@@ -101,6 +101,9 @@ def install_callback_handler(kernel, bot_client) -> None:
         return
     if getattr(bot_client, "_mcub_cb_handler_installed", False):
         return
+    if not hasattr(bot_client, "on"):
+        log.debug("[callback] bot_client без .on — пропускаем (обработает TETKO bot.py)")
+        return
     try:
         bot_client._mcub_cb_handler_installed = True
     except Exception:
