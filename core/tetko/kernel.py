@@ -77,8 +77,15 @@ class Kernel:
         config: dict | None = None,
     ):
         self.client = client
-        self.prefix = prefix
         self.config = dict(config or {})
+        # префикс: приоритет — config.json → аргумент → "."
+        self.prefix = (
+            self.config.get("command_prefix")
+            or prefix
+            or "."
+        )
+        # лог-чат
+        self.log_chat_id = self.config.get("log_chat_id") or None
         # MCUB core_inline compatibility aliases.
         self.logger = log
         self.CONFIG_FILE = "config.json"
@@ -103,7 +110,7 @@ class Kernel:
         # Контекст ядра: admin_id, prefix, language, config, handle_error
         self.context = Context(
             admin_id=self.config.get("admin_id") or self.config.get("owner_id"),
-            prefix=prefix,
+            prefix=self.prefix,
             language=self.config.get("language", "ru"),
             config=self.config,
         )
@@ -129,7 +136,6 @@ class Kernel:
         self._loop_tasks: list[asyncio.Task] = []
 
         # лог-чат
-        self.log_chat_id = self.config.get("log_chat_id") or None
 
         # Связываем важные объекты с клиентом Telethon для быстрого доступа из модулей
         self.client.kernel = self
