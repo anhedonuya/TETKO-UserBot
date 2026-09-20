@@ -161,6 +161,7 @@ class MCUBModuleBase:
             "loops": [],
             "bot_commands": [],
             "inlines": [],
+            "events": [],
         }
         for attr_name, attr in cls.__dict__.items():
             if not callable(attr):
@@ -177,8 +178,25 @@ class MCUBModuleBase:
                 registry["bot_commands"].append((pattern, kw, attr_name))
             for pattern, kw in getattr(attr, "_mcub_inline", []):
                 registry["inlines"].append((pattern, kw, attr_name))
+            for ev_type, ev_args, ev_kw in getattr(attr, "_mcub_events", []):
+                registry["events"].append((ev_type, ev_args, ev_kw, attr_name))
 
         cls._mcub_registry = registry
+
+    @staticmethod
+    def _normalize_kwargs(kwargs: dict) -> dict:
+        """MCUB → Telethon: конвертируем Bot API kwargs."""
+        if "disable_web_page_preview" in kwargs:
+            dwp = kwargs.pop("disable_web_page_preview")
+            if "link_preview" not in kwargs:
+                kwargs["link_preview"] = not dwp  # True → превью off
+        if "disable_notification" in kwargs:
+            dn = kwargs.pop("disable_notification")
+            if "silent" not in kwargs:
+                kwargs["silent"] = dn
+        if "parse_mode" in kwargs and kwargs["parse_mode"] is None:
+            kwargs.pop("parse_mode")
+        return kwargs
 
     def __init__(self, kernel=None, client=None, register=None):
         self.kernel = kernel
@@ -187,7 +205,8 @@ class MCUBModuleBase:
         self.log = _ModuleLogger(getattr(self, "name", type(self).__name__))
         self._loaded = False
         self.cache = getattr(kernel, "cache", None)
-        self.db = kernel
+        self.db = _ModuleDB(self)  # объект с .get/.set/.delete/.query
+        self.translator = _EmptyTranslator()  # i18n
 
         # Реальный ModuleConfig из class.config (MCUB-стиль)
         self._config_obj = None
@@ -203,6 +222,23 @@ class MCUBModuleBase:
             self._auto_register()
         except Exception as e:
             log.warning(f"[{getattr(self, 'name', '?')}] auto-register: {e}")
+
+        # Загружаем config из БД (в фоне, если есть loop)
+        if self._config_obj is not None:
+            try:
+                import asyncio
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    loop.create_task(self._load_config_async())
+            except Exception:
+                pass
+
+    async def _load_config_async(self):
+        """Загружает ModuleConfig из БД (fire-and-forget)."""
+        try:
+            await self._config_obj.load_from_db(self)
+        except Exception as e:
+            log.warning(f"load_config({self.name}): {e}")
 
     def _auto_register(self):
         registry = getattr(type(self), "_mcub_registry", None)
@@ -245,8 +281,15 @@ class MCUBModuleBase:
             except Exception:
                 pass
 
+        for ev_type, ev_args, ev_kw, attr_name in registry.get("events", []):
+            bound = getattr(self, attr_name)
+            try:
+                kr.event(ev_type, *ev_args, **ev_kw)(bound)
+            except Exception:
+                pass
+
     def _get_strings(self):
-        data = getattr(self, "strings", None) or {}
+        data = getattr(type(self), "strings", None) or {}
         if not data:
             return _EmptyStrings()
         if "name" in data:
@@ -258,12 +301,20 @@ class MCUBModuleBase:
         return _DictStrings(active)
 
     def _get_config(self):
-        cfg = getattr(self, "_config_obj", None)
+        cfg = object.__getattribute__(self, "_config_obj") if "_config_obj" in object.__getattribute__(self, "__dict__") else None
         if cfg is not None:
             return cfg
         return _EmptyConfig()
 
-    async def save_config(self): return None
+    async def save_config(self):
+        """Сохраняет ModuleConfig в БД."""
+        cfg = self._config_obj
+        if cfg is None:
+            return
+        try:
+            await cfg.save_to_db(self)
+        except Exception as e:
+            log.warning(f"save_config({self.name}): {e}")
 
     def get_prefix(self):
         k = self.kernel
@@ -293,12 +344,14 @@ class MCUBModuleBase:
             kwargs["buttons"] = reply_markup
         if as_html and "parse_mode" not in kwargs:
             kwargs["parse_mode"] = "html"
+        kwargs = self._normalize_kwargs(kwargs)
         return await event.edit(text, **kwargs)
 
     async def answer(self, event, text, **kwargs):
         as_html = kwargs.pop("as_html", False)
         if as_html and "parse_mode" not in kwargs:
             kwargs["parse_mode"] = "html"
+        kwargs = self._normalize_kwargs(kwargs)
         return await event.reply(text, **kwargs)
 
     async def reply(self, event, text, **kwargs):
@@ -325,6 +378,34 @@ class MCUBModuleBase:
         if mod is None:
             raise LookupError(f"Required module '{module_name}' is not loaded")
         return mod
+
+    def lookup(self, module_name, *, all_loaded=False):
+        """Алиас для MCUB: self.lookup("name")."""
+        return self.lookup_module(module_name, all_loaded=all_loaded)
+
+    def require(self, module_name, *, all_loaded=False):
+        """Алиас для MCUB: self.require("name")."""
+        return self.require_module(module_name, all_loaded=all_loaded)
+
+    @property
+    def bot(self):
+        """Telegram-бот (BotClient) для отправки inline."""
+        k = self.kernel
+        if k is not None:
+            return getattr(k, "bot_client", None)
+        return None
+
+    async def db_get(self, key, default=None):
+        """Короткая обёртка: self.db_get("key")."""
+        return await self.db.get(key, default)
+
+    async def db_set(self, key, value):
+        """Короткая обёртка: self.db_set("key", value)."""
+        return await self.db.set(key, value)
+
+    async def db_del(self, key):
+        """Короткая обёртка: self.db_del("key")."""
+        return await self.db.delete(key)
 
     async def import_lib(self, url, *, name=None):
         import sys, types, urllib.request
@@ -448,6 +529,16 @@ def bot_command(pattern, **kwargs):
     return deco
 
 
+def event(event_type, *args, bot_client=False, **kwargs):
+    """MCUB-декоратор @event — регистрирует обработчик события."""
+    def deco(fn):
+        meta = list(getattr(fn, "_mcub_events", []))
+        meta.append((event_type, args, kwargs))
+        fn._mcub_events = meta
+        return fn
+    return deco
+
+
 def inline(pattern, **kwargs):
     def deco(fn):
         meta = list(getattr(fn, "_mcub_inline", []))
@@ -457,9 +548,106 @@ def inline(pattern, **kwargs):
     return deco
 
 
-__all__ = ["MCUBModuleBase", "command", "watcher", "callback", "loop", "bot_command", "inline"]
+__all__ = ["MCUBModuleBase", "command", "watcher", "callback", "loop", "bot_command", "inline", "event"]
 
 
+
+
+class _ModuleDB:
+    """MCUB-совместимая обёртка над kernel.db_* для модуля."""
+
+    def __init__(self, module):
+        self._module = module
+        self._ns = getattr(module, "name", "unnamed")
+
+    async def get(self, key, default=None):
+        k = getattr(self._module, "kernel", None)
+        if k is None:
+            return default
+        try:
+            return await k.db_get(self._ns, key, default)
+        except Exception:
+            return default
+
+    async def set(self, key, value):
+        k = getattr(self._module, "kernel", None)
+        if k is None:
+            return None
+        try:
+            return await k.db_set(self._ns, key, value)
+        except Exception:
+            return None
+
+    async def delete(self, key):
+        k = getattr(self._module, "kernel", None)
+        if k is None:
+            return None
+        try:
+            return await k.db_delete(self._ns, key)
+        except Exception:
+            return None
+
+    async def query(self, sql, params=None):
+        k = getattr(self._module, "kernel", None)
+        if k is None:
+            return None
+        try:
+            return await k.db_query(sql, params)
+        except Exception:
+            return None
+
+    # ── MCUB-совместимые методы (self.db.db_get(ns, key)) ──
+    async def db_get(self, namespace, key, default=None):
+        k = getattr(self._module, "kernel", None)
+        if k is None:
+            return default
+        try:
+            return await k.db_get(namespace, key, default)
+        except Exception:
+            return default
+
+    async def db_set(self, namespace, key, value):
+        k = getattr(self._module, "kernel", None)
+        if k is None:
+            return None
+        try:
+            return await k.db_set(namespace, key, value)
+        except Exception:
+            return None
+
+    async def db_delete(self, namespace, key):
+        k = getattr(self._module, "kernel", None)
+        if k is None:
+            return None
+        try:
+            return await k.db_delete(namespace, key)
+        except Exception:
+            return None
+
+    async def db_del(self, namespace, key):
+        return await self.db_delete(namespace, key)
+
+    async def db_query(self, sql, params=None):
+        return await self.query(sql, params)
+
+
+class _EmptyTranslator:
+    """Заглушка i18n: возвращает ключ как есть."""
+
+    def get(self, key, default=None, **kwargs):
+        return default if default is not None else key
+
+    def __call__(self, key, **kwargs):
+        return key
+
+    def __getitem__(self, key):
+        return key
+
+    def has(self, key):
+        return False
+
+    def keys(self):
+        return set()
 
 
 class _SubInline:

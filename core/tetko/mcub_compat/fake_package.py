@@ -72,6 +72,16 @@ def _noop_decorator(*args, **kwargs):
 #  Регистрация фейков в sys.modules
 # ────────────────────────────────────────────────────────────────────
 
+def _mcub_event(event_type, *args, bot_client=False, **kwargs):
+    """MCUB-декоратор @event — регистрирует обработчик события."""
+    def deco(fn):
+        meta = list(getattr(fn, "_mcub_events", []))
+        meta.append((event_type, args, kwargs))
+        fn._mcub_events = meta
+        return fn
+    return deco
+
+
 def _build_fake_modules() -> dict[str, types.ModuleType]:
     fake: dict[str, types.ModuleType] = {}
 
@@ -84,6 +94,7 @@ def _build_fake_modules() -> dict[str, types.ModuleType]:
         "loop": _mcub_loop,
         "bot_command": _mcub_bot_command,
         "inline": _mcub_inline,
+        "event": _mcub_event,
     })
     fake["core.lib.loader.module_base"] = module_base
 
@@ -289,9 +300,55 @@ _FAKE_MODULES: dict[str, types.ModuleType] | None = None
 _SAVED_ORIGINALS: dict[str, Any] = {}
 
 
+def _patch_telethon_message():
+    """Monkey-patch Telethon Message: добавляет MCUB-совместимые атрибуты.
+
+    MCUB-модули используют message.html_text, message.text, message.markdown_text.
+    Telethon даёт .raw_text / .message / .text (уже есть).
+    Добавляем .html_text и .markdown_text.
+    """
+    try:
+        from telethon.tl.custom.message import Message
+    except Exception:
+        return
+
+    # Если уже пропатчен
+    if getattr(Message, "_mcub_patched", False):
+        return
+
+    def _get_html_text(self):
+        """MCUB html_text — HTML-разметка сообщения (entities → HTML).
+
+        Используем telethon.extensions.html.unparse (entities → html).
+        Fallback — raw без escape.
+        """
+        raw = getattr(self, "raw_text", None) or getattr(self, "message", "") or ""
+        entities = getattr(self, "entities", None) or []
+        if entities:
+            try:
+                from telethon.extensions import html as _html_ext
+                return _html_ext.unparse(raw, entities)
+            except Exception:
+                pass
+        return raw
+
+    def _get_markdown_text(self):
+        return getattr(self, "raw_text", None) or getattr(self, "message", "") or ""
+
+    try:
+        if not hasattr(Message, "html_text"):
+            Message.html_text = property(_get_html_text)
+        if not hasattr(Message, "markdown_text"):
+            Message.markdown_text = property(_get_markdown_text)
+        Message._mcub_patched = True
+    except Exception:
+        pass
+
+
 def install_fakes() -> None:
     """Заменяет sys.modules на MCUB-фейки. Сохраняет оригиналы для restore."""
     global _FAKE_MODULES
+    _patch_telethon_message()
     if _FAKE_MODULES is None:
         _FAKE_MODULES = _build_fake_modules()
 
