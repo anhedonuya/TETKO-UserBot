@@ -112,10 +112,22 @@ class Tek(Module):
 
     def _cmds_for_module(self, mod) -> list:
         registry = self.kernel.registry
+        _mod_name = getattr(mod, "name", None) or type(mod).__name__
+
         result = []
         for cmd in registry._commands.values():
-            if cmd.module is mod:
+            cmd_mod = getattr(cmd, "module", None)
+            # Прямое сравнение по объекту
+            if cmd_mod is mod:
                 result.append(cmd)
+                continue
+            # MCUB: команды регистрируются под _PlaceholderModule с тем же name
+            _cmd_mod_name = getattr(cmd_mod, "name", None) or (
+                type(cmd_mod).__name__ if cmd_mod is not None else None
+            )
+            if _cmd_mod_name == _mod_name:
+                result.append(cmd)
+
         result.sort(key=lambda c: c.name)
         return result
 
@@ -169,10 +181,31 @@ class Tek(Module):
             )
             return
 
-        desc = mod.get_description(_lang(self.kernel)) if hasattr(mod, "get_description") else getattr(mod, "description", "—")
+        _lang_code = _lang(self.kernel)
+        if hasattr(mod, "get_description"):
+            try:
+                desc = mod.get_description(_lang_code)
+            except Exception:
+                desc = "—"
+        else:
+            _d = getattr(mod, "description", "—")
+            if isinstance(_d, dict):
+                desc = _d.get(_lang_code) or _d.get("ru") or _d.get("en") or next(iter(_d.values()), "—")
+            else:
+                desc = _d or "—"
+        if not isinstance(desc, str):
+            desc = str(desc)
         ver = getattr(mod, "version", "—")
         author = getattr(mod, "author", "—")
-        compat = getattr(mod, "__compat__", "—")
+        compat = getattr(mod, "__compat__", None)
+        if not compat:
+            # Определяем: MCUB или TETKO-модуль
+            try:
+                mro = type(mod).__mro__
+                _is_mcub = any("MCUBModuleBase" in c.__name__ for c in mro)
+            except Exception:
+                _is_mcub = False
+            compat = "mcub-compat" if _is_mcub else "—"
         is_sys = self._is_system(mod)
         kind = "системный" if is_sys else "пользовательский"
 
