@@ -292,9 +292,16 @@ class BotClient:
         """Обработка inline-запросов от юзербота."""
         query = (event.text or "").strip()
 
-        # ── Rich-via-bot: query вида "rich:<html>" ──
+        # ── Rich-via-bot: query вида "rich:<key>" ──
         if query.startswith("rich:"):
-            html_text = query[len("rich:"):]
+            key = query[len("rich:"):]
+            menu = self._menus.get(key)
+            if menu is None:
+                # fallback: старый формат rich:<html>
+                html_text = key
+                menu = {"text": html_text, "buttons": []}
+            html_text = menu.get("text", "")
+
             try:
                 rich = InputRichMessageHTML(html=html_text)
             except Exception as e:
@@ -303,6 +310,30 @@ class BotClient:
 
             if rich is not None:
                 try:
+                    # строим reply_markup из кнопок
+                    reply_markup = None
+                    buttons = menu.get("buttons") or []
+                    if buttons:
+                        from telethon.tl.types import KeyboardButtonRow
+                        kb_rows = []
+                        for row in buttons:
+                            kb_row = []
+                            for b in row:
+                                # Уже Telethon-объект (KeyboardButtonCopy, KeyboardButtonCallback, ...)
+                                if not isinstance(b, dict):
+                                    kb_row.append(b)
+                                    continue
+                                # Словарь с token
+                                data = b.get("token", b.get("data", ""))
+                                if isinstance(data, str):
+                                    data = data.encode("utf-8")
+                                text_btn = b.get("text", "·")
+                                kb_row.append(KeyboardButtonCallback(text=text_btn, data=data))
+                            if kb_row:
+                                kb_rows.append(KeyboardButtonRow(buttons=kb_row))
+                        if kb_rows:
+                            reply_markup = ReplyInlineMarkup(rows=kb_rows)
+
                     result = InputBotInlineResult(
                         id=f"rich_{secrets.token_hex(4)}",
                         type="article",
@@ -310,6 +341,7 @@ class BotClient:
                         description=html_text[:80],
                         send_message=InputBotInlineMessageRichMessage(
                             rich_message=rich,
+                            reply_markup=reply_markup,
                         ),
                     )
                     await event.answer([result], cache_time=0, gallery=False)

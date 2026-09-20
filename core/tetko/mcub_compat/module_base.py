@@ -75,15 +75,67 @@ class _ArgsShim:
 
 
 class _ButtonFactoryStub:
-    def inline(self, *a, **kw): raise NotImplementedError("Button.inline — этап 4")
+    """Фабрика кнопок в стиле MCUB (Button.copy, Button.inline, ...)."""
+
+    def __init__(self, module=None):
+        self._module = module
+
+    def _make_callback_data(self, callback):
+        """Создаёт токен для callback-кнопки и регистрирует handler."""
+        import secrets, time
+        token = secrets.token_hex(8)
+        if self._module is not None:
+            kernel = getattr(self._module, "kernel", None)
+            if kernel is not None:
+                # Регистрируем callback-обработчик
+                register = getattr(self._module, "_register", None)
+                if register is not None:
+                    # Пробуем использовать встроенный callback в register
+                    cb_map = getattr(kernel, "inline_callback_map", None)
+                    if cb_map is None:
+                        kernel.inline_callback_map = {}
+                        cb_map = kernel.inline_callback_map
+                    cb_map[token] = {
+                        "handler": callback,
+                        "module": self._module,
+                        "expires_at": time.time() + 900,
+                    }
+        return token.encode() if isinstance(token, str) else token
+
+    def inline(self, text, callback, style=None, **kw):
+        """Inline callback-кнопка."""
+        from telethon.tl.types import KeyboardButtonCallback
+        data = self._make_callback_data(callback)
+        return KeyboardButtonCallback(text=str(text), data=data)
+
     def url(self, text, url, **kw):
         from telethon.tl.custom import Button
-        return Button.url(text, url)
-    def text(self, *a, **kw): raise NotImplementedError("Button.text — этап 4")
-    def switch(self, *a, **kw): raise NotImplementedError("Button.switch — этап 4")
-    def input(self, *a, **kw): raise NotImplementedError("Button.input — этап 4")
-    def close(self, *a, **kw): raise NotImplementedError("Button.close — этап 4")
-    def copy(self, *a, **kw): raise NotImplementedError("Button.copy — этап 4")
+        return Button.url(str(text), str(url))
+
+    def text(self, text, **kw):
+        """Простая текстовая кнопка (в inline не работает, но вернём как есть)."""
+        from telethon.tl.types import KeyboardButton
+        return KeyboardButton(text=str(text))
+
+    def switch(self, text, query="", **kw):
+        from telethon.tl.types import KeyboardButtonSwitchInline
+        return KeyboardButtonSwitchInline(text=str(text), query=str(query))
+
+    def input(self, text, placeholder="", **kw):
+        from telethon.tl.types import KeyboardButtonRequestPhone
+        # input не поддерживается в inline, вернём обычную кнопку
+        from telethon.tl.types import KeyboardButton
+        return KeyboardButton(text=str(text))
+
+    def close(self, text="Закрыть", **kw):
+        """Кнопка 'закрыть' — отправит callback с data='close'."""
+        from telethon.tl.types import KeyboardButtonCallback
+        return KeyboardButtonCallback(text=str(text), data=b"close")
+
+    def copy(self, text, copy_text, **kw):
+        """Кнопка 'скопировать текст'."""
+        from telethon.tl.types import KeyboardButtonCopy
+        return KeyboardButtonCopy(text=str(text), copy_text=str(copy_text))
 
 
 class MCUBModuleBase:
@@ -344,7 +396,68 @@ class MCUBModuleBase:
         return object.__getattribute__(self, name)
 
 
-__all__ = ["MCUBModuleBase"]
+
+def command(pattern, **kwargs):
+    def deco(fn):
+        meta = list(getattr(fn, "_mcub_commands", []))
+        meta.append((pattern, kwargs))
+        fn._mcub_commands = meta
+        return fn
+    return deco
+
+
+def watcher(*args, **kwargs):
+    def deco(fn):
+        meta = list(getattr(fn, "_mcub_watchers", []))
+        meta.append(kwargs)
+        fn._mcub_watchers = meta
+        return fn
+    if args and callable(args[0]) and not kwargs:
+        return deco(args[0])
+    return deco
+
+
+def callback(*args, **kwargs):
+    def deco(fn):
+        meta = list(getattr(fn, "_mcub_callbacks", []))
+        meta.append(kwargs)
+        fn._mcub_callbacks = meta
+        return fn
+    if args and callable(args[0]) and not kwargs:
+        return deco(args[0])
+    return deco
+
+
+def loop(*args, **kwargs):
+    def deco(fn):
+        meta = list(getattr(fn, "_mcub_loops", []))
+        meta.append(kwargs)
+        fn._mcub_loops = meta
+        return fn
+    if args and callable(args[0]) and not kwargs:
+        return deco(args[0])
+    return deco
+
+
+def bot_command(pattern, **kwargs):
+    def deco(fn):
+        meta = list(getattr(fn, "_mcub_bot_commands", []))
+        meta.append((pattern, kwargs))
+        fn._mcub_bot_commands = meta
+        return fn
+    return deco
+
+
+def inline(pattern, **kwargs):
+    def deco(fn):
+        meta = list(getattr(fn, "_mcub_inline", []))
+        meta.append((pattern, kwargs))
+        fn._mcub_inline = meta
+        return fn
+    return deco
+
+
+__all__ = ["MCUBModuleBase", "command", "watcher", "callback", "loop", "bot_command", "inline"]
 
 
 
@@ -436,14 +549,7 @@ class _SubInline:
 
     # --- публичный API ---
     async def rich_form(self, event, text, **kwargs):
-        """Rich-сообщение через бота (плашка via @bot) через MCUB InlineHandlers.
-
-        Порядок:
-        1. kernel._mcub_inline_handlers.create_inline_form(rich_text=...) + send_inline_menu
-        2. fallback: send_rich_message юзерботом
-        3. fallback: bot.send_message
-        4. fallback: client.send_message
-        """
+        """Отправка rich-сообщения через inline-бота (плашка via @bot)."""
         import logging
         import time as _time
         log = logging.getLogger("TETKO.mcub_compat.subinline")
@@ -455,32 +561,29 @@ class _SubInline:
         text = str(text or "")
         reply_to = kwargs.get("reply_to")
 
-        # 1. MCUB InlineHandlers
-        handlers = getattr(kk, "_mcub_inline_handlers", None)
+        # Основной путь: inline-запрос через бота
         bot = getattr(kk, "bot_client", None)
-        if handlers is not None and bot is not None and hasattr(bot, "send_inline_menu"):
+        if bot is not None and hasattr(bot, "send_inline_menu"):
             try:
-                form_id = handlers.create_inline_form(
-                    text="",
-                    rich_text=text,
-                    rich_parse_mode="html",
-                    ttl=kwargs.get("ttl", 3600),
-                )
                 key = f"rich_{int(_time.time() * 1000)}"
-                # регистрируем меню с этим form_id (form_xxx → в query)
+                buttons = kwargs.get("buttons") or []
+                # Регистрируем меню: key → (text, buttons)
+                if hasattr(bot, "register_menu"):
+                    bot.register_menu(key, text, buttons)
+                # Шлём query=rich:<key> — key, а не текст!
                 await bot.send_inline_menu(
                     chat_id=chat_id,
-                    key=form_id,
+                    key=key,
                     text=text,
-                    buttons=[],
-                    rich=True,
+                    buttons=buttons,
+                    query=f"rich:{key}",
                 )
-                log.warning(f"rich_form: MCUB inline → OK (form_id={form_id})")
+                log.debug(f"rich_form: inline через бота OK (key={key})")
                 return None
             except Exception as e:
-                log.warning(f"rich_form MCUB inline: {type(e).__name__}: {e}")
+                log.warning(f"rich_form inline: {type(e).__name__}: {e}")
 
-        # 2. send_rich_message юзерботом (работает, но от юзербота)
+        # Fallback: send_rich_message юзерботом
         found = self._find_rich_client()
         if found is not None:
             tg, is_rich = found
@@ -489,24 +592,20 @@ class _SubInline:
                     result = tg.send_rich_message(chat_id, html=text)
                     if hasattr(result, "__await__"):
                         result = await result
-                    log.warning("rich_form: send_rich_message юзерботом")
+                    log.warning("rich_form: fallback send_rich_message юзерботом")
                     return result
                 except Exception as e:
-                    log.warning(f"rich_form send_rich_message: {e}")
+                    log.warning(f"rich_form fallback send_rich_message: {e}")
 
-        # 3. bot.send_message
-        if bot is not None:
-            try:
-                return await bot.send_message(chat_id, text, parse_mode="html", reply_to=reply_to)
-            except Exception as e:
-                log.warning(f"rich_form bot.send_message: {e}")
-
-        # 4. client.send_message
+        # Fallback: обычное сообщение с html
         c = self.client
         if c is not None:
-            return await c.send_message(chat_id, text, parse_mode="html", reply_to=reply_to)
-        return None
+            try:
+                return await c.send_message(chat_id, text, parse_mode="html", reply_to=reply_to)
+            except Exception as e:
+                log.warning(f"rich_form fallback send_message: {e}")
 
+        return None
 
     async def form(self, chat_id, text, buttons=None, **kwargs):
         """Форма с кнопками (обычное сообщение)."""
