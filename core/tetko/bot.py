@@ -23,14 +23,17 @@ from telethon.tl.types import (
     UpdateBotInlineSend,
     InputBotInlineResult,
     InputBotInlineMessageText,
-    InputBotInlineMessageRichMessage,
-    InputRichMessageHTML,
     InputReplyToMessage,
     MessageEntityCustomEmoji,
     ReplyInlineMarkup,
     KeyboardButtonRow,
     KeyboardButtonCallback,
 )
+try:
+    from telethon.tl.types import InputBotInlineMessageRichMessage, InputRichMessageHTML
+except ImportError:
+    InputBotInlineMessageRichMessage = None
+    InputRichMessageHTML = None
 
 log = logging.getLogger("TETKO.tetko.bot")
 
