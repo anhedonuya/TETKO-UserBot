@@ -18,6 +18,13 @@ log = logging.getLogger("TETKO.mcub_compat.loader")
 
 def _install_fakes() -> None:
     """Install only compatibility aliases; keep the real MCUB API intact."""
+    # Подменяем sys.modules на MCUB-фейки (utils, utils.strings, ...)
+    try:
+        from .fake_package import install_fakes as _fp_install
+        _fp_install()
+    except Exception as _e:
+        log.warning(f"[mcub_compat] fake_package.install_fakes: {_e}")
+
     import importlib
     # The full MCUB core/lib is shipped with TETKO.  Do not replace ModuleBase,
     # decorators or ModuleConfig with reduced shims: that was the source of

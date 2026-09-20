@@ -50,6 +50,14 @@ def _make_module(name: str, attrs: dict[str, Any] | None = None) -> types.Module
 # ────────────────────────────────────────────────────────────────────
 
 from .module_base import MCUBModuleBase as _MCUB_ModuleBase
+from .module_base import (
+    command as _mcub_command,
+    callback as _mcub_callback,
+    watcher as _mcub_watcher,
+    loop as _mcub_loop,
+    bot_command as _mcub_bot_command,
+    inline as _mcub_inline,
+)
 
 def _noop_decorator(*args, **kwargs):
     """Декоратор-заглушка: возвращает функцию без изменений."""
@@ -70,51 +78,14 @@ def _build_fake_modules() -> dict[str, types.ModuleType]:
     # ── core.lib.loader.module_base ──
     module_base = _make_module("core.lib.loader.module_base", {
         "ModuleBase": _MCUB_ModuleBase,
-        "command": _noop_decorator,
-        "callback": _noop_decorator,
-        "watcher": _noop_decorator,
-        "loop": _noop_decorator,
-        "bot_command": _noop_decorator,
-        "inline": _noop_decorator,
+        "command": _mcub_command,
+        "callback": _mcub_callback,
+        "watcher": _mcub_watcher,
+        "loop": _mcub_loop,
+        "bot_command": _mcub_bot_command,
+        "inline": _mcub_inline,
     })
     fake["core.lib.loader.module_base"] = module_base
-
-    # ── core.lib.loader.module_config ──
-    module_config = _make_module("core.lib.loader.module_config", {
-        "ModuleConfig": _Unavailable("ModuleConfig"),
-        "ConfigValue": _Unavailable("ConfigValue"),
-        "ValidationError": type("ValidationError", (Exception,), {}),
-        # валидаторы
-        "Boolean": _Unavailable("Boolean"),
-        "Integer": _Unavailable("Integer"),
-        "Float": _Unavailable("Float"),
-        "String": _Unavailable("String"),
-        "Choice": _Unavailable("Choice"),
-        "List": _Unavailable("List"),
-        "DictType": _Unavailable("DictType"),
-        "Secret": _Unavailable("Secret"),
-        "Placeholders": _Unavailable("Placeholders"),
-        "RegExp": _Unavailable("RegExp"),
-        "Link": _Unavailable("Link"),
-        "TelegramID": _Unavailable("TelegramID"),
-        "EntityLike": _Unavailable("EntityLike"),
-        "Emoji": _Unavailable("Emoji"),
-        "MultiChoice": _Unavailable("MultiChoice"),
-        "Union": _Unavailable("Union"),
-        "Hidden": _Unavailable("Hidden"),
-        "NoneType": _Unavailable("NoneType"),
-        # UI-элементы
-        "Group": _Unavailable("Group"),
-        "Row": _Unavailable("Row"),
-        "Divider": _Unavailable("Divider"),
-        "Url": _Unavailable("Url"),
-        "Callback": _Unavailable("Callback"),
-        "Status": _Unavailable("Status"),
-        "Notice": _Unavailable("Notice"),
-        "Answer": _Unavailable("Answer"),
-        "Buttons": _Unavailable("Buttons"),
-    })
-    fake["core.lib.loader.module_config"] = module_config
 
     # ── core.lib.loader.kernel_proxy ──
     def _wrap_event_for_module(event, *a, **kw):
@@ -258,6 +229,7 @@ def _build_fake_modules() -> dict[str, types.ModuleType]:
         "get_args_html": _Unavailable("utils.get_args_html"),
         "get_prefix": lambda *a, **kw: ".",
         "get_lang": lambda *a, **kw: "ru",
+        "Strings": type("Strings", (), {}),  # для type-аннотаций
         "make_button": _Unavailable("utils.make_button"),
         "make_buttons": _Unavailable("utils.make_buttons"),
         "restart_kernel": _Unavailable("utils.restart_kernel"),
