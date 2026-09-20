@@ -41,9 +41,6 @@ class Command:
 
         # bound method — self уже связан, params содержит только реальные аргументы
         # Ожидаемые варианты:
-        #   (event)          → func(event)
-        #   (event, args)    → func(event, args)
-        #   (event, text)    → func(event, args)   # args как список
         if len(params) == 0:
             return await self.func()
         if len(params) == 1:
@@ -67,7 +64,6 @@ class Registry:
         self._callbacks: list[tuple[Any, Callable]] = []
         self._loops: list[tuple[Any, Callable, float]] = []
 
-    #   МОДУЛИ
     def register_module(self, module: Any) -> None:
         """Зарегистрировать модуль."""
         if module.name in self._modules:
@@ -83,7 +79,6 @@ class Registry:
         if module is None:
             return None
 
-        # Снимаем команды
         to_remove = [
             cmd_name for cmd_name, cmd in self._commands.items()
             if cmd.module is module
@@ -91,13 +86,11 @@ class Registry:
         for cmd_name in to_remove:
             del self._commands[cmd_name]
 
-        # Снимаем алиасы
         self._aliases = {
             alias: target for alias, target in self._aliases.items()
             if target in self._commands
         }
 
-        # Снимаем watchers/callbacks/loops
         self._watchers = [(m, w) for m, w in self._watchers if m is not module]
         self._callbacks = [(m, c) for m, c in self._callbacks if m is not module]
         self._loops = [(m, l, i) for m, l, i in self._loops if m is not module]
@@ -112,7 +105,6 @@ class Registry:
         """{имя: версия}"""
         return {m.name: m.version for m in self._modules.values()}
 
-    #   КОМАНДЫ
     def register_command(self, cmd: Command) -> None:
         """Зарегистрировать команду."""
         key = cmd.name.lower()
@@ -124,7 +116,6 @@ class Registry:
             )
         self._commands[key] = cmd
 
-        # Алиасы
         for alias in cmd.aliases:
             a = alias.lower()
             if a in self._aliases and self._aliases[a] != key:
@@ -149,7 +140,6 @@ class Registry:
             for name, cmd in self._commands.items()
         }
 
-    #   WATCHERS / CALLBACKS / LOOPS
     def register_watcher(self, module: Any, func: Callable) -> None:
         self._watchers.append((module, func))
         log.debug(f"[+] Watcher: {func.__name__} ({module.name})")
@@ -171,7 +161,6 @@ class Registry:
     def list_loops(self) -> list:
         return list(self._loops)
 
-    #   ОБЩЕЕ
     def clear(self) -> None:
         self._modules.clear()
         self._commands.clear()

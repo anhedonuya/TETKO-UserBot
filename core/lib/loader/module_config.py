@@ -4,11 +4,9 @@ MCUB-модули делают `from core.lib.loader.module_config import Config
 и ожидают РАБОЧИЕ классы, а не заглушки.
 """
 from core.tetko.mcub_compat.module_config import (
-    # Core
     ConfigValue,
     ModuleConfig,
     ValidationError,
-    # Validators
     Validator,
     Boolean,
     Integer,
@@ -28,7 +26,6 @@ from core.tetko.mcub_compat.module_config import (
     Union,
     Hidden,
     NoneType,
-    # UI
     Group,
     Row,
     Divider,

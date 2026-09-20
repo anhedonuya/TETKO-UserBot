@@ -43,7 +43,6 @@ def render_banner(version: str = "0.0.0.1", codename: str = "native") -> str:
             colored_line += _rgb_to_ansi(rgb) + char
         lines.append(colored_line + RESET)
 
-    # Подпись снизу — тоже градиент
     subtitle = f"  TETKO UserBot  v{version}  ({codename})"
     sub_colored = ""
     for i, char in enumerate(subtitle):

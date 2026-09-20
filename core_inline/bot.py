@@ -1,5 +1,4 @@
 # SPDX-License-Identifier: MIT
-# Copyright (c) 2026 flexownerAL | @flexownerAL
 
 from __future__ import annotations
 
@@ -610,7 +609,6 @@ class InlineBot:
 
                 lowered = text.lower()
 
-                # Detect bot creation limit BEFORE generic "sorry" check so we
                 # can give the user a specific, actionable error.
                 if "can't add more than" in lowered or (
                     "sorry" in lowered and "delete one of your bots" in lowered
@@ -839,7 +837,6 @@ class InlineBot:
             for msg_text in steps:
                 await client.send_message(botfather, msg_text)
 
-                # Wait for BotFather's response before sending next message
                 start_wait = time.monotonic()
                 timeout = 15
                 responded = False
@@ -931,7 +928,6 @@ class InlineBot:
             handlers = InlineHandlers(self.kernel, self.bot_client)
             await handlers.register_handlers()
 
-            # Не перезаписываем существующий TETKO BotClient
             _existing = getattr(self.kernel, "bot_client", None)
             _existing_type = type(_existing).__name__ if _existing is not None else "None"
             if _existing is None or _existing_type == "TelegramClient":

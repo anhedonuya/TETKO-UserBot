@@ -87,10 +87,8 @@ class _ButtonFactoryStub:
         if self._module is not None:
             kernel = getattr(self._module, "kernel", None)
             if kernel is not None:
-                # Регистрируем callback-обработчик
                 register = getattr(self._module, "_register", None)
                 if register is not None:
-                    # Пробуем использовать встроенный callback в register
                     cb_map = getattr(kernel, "inline_callback_map", None)
                     if cb_map is None:
                         kernel.inline_callback_map = {}
@@ -153,7 +151,6 @@ class MCUBModuleBase:
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
 
-        # Собираем всё, что помечено декораторами из loader.*
         registry = {
             "commands": [],
             "watchers": [],
@@ -208,7 +205,6 @@ class MCUBModuleBase:
         self.db = _ModuleDB(self)  # объект с .get/.set/.delete/.query
         self.translator = _EmptyTranslator()  # i18n
 
-        # Реальный ModuleConfig из class.config (MCUB-стиль)
         self._config_obj = None
         cls_cfg = getattr(type(self), "config", None)
         if isinstance(cls_cfg, ModuleConfig):
@@ -223,7 +219,6 @@ class MCUBModuleBase:
         except Exception as e:
             log.warning(f"[{getattr(self, 'name', '?')}] auto-register: {e}")
 
-        # Загружаем config из БД (в фоне, если есть loop)
         if self._config_obj is not None:
             try:
                 import asyncio
@@ -596,7 +591,6 @@ class _ModuleDB:
         except Exception:
             return None
 
-    # ── MCUB-совместимые методы (self.db.db_get(ns, key)) ──
     async def db_get(self, namespace, key, default=None):
         k = getattr(self._module, "kernel", None)
         if k is None:

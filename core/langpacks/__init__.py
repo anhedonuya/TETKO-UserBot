@@ -1,5 +1,4 @@
 # SPDX-License-Identifier: MIT
-# Copyright (c) 2026 flexownerAL | @flexownerAL
 
 """Language packs management for TETKO."""
 
@@ -199,14 +198,12 @@ def get_module_strings(module_name: str, locale: str = "ru") -> dict[str, Any]:
     """Get strings for a module, with fallback to base language if needed."""
     packs = get_langpacks()
 
-    # Try requested locale first
     locale_data = packs.get(locale, {})
     result = locale_data.get(module_name, None)
 
     if result is not None:
         return _merge_globals(locale_data, result)
 
-    # Check for base language fallback
     base_lang = packs.get(locale, {}).get("lang") or packs.get("ru", {}).get("lang")
     if base_lang:
         base_data = packs.get(base_lang, {})
@@ -232,11 +229,9 @@ def get_all_module_strings(module_name: str) -> dict[str, dict[str, Any]]:
     result = {}
 
     for loc in available:
-        # Try direct locale
         loc_data = packs.get(loc, {})
         strings = loc_data.get(module_name, {})
 
-        # Fill missing keys from base language
         if strings:
             result[loc] = _merge_globals(loc_data, strings)
         else:

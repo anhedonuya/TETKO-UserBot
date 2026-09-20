@@ -12,7 +12,6 @@ import types
 from typing import Any, Iterator
 
 
-#  Базовые заглушки (будут заменены на реальные в этапах 2-7)
 
 class _Unavailable:
     """Объект-заглушка: обращение к нему кидает понятную ошибку."""
@@ -43,7 +42,6 @@ def _make_module(name: str, attrs: dict[str, Any] | None = None) -> types.Module
     return mod
 
 
-#  Минимальный ModuleBase (реальный класс — нужен для isinstance)
 
 from .module_base import MCUBModuleBase as _MCUB_ModuleBase
 from .module_base import (
@@ -64,7 +62,6 @@ def _noop_decorator(*args, **kwargs):
     return deco
 
 
-#  Регистрация фейков в sys.modules
 
 def _mcub_event(event_type, *args, bot_client=False, **kwargs):
     """MCUB-декоратор @event — регистрирует обработчик события."""
@@ -221,7 +218,6 @@ def _build_fake_modules() -> dict[str, types.ModuleType]:
     return fake
 
 
-#  Публичный API
 
 _FAKE_MODULES: dict[str, types.ModuleType] | None = None
 _SAVED_ORIGINALS: dict[str, Any] = {}
@@ -239,7 +235,6 @@ def _patch_telethon_message():
     except Exception:
         return
 
-    # Если уже пропатчен
     if getattr(Message, "_mcub_patched", False):
         return
 
@@ -280,7 +275,6 @@ def install_fakes() -> None:
         _FAKE_MODULES = _build_fake_modules()
 
     for name, mod in _FAKE_MODULES.items():
-        # Запоминаем что было — только в первый раз
         if name not in _SAVED_ORIGINALS:
             _SAVED_ORIGINALS[name] = sys.modules.get(name)
         sys.modules[name] = mod

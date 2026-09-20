@@ -16,7 +16,6 @@ from typing import Any, Callable, Optional
 log = logging.getLogger("TETKO.mcub_compat.module_config")
 
 
-#  Валидаторы
 
 class ValidationError(Exception):
     pass
@@ -240,7 +239,6 @@ class NoneType(Validator):
         raise ValidationError("Expected None")
 
 
-#  UI-элементы (простые маркеры, для этапа 3 — храним, но UI базовый)
 
 class _UIItem:
     ui_only = True
@@ -405,7 +403,6 @@ class Buttons(_UIItem):
         self.button_text = button_text or title
 
 
-#  ConfigValue + ModuleConfig
 
 class ConfigValue:
     """Значение конфига в стиле MCUB."""
@@ -475,13 +472,11 @@ class ModuleConfig:
 
     def _register_item(self, item, index):
         """Регистрирует любой элемент — ConfigValue, UI-item, или вообще чужой объект."""
-        # ConfigValue
         if isinstance(item, ConfigValue):
             self._values[item.key] = item
             self._items_order.append(item.key)
             return
 
-        # UI-item с ui_only=True
         if getattr(item, "ui_only", False):
             ui_type = getattr(item, "ui_type", "ui")
             raw_key = getattr(item, "key", None) or f"{ui_type}_{index}"
@@ -511,7 +506,6 @@ class ModuleConfig:
         self._owner = owner
         return self
 
-    # ── словарный интерфейс ──
 
     def __getitem__(self, key):
         if key not in self._values:
@@ -520,14 +514,12 @@ class ModuleConfig:
 
     def __setitem__(self, key, value):
         if key not in self._values:
-            # Динамический ключ (SourceTrigger и др.) — создаём на лету
             self._values[key] = ConfigValue(key, None)
             self._items_order.append(key)
         cv = self._values[key]
         old = cv.get_value()
         cv.set_value(value)
         new = cv.get_value()
-        # Сохраняем в БД (async, fire-and-forget)
         self._persist(key, value)
         if cv.on_change:
             try:

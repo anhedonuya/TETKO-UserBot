@@ -9,16 +9,12 @@ from core.tetko import Module, command
 
 log = logging.getLogger("TETKO.module.terminal")
 
-# Максимум символов в ответе
 MAX_OUTPUT = 3500
 
-# Таймаут выполнения команды (секунды)
 CMD_TIMEOUT = 30
 
-# ─── Блэклист опасных паттернов ───
 # Это защита от СЛУЧАЙНОГО разрушения, не от целенаправленной атаки.
 BLACKLIST = [
-    # Разрушительные
     r"rm\s+(-[a-zA-Z]*\s+)*-[a-zA-Z]*[rR][a-zA-Z]*f?\s+/\s*$",
     r"rm\s+(-[a-zA-Z]*\s+)*-[a-zA-Z]*[rR][a-zA-Z]*f?\s+/\*",
     r"rm\s+(-[a-zA-Z]*\s+)*-r[f]?\s+~",
@@ -29,16 +25,13 @@ BLACKLIST = [
     r":\(\)\s*\{\s*:\|:&\s*\};:",
     r">\s*/dev/(sd|block|mmcblk)",
 
-    # Завершение системы
     r"\b(shutdown|reboot|halt|poweroff)\b",
     r"\binit\s+0\b",
 
-    # Убийство критичных процессов
     r"\bkill\s+-9\s+1\b",
     r"\bkillall\s+python\b",
     r"\bpkill\s+.*python\b",
 
-    # Эскалация
     r"^\s*su(\s|$)",
     r"^\s*sudo(\s|$)",
 ]
@@ -102,7 +95,6 @@ class TerminalModule(Module):
 
         cmd = " ".join(args)
 
-        # ── Проверка блэклиста ──
         reason = _is_blocked(cmd)
         if reason:
             await event.edit(
@@ -115,7 +107,6 @@ class TerminalModule(Module):
             log.warning(f"Terminal: blocked command: {cmd!r} (pattern: {reason})")
             return
 
-        # ── executing ──
         await event.edit(
             f"<blockquote><b>executing:</b>\n"
             f"<code>{_esc(cmd)}</code></blockquote>",
@@ -146,7 +137,6 @@ class TerminalModule(Module):
             output = stdout.decode(errors="replace").rstrip()
             exit_code = proc.returncode
 
-            # ── Успех ──
             if exit_code == 0:
                 if not output:
                     output = "(no output)"
@@ -166,7 +156,6 @@ class TerminalModule(Module):
                 await event.edit(text, parse_mode="html")
                 return
 
-            # ── Ошибка (exit_code != 0) ──
             err = output or f"exit code {exit_code}"
             if len(err) > MAX_OUTPUT:
                 err = err[:MAX_OUTPUT]

@@ -1,5 +1,4 @@
 # SPDX-License-Identifier: MIT
-# Copyright (c) 2026 flexownerAL | @flexownerAL
 
 from .api import CodeInline, InlineButton, InlineKeyboard, code_inline
 from .bot import InlineBot

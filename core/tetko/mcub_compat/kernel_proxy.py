@@ -259,7 +259,6 @@ class KernelProxy:
         reg = object.__getattribute__(self, "_k").registry
         return {n: c.func for n, c in reg._commands.items()}
 
-    # ---- Broad MCUB kernel compatibility ---------------------------------
     # MCUB modules historically accessed the kernel as a large service
     # object.  TETKO remains the real runtime, but these aliases let old
     # modules use the same surface without requiring MCUB to own the process.

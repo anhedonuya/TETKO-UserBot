@@ -1,5 +1,4 @@
 # SPDX-License-Identifier: MIT
-# Copyright (c) 2026 flexownerAL | @flexownerAL
 
 # authors: @flexownerAL, @anhedonuya
 # version: 1.0.1

@@ -117,7 +117,6 @@ class Tek(Module):
         result = []
         for cmd in registry._commands.values():
             cmd_mod = getattr(cmd, "module", None)
-            # Прямое сравнение по объекту
             if cmd_mod is mod:
                 result.append(cmd)
                 continue
@@ -486,7 +485,6 @@ class Tek(Module):
                 buttons=rows,
             )
 
-    # ── SETPREFIX ──
     @command(
         name="setprefix",
         aliases=["prefix"],

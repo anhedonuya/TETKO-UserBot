@@ -159,7 +159,6 @@ async def load_mcub_module(
         tetko_kernel.current_loading_module = old_loading
         tetko_kernel.current_loading_module_type = old_loading_type
 
-    # Дописываем module_instance в proxy (нужен register_shim)
     object.__setattr__(proxy, "_module", instance)
     proxy.register.module = instance
 

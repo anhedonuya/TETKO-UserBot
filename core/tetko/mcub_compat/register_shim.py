@@ -148,7 +148,6 @@ def _event_builder(event_type, args, kwargs):
         "callbackquery": events.CallbackQuery, "callback": events.CallbackQuery,
         "raw": events.Raw, "custom": events.Raw,
     }
-    # Удаляем события, которых нет в форке (например, JoinRequest)
     mapping = {k: v for k, v in mapping.items() if v is not None}
     cls = mapping.get(key)
     if cls is None: raise ValueError(f"Unknown MCUB event type: {event_type!r}")
@@ -395,7 +394,6 @@ class RegisterShim:
 
     async def _invoke_handler(self, fn, event, args=None):
 
-        # MCUB-совместимые атрибуты (html_text, text, markdown_text)
         event = _patch_event_mcub(event)
 
         try:

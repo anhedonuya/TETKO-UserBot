@@ -17,7 +17,6 @@ _MCUB_MARKERS = (
     "from core.lib.time",
     "import core.lib",
     "from core.langpacks",
-    # ModuleBase-стиль
     "ModuleBase",
     # локализация mcub
     "utils.strings",
@@ -84,7 +83,6 @@ def is_mcub_module(code: str) -> bool:
             return False
 
     # 3. Слабая эвристика: класс с именем ...Module(ModuleBase) или использование
-    #    `async def on_load(self)` + `self.kernel.register` где-то
     if re.search(r"\bclass\s+\w+\s*\(\s*\w*ModuleBase\w*\s*\)", cleaned):
         return True
 

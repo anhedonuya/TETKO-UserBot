@@ -1,6 +1,5 @@
 """TETKO — модульная система TETKO UserBot."""
 
-# Версия API tetko-compat (стиль модулей)
 __compat__ = "0.0.9.0"
 __compat_style__ = "tetko-compat"
 from core.tetko.module import Module

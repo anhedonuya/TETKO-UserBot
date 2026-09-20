@@ -438,7 +438,6 @@ class Trusted(Module):
         trusted.append(user_id)
         await self._save_trusted_list(trusted)
 
-        # Дефолтные доступы
         default_access = {
             cat: (cat in ("modules", "inline", "callback"))
             for cat in ACCESS_CATEGORIES

@@ -25,10 +25,8 @@ class ModuleLoader:
     def __init__(self, registry: Registry, kernel: Optional[Any] = None):
         self.registry = registry
         self.kernel = kernel
-        # Системные модули (идут с ядром)
         self.modules_dir = Path("modules")
         self.modules_dir.mkdir(parents=True, exist_ok=True)
-        # Пользовательские модули (скачанные, локальные)
         self.custom_dir = Path("modules_custom")
         self.custom_dir.mkdir(parents=True, exist_ok=True)
 
@@ -40,7 +38,6 @@ class ModuleLoader:
 
         mod_name = path.stem
 
-        # ── MCUB compat: если модуль mcub-стиля, отдаём его compat-слою
         try:
             _code = path.read_text(encoding="utf-8")
             if is_mcub_module(_code):
@@ -78,7 +75,6 @@ class ModuleLoader:
                 f"В файле {path.name} не найден класс, унаследованный от Module"
             )
 
-        # ── Проверка совместимости tetko-compat ──
         required = getattr(module_class, "__compat__", None)
         if required:
             from core.tetko import __compat__ as kernel_compat

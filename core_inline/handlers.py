@@ -1,5 +1,4 @@
 # SPDX-License-Identifier: MIT
-# Copyright (c) 2026 flexownerAL | @flexownerAL
 
 from __future__ import annotations
 
@@ -1412,11 +1411,9 @@ class InlineHandlers:
         if hasattr(buttons, "rows"):
             buttons = buttons.rows
 
-        # Consolidate the three redundant falsy checks into one
         if not buttons or not isinstance(buttons, list):
             return None
 
-        # Single-level list → each item in a separate row.
         if not isinstance(buttons[0], list):
             parsed = []
             for item in buttons:
@@ -1425,7 +1422,6 @@ class InlineHandlers:
                     parsed.append([btn])
             return parsed or None
 
-        # List of rows
         if isinstance(buttons[0], list):
             parsed = []
             for row in buttons:
@@ -1457,7 +1453,6 @@ class InlineHandlers:
         text = btn_dict.get("text", default_text)
         b_type = btn_dict.get("type", "callback").lower()
 
-        # If no explicit type, detect from keys (hikka style)
         if (
             b_type == "callback"
             and not btn_dict.get("callback")
@@ -1919,7 +1914,6 @@ class InlineHandlers:
                                 **article_kwargs,
                             )
                         except TypeError:
-                            # Older adapters/Bot API fall back to a normal
                             # formatted article instead of failing the form.
                             try:
                                 builder = event.builder.article(
@@ -2072,7 +2066,6 @@ class InlineHandlers:
                 self.kernel.logger.debug("[InlineHandlers] duplicate callback ignored")
                 return
 
-            # Check auto-generated callback tokens first for allow_all
             self._cleanup_inline_callback_map()
             with self._cb_lock:
                 cb_map = getattr(self.kernel, "inline_callback_map", None) or {}
@@ -2218,7 +2211,6 @@ class InlineHandlers:
 
             func_hash = parts[1]
 
-            # KernelLogger may be exposed under various attribute names
             klogger = getattr(self.kernel, "klogger", None) or getattr(
                 self.kernel, "kernel_logger", None
             )

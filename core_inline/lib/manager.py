@@ -31,7 +31,6 @@ class InlineManager:
             "everyone_mode": None,
         }
 
-    # ── низкоуровневые ──
     async def _get(self, key, default):
         k = self.kernel
         if k is None:
@@ -54,7 +53,6 @@ class InlineManager:
         except Exception:
             pass
 
-    # ── пользователи ──
     async def allow_user(self, user_id, command=None):
         if command:
             cmds = await self._get("allowed_cmds", {})
@@ -62,7 +60,6 @@ class InlineManager:
             if user_id not in cmds[command]:
                 cmds[command].append(user_id)
             await self._set("allowed_cmds", cmds)
-            # И убираем из denied
             d = await self._get("denied_cmds", {})
             if command in d and user_id in d[command]:
                 d[command].remove(user_id)
@@ -72,7 +69,6 @@ class InlineManager:
             if user_id not in users:
                 users.append(user_id)
             await self._set("allowed_users", users)
-            # Убираем из denied
             d = await self._get("denied_users", [])
             if user_id in d:
                 d.remove(user_id)
@@ -128,7 +124,6 @@ class InlineManager:
             return list(a.get(command, []))
         return list(await self._get("allowed_users", []))
 
-    # ── everyone ──
     async def allow_everyone(self, mode="all"):
         await self._set("everyone_mode", mode)
 

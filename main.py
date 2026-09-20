@@ -13,7 +13,6 @@ from core.tetko.bot import BotClient
 from core.tetko.banner import render_banner
 
 
-# Приглушаем Telethon (много служебных сообщений)
 logging.getLogger("telethon").setLevel(logging.WARNING)
 logging.basicConfig(
     level=logging.INFO,
@@ -149,7 +148,6 @@ def load_config() -> dict:
     if _needs_first_run(cfg):
         return first_run_setup(cfg)
 
-    # Power Save is intentionally not a TETKO setting anymore.
     cfg.pop("power_save_mode", None)
     required = ["api_id", "api_hash"]
     missing = [k for k in required if not cfg.get(k)]
@@ -218,7 +216,6 @@ async def main():
     log.info("📡 Подключение к Telegram...")
     await client.start(phone=phone)
 
-    # Автоопределение admin_id, если его нет в конфиге
     if not cfg.get("admin_id"):
         me = await client.get_me()
         cfg["admin_id"] = me.id
@@ -231,7 +228,6 @@ async def main():
 
     kernel = Kernel(client=client, prefix=prefix, config=cfg)
 
-    # ── Inline-бот (TETKO BotClient) ──
     # Создаём ДО kernel.start(), чтобы MCUB inline (setup_mcub_inline)
     # не перезаписал kernel.bot_client на сырой TelegramClient.
     bot_token = cfg.get("inline_bot_token")

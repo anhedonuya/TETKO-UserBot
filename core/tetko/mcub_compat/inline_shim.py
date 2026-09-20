@@ -18,7 +18,6 @@ from typing import Any
 log = logging.getLogger("TETKO.mcub_compat.inline_shim")
 
 
-#  InlineManager — права (порт из core_inline/lib/manager.py)
 
 class InlineManager:
     """Менеджер прав inline. Работает с async db_get/db_set tetko."""
@@ -153,7 +152,6 @@ class InlineManager:
             return False
 
 
-#  make_cb_button + работа с kernel.inline_callback_map
 
 def _unwrap_kernel(kernel):
     """Достаём реальный объект с inline_callback_map."""
@@ -204,7 +202,6 @@ def make_cb_button(kernel, text, callback, *, args=None, kwargs=None,
         return Button.inline(text, tok.encode())
 
 
-#  Билдеры словарных inline-результатов (копия core_inline/api/core.py)
 
 def build_inline_result_text(title, text, description=None, parse_mode="HTML", result_id=None):
     r = {"type": "article", "id": result_id or str(uuid.uuid4()), "title": title,
@@ -412,7 +409,6 @@ def add_inline_keyboard_to_result(result, buttons, parse_mode=None):
     return result
 
 
-#  InlineHandlers — заглушка (диспетчер inline живёт в tetko)
 
 class InlineHandlers:
     """Заглушка. Модули, использующие InlineHandlers, получат минимум."""

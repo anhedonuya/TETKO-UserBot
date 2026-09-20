@@ -16,7 +16,6 @@ from core.tetko import Module, command, loop
 
 log = logging.getLogger("TETKO.module.dlm")
 
-# ─── Источник модулей (СТРОГО этот репозиторий) ───
 CATALOG_REPO = "flexOwnerAL/repo-TETKO-modules"
 CATALOG_BRANCH = "main"
 CATALOG_API = f"https://api.github.com/repos/{CATALOG_REPO}/contents/"
@@ -27,7 +26,6 @@ CUSTOM_DIR = Path("modules_custom")       # пользовательские м�
 CACHE_TTL = 300   # 5 минут — кэш каталога
 PAGE_SIZE = 5     # модулей на странице в DLM
 
-# Версия модуля (по дефолту). Переопредели в модуле.
 VERSION_RE = re.compile(r'^\s*version\s*=\s*["\']([^"\']+)["\']', re.MULTILINE)
 
 
@@ -73,14 +71,12 @@ class DLMModule(Module):
         self._catalog_cache: Optional[list[dict]] = None
         self._cache_time: float = 0
 
-    # ── Загрузка / выгрузка ──
     async def on_load(self):
         self.log.info("DLM loaded")
 
     async def on_unload(self):
         self.log.info("DLM unloaded")
 
-    # ── КАТАЛОГ ──
     async def _fetch_catalog(self, force: bool = False) -> list[dict]:
         """Получить список модулей из GitHub API (с кэшем)."""
         now = time.time()
@@ -118,7 +114,6 @@ class DLMModule(Module):
         self._cache_time = now
         return items
 
-    # ── ВЕРСИИ ──
     async def _get_remote_version(self, file: str) -> Optional[str]:
         """Скачать raw-файл и вытащить version."""
         url = f"{CATALOG_RAW}/{file}"
@@ -149,7 +144,6 @@ class DLMModule(Module):
                     pass
         return None
 
-    # ── ПРОВЕРКА ОБНОВЛЕНИЙ ──
     async def _check_updates(self) -> dict:
         """Вернуть dict: {file: {"local": v, "remote": v, "status": 'new'/'update'/'same'}}."""
         catalog = await self._fetch_catalog()
@@ -177,7 +171,6 @@ class DLMModule(Module):
 
         return result
 
-    # ── УВЕДОМЛЕНИЕ ──
     async def _notify_admin(self, text: str):
         """Отправить ЛС владельцу (и в лог)."""
         if not self.cfg.get("notify_updates", True):
@@ -193,7 +186,6 @@ class DLMModule(Module):
         except Exception as e:
             self.log.warning(f"DLM: не удалось отправить уведомление: {e}")
 
-    # ── ОБНОВЛЕНИЕ ──
     async def _update_module(self, file: str) -> bool:
         """Скачать новую версию модуля в modules_custom/ и перезагрузить."""
         url = f"{CATALOG_RAW}/{file}"
@@ -275,7 +267,6 @@ class DLMModule(Module):
 
         return True
 
-    # ── ФОНОВАЯ ЗАДАЧА ──
     @loop(interval=3600)
     async def auto_update_loop(self):
         """Периодическая проверка каталога и автообновление модулей."""
@@ -324,7 +315,6 @@ class DLMModule(Module):
                 + "\n\n<i>Установи через <code>.dlm</code></i>"
             )
 
-    # ── ГЛАВНОЕ МЕНЮ ──
     @command(name="dlm", aliases=["mods", "dlmods"], description="Менеджер модулей", only_for="owner")
     async def dlm_cmd(self, event, args):
         await self._show_main(event, is_cb=False)
@@ -363,7 +353,6 @@ class DLMModule(Module):
         if not peer:
             return
 
-        # Ищем (chat_id, message_id) в кэше по token кнопки
         data = getattr(cb_event, "data", b"")
         if isinstance(data, bytes):
             data = data.decode("utf-8", errors="replace")
@@ -522,7 +511,6 @@ class DLMModule(Module):
                     log.warning(f"DLM: send_inline_menu failed: {e}, fallback")
             await kernel.inline.form(chat_id, text, buttons)
 
-    # ── МЕНЮ МОДУЛЯ ──
     async def _show_module(self, cb_event, file: str):
         catalog = self._catalog_cache or []
         item = next((x for x in catalog if x["file"] == file), None)
@@ -576,7 +564,6 @@ class DLMModule(Module):
 
         await self._send_menu_via_bot(cb_event, text, buttons)
 
-    # ── РУЧНАЯ ПРОВЕРКА ──
     @command(name="dlm_check", aliases=["checkmods"], description="Проверить обновления модулей", only_for="owner")
     async def dlm_check_cmd(self, event, args):
         await event.edit("🔍 Проверяю каталог...")

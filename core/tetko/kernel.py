@@ -19,7 +19,6 @@ try:
     from core_inline.bot import InlineBot
 except Exception as _e:
     InlineBot = None
-# Fallback на старый tetko Inline
 from core.tetko.inline import Inline as _TetkoInline
 from core.tetko.loader import ModuleLoader
 from core.tetko.registry import Registry
@@ -73,7 +72,6 @@ class Kernel:
             handlers = InlineHandlers(self, bot_client)
             self._mcub_inline_handlers = handlers
 
-                # Не перезаписываем существующий TETKO BotClient
             if getattr(self, "bot_client", None) is None:
                 self.bot_client = bot_client
             else:
@@ -103,7 +101,6 @@ class Kernel:
         )
         # лог-чат
         self.log_chat_id = self.config.get("log_chat_id") or None
-        # MCUB-совместимые алиасы
         self.bot_command_handlers = {}
         self.premium_user = False
         self.user_premium = False
@@ -111,7 +108,6 @@ class Kernel:
         self.inline_handlers = {}
         self.callback_permissions = _DummyCallbackPermissions()
 
-        # MCUB core_inline compatibility aliases.
         self.logger = log
         self.CONFIG_FILE = "config.json"
         # MCUB core_inline expects these names on the kernel.  TETKO keeps
@@ -147,9 +143,7 @@ class Kernel:
             prefix=self.prefix,
             context=self.context,
         )
-        # Старый inline для обратной совместимости
         self.inline = _TetkoInline(kernel=self)
-        # MCUB InlineHandlers подключается после старта bot_client
         self._mcub_inline_handlers = None
         self._mcub_inline_bot = None
         # Ссылка на inline_callback_map (для make_cb_button и InlineHandlers)
@@ -171,7 +165,6 @@ class Kernel:
     async def start(self) -> None:
         """Запуск ядра, загрузка модулей и старт событий."""
         log.info("🚀 Запуск ядра TETKO...")
-        # MCUB inline (bot + InlineHandlers)
         await self.setup_mcub_inline()
 
         # проверяем premium у владельца
@@ -224,14 +217,12 @@ class Kernel:
         """Остановка ядра и корректная выгрузка модулей."""
         log.info("🛑 Остановка ядра TETKO...")
 
-        # Отменяем фоновые задачи и ждём их завершения
         for task in self._loop_tasks:
             task.cancel()
         if self._loop_tasks:
             await asyncio.gather(*self._loop_tasks, return_exceptions=True)
         self._loop_tasks.clear()
 
-        # Выгружаем модули
         for mod_name in list(self.registry.list_modules().keys()):
             await self.loader.unload_module(mod_name)
 

@@ -16,7 +16,6 @@ class Inline:
         self.kernel = kernel
         self._handlers: dict[str, dict] = {}
 
-    # ── Регистрация временного callback-хендлера ──
     def register_handler(
         self,
         func: Callable,
@@ -68,7 +67,6 @@ class Inline:
         token = self.register_handler(func, args=args, ttl=ttl)
         return {"label": label, "token": token, "style": style}
 
-    # ── Построение ReplyInlineMarkup БЕЗ build_reply_markup ──
     def _build_markup(self, buttons: list[list[dict]]):
         """Собрать ReplyInlineMarkup через ButtonMethods.build_reply_markup."""
         from telethon.tl.custom import Button
@@ -111,7 +109,6 @@ class Inline:
             kb_rows.append(KeyboardButtonRow(buttons=kb_row))
         return ReplyInlineMarkup(rows=kb_rows)
 
-    # ── Отправка сообщения с кнопками (через SendMessageRequest) ──
     async def form(
         self,
         chat_id: int,
@@ -150,7 +147,6 @@ class Inline:
         result = await self.kernel.client(SendMessageRequest(**kwargs))
         return result
 
-    # ── Редактирование сообщения с кнопками ──
     async def edit(
         self,
         event: Any,

@@ -75,7 +75,6 @@ class BotClient:
         async def on_start(event):
             await self._handle_start(event)
 
-        # UpdateBotInlineSend — приходит inline_message_id
         from telethon import events as _events
         @self.client.on(_events.Raw(UpdateBotInlineSend))
         async def on_inline_send(update):
@@ -236,7 +235,6 @@ class BotClient:
             return None
 
         # 3. Отправка
-        # Оборачиваем в InlineResult — у него есть .click()
         from telethon.tl.custom.inlineresult import InlineResult
         inline_results = [
             InlineResult(userbot, r, results.query_id)
@@ -288,7 +286,6 @@ class BotClient:
         """Обработка inline-запросов от юзербота."""
         query = (event.text or "").strip()
 
-        # ── Rich-via-bot: query вида "rich:<key>" ──
         if query.startswith("rich:"):
             key = query[len("rich:"):]
             menu = self._menus.get(key)
@@ -318,7 +315,6 @@ class BotClient:
                                 if not isinstance(b, dict):
                                     kb_row.append(b)
                                     continue
-                                # Словарь с token
                                 data = b.get("token", b.get("data", ""))
                                 if isinstance(data, str):
                                     data = data.encode("utf-8")
@@ -344,7 +340,6 @@ class BotClient:
                 except Exception as e:
                     log.warning(f"_handle_inline: rich result failed: {e}")
 
-        # ── Table-via-bot: query вида "table:Заголовок1|Заголовок2\nданные" ──
         if query.startswith("table:"):
             body = query[len("table:"):].strip()
             lines = [ln.strip() for ln in body.split("\n") if ln.strip()]

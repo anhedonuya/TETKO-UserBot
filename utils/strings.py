@@ -55,7 +55,6 @@ class Strings:
         self.kernel = kernel
         self.data = data or {}
 
-        # Определяем активный язык
         lang = "ru"
         try:
             if kernel is not None:
@@ -66,7 +65,6 @@ class Strings:
             pass
         self.language = lang
 
-        # Собираем активный словарь
         active = self._pick_active(lang)
         self._active = _StringDict(active)
 

@@ -7,7 +7,6 @@ ModuleBase = настоящий MCUBModuleBase (с __init_subclass__,
 """
 from __future__ import annotations
 
-# Реэкспорт настоящего класса
 from core.tetko.mcub_compat.module_base import MCUBModuleBase as ModuleBase
 
 

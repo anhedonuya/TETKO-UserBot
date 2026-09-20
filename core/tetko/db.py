@@ -77,7 +77,6 @@ class Storage:
         self._save(namespace)
 
 
-# Глобальный экземпляр для использования из модулей
 _storage = Storage()
 
 
