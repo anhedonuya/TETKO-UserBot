@@ -101,7 +101,14 @@ class _ButtonFactoryStub:
         return token.encode() if isinstance(token, str) else token
 
     def inline(self, text, callback, style=None, **kw):
-        """Inline callback-кнопка."""
+        """Inline callback-кнопка (TETKO-формат: dict)."""
+        kernel = getattr(self._module, "kernel", None) if self._module else None
+        inline = getattr(kernel, "inline", None) if kernel else None
+        if inline is not None and hasattr(inline, "make_button"):
+            async def _wrapped(ev, *a, **k):
+                return await callback(ev)
+            token = inline.register_handler(_wrapped, [], 600)
+            return {"label": str(text or "·"), "token": token, "style": style or "primary"}
         from telethon.tl.types import KeyboardButtonCallback
         data = self._make_callback_data(callback)
         return KeyboardButtonCallback(text=str(text), data=data)
@@ -415,7 +422,10 @@ class MCUBModuleBase:
         return module
 
     @property
-    def Button(self): return _ButtonFactoryStub()
+    def Button(self):
+        if not hasattr(self, "_btn_factory") or self._btn_factory is None:
+            self._btn_factory = _ButtonFactoryStub(self)
+        return self._btn_factory
 
     async def on_load(self):
         self._loaded = True

@@ -198,6 +198,7 @@ async def console_reader() -> None:
 
 
 async def main():
+    import logging as _l
     cfg = load_config()
 
     api_id = int(cfg["api_id"])
@@ -206,14 +207,15 @@ async def main():
     prefix = cfg.get("command_prefix", ".")
     session_name = "tetko"
 
-    log.info("🔥 Инициализация TETKO UserBot...")
-    log.info(f"   • api_id: {api_id}")
-    log.info(f"   • phone:  {phone or '(из сессии)'}")
-    log.info(f"   • prefix: {prefix!r}")
+    import logging as _l
+    _l.getLogger().setLevel(_l.CRITICAL)
+
+    print("🔥 Инициализация TETKO UserBot...")
+    print("📡 Подключение к Telegram...")
+    sys.stdout.flush()
 
     client = TelegramClient(session_name, api_id, api_hash)
 
-    log.info("📡 Подключение к Telegram...")
     await client.start(phone=phone)
 
     if not cfg.get("admin_id"):
@@ -249,15 +251,15 @@ async def main():
 
     await kernel.start()
 
-
+    _l.getLogger().setLevel(_l.INFO)
 
     os.system("clear")
 
     print(render_banner(version="0.0.9.15", codename="native"))
     print()
     print("  \033[1;92m[>]\033[0m Kernel:  loaded successfully")
-    modules = list(kernel.registry.list_modules().keys()) or ["none"]
-    print(f"  \033[1;92m[>]\033[0m Modules: {len(modules)} ({', '.join(modules)})")
+    modules = list(kernel.registry.list_modules().keys()) or []
+    print(f"  \033[1;92m[>]\033[0m Modules: {len(modules)}")
     print("  \033[1;92m[>]\033[0m Compat:  tetko-compat 0.0.9.0")
     print(f"  \033[1;92m[>]\033[0m Owner:   {kernel.context.admin_id}")
     print()
