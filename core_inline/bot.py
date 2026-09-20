@@ -1013,10 +1013,7 @@ class InlineBot:
                 """
                 await self._inline_handlers_instance.process_inline_query(query)
 
-            @callback_router.callback_query(_CallbackQueryFilter())
-            async def _aiogram_callback_handler(query: Any) -> None:
-                """Bridge aiogram CallbackQuery to the adapter method."""
-                await self._inline_handlers_instance.process_callback_query(query)
+            pass
 
             self._aiogram_polling_task = asyncio.create_task(
                 self._aiogram_dp.start_polling(self._aiogram_bot)

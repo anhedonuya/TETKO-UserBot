@@ -664,14 +664,11 @@ class Trusted(Module):
             name = await self._get_user_display(uid)
             groups = await self._get_sgroups()
             g_access = {g: d for g, d in groups.items() if uid in d.get("users", [])}
-            try:
-                await cb_event.edit(
-                    self._access_text(name, cur, g_access),
-                    buttons=self._access_buttons(uid, cur, g_access, input_chat),
-                    parse_mode="html",
-                )
-            except Exception:
-                pass
+            await self.kernel.inline.edit(
+                cb_event,
+                self._access_text(name, cur, g_access),
+                self._access_buttons(uid, cur, g_access, input_chat),
+            )
 
         async def on_preset(cb_event, uid, preset_key):
             sender = cb_event.sender_id
@@ -692,11 +689,7 @@ class Trusted(Module):
             groups = await self._get_sgroups()
             g_access = {g: d for g, d in groups.items() if uid in d.get("users", [])}
             try:
-                await cb_event.edit(
-                    self._access_text(name, preset["access"], g_access),
-                    buttons=self._access_buttons(uid, preset["access"], g_access, input_chat),
-                    parse_mode="html",
-                )
+                await self.kernel.inline.edit(cb_event, self._access_text(name, preset["access"], g_access), self._access_buttons(uid, preset["access"], g_access, input_chat))
             except Exception:
                 pass
 
@@ -714,11 +707,7 @@ class Trusted(Module):
             await im.allow_user(uid)
             name = await self._get_user_display(uid)
             try:
-                await cb_event.edit(
-                    self._access_text(name, full),
-                    buttons=self._access_buttons(uid, full, input_chat=input_chat),
-                    parse_mode="html",
-                )
+                await self.kernel.inline.edit(cb_event, self._access_text(name, full), self._access_buttons(uid, full, input_chat=input_chat))
             except Exception:
                 pass
 
@@ -736,11 +725,7 @@ class Trusted(Module):
             await im.deny_user(uid)
             name = await self._get_user_display(uid)
             try:
-                await cb_event.edit(
-                    self._access_text(name, none_),
-                    buttons=self._access_buttons(uid, none_, input_chat=input_chat),
-                    parse_mode="html",
-                )
+                await self.kernel.inline.edit(cb_event, self._access_text(name, none_), self._access_buttons(uid, none_, input_chat=input_chat))
             except Exception:
                 pass
 
@@ -847,11 +832,7 @@ class Trusted(Module):
             groups = await self._get_sgroups()
             g_access = {g: d for g, d in groups.items() if uid in d.get("users", [])}
             try:
-                await cb_event.edit(
-                    self._access_text(nm, acc, g_access),
-                    buttons=self._access_buttons(uid, acc, g_access),
-                    parse_mode="html",
-                )
+                await self.kernel.inline.edit(cb_event, self._access_text(nm, acc, g_access), self._access_buttons(uid, acc, g_access))
             except Exception:
                 pass
 
@@ -949,11 +930,7 @@ class Trusted(Module):
             groups = await self._get_sgroups()
             g_access = {g: d for g, d in groups.items() if uid in d.get("users", [])}
             try:
-                await cb_event.edit(
-                    self._access_text(nm, acc, g_access),
-                    buttons=self._access_buttons(uid, acc, g_access),
-                    parse_mode="html",
-                )
+                await self.kernel.inline.edit(cb_event, self._access_text(nm, acc, g_access), self._access_buttons(uid, acc, g_access))
             except Exception:
                 pass
 
@@ -1314,11 +1291,7 @@ class Trusted(Module):
                 await self._save_sgroups(groups)
             acc = groups[gname]["access"]
             try:
-                await cb_event.edit(
-                    self._sgroup_access_text(gname, acc),
-                    buttons=self._sgroup_access_buttons(gname, acc),
-                    parse_mode="html",
-                )
+                await self.kernel.inline.edit(cb_event, self._sgroup_access_text(gname, acc), self._sgroup_access_buttons(gname, acc))
             except Exception:
                 pass
 
@@ -1329,11 +1302,7 @@ class Trusted(Module):
                 await self._save_sgroups(groups)
             acc = groups[gname]["access"]
             try:
-                await cb_event.edit(
-                    self._sgroup_access_text(gname, acc),
-                    buttons=self._sgroup_access_buttons(gname, acc),
-                    parse_mode="html",
-                )
+                await self.kernel.inline.edit(cb_event, self._sgroup_access_text(gname, acc), self._sgroup_access_buttons(gname, acc))
             except Exception:
                 pass
 
@@ -1344,11 +1313,7 @@ class Trusted(Module):
                 await self._save_sgroups(groups)
             acc = groups[gname]["access"]
             try:
-                await cb_event.edit(
-                    self._sgroup_access_text(gname, acc),
-                    buttons=self._sgroup_access_buttons(gname, acc),
-                    parse_mode="html",
-                )
+                await self.kernel.inline.edit(cb_event, self._sgroup_access_text(gname, acc), self._sgroup_access_buttons(gname, acc))
             except Exception:
                 pass
 

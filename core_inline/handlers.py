@@ -1660,13 +1660,7 @@ class InlineHandlers:
 
         await self._start_cleanup_task()
 
-        @self.bot_client.on(events.InlineQuery)
-        async def inline_query_handler(event):
-            await self.process_inline_query(event)
-
-        @self.bot_client.on(events.CallbackQuery)
-        async def callback_query_handler(event):
-            await self.process_callback_query(event)
+        pass
 
     async def process_inline_query(self, event: Any) -> None:
         """Process an inline query event.
@@ -2060,6 +2054,12 @@ class InlineHandlers:
                 if isinstance(event.data, bytes)
                 else str(event.data)
             )
+            _inline = getattr(self.kernel, "inline", None)
+            if _inline is not None:
+                _h = getattr(_inline, "_handlers", None) or {}
+                if data_str in _h:
+                    return
+
             if self._dedup_runtime_event(
                 "callback", self._callback_dedup_key(event, data_str)
             ):
