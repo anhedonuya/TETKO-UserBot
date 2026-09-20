@@ -526,11 +526,15 @@ class ModuleConfig:
 
     def __setitem__(self, key, value):
         if key not in self._values:
-            raise KeyError(f"Unknown config key: {key}")
+            # Динамический ключ (SourceTrigger и др.) — создаём на лету
+            self._values[key] = ConfigValue(key, None)
+            self._items_order.append(key)
         cv = self._values[key]
         old = cv.get_value()
         cv.set_value(value)
         new = cv.get_value()
+        # Сохраняем в БД (async, fire-and-forget)
+        self._persist(key, value)
         if cv.on_change:
             try:
                 r = cv.on_change(old, new)
@@ -539,6 +543,64 @@ class ModuleConfig:
                     asyncio.ensure_future(r)
             except Exception as e:
                 log.warning(f"on_change({key}): {e}")
+
+    def _persist(self, key, value):
+        """Сохраняет одно значение в БД через owner.kernel.db_set."""
+        owner = self._owner
+        if owner is None:
+            return
+        kernel = getattr(owner, "kernel", None)
+        if kernel is None:
+            return
+        db_set = getattr(kernel, "db_set", None)
+        if db_set is None:
+            return
+        ns = getattr(owner, "name", "unnamed")
+        try:
+            import asyncio
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                loop.create_task(db_set(ns, f"cfg_{key}", value))
+        except Exception:
+            pass
+
+    async def load_from_db(self, owner=None):
+        """Загружает все значения из БД через owner.kernel.db_get."""
+        owner = owner or self._owner
+        if owner is None:
+            return
+        kernel = getattr(owner, "kernel", None)
+        if kernel is None:
+            return
+        db_get = getattr(kernel, "db_get", None)
+        if db_get is None:
+            return
+        ns = getattr(owner, "name", "unnamed")
+        for key, cv in self._values.items():
+            try:
+                val = await db_get(ns, f"cfg_{key}", None)
+                if val is not None:
+                    cv.set_value(val)
+            except Exception as e:
+                log.warning(f"load_from_db({key}): {e}")
+
+    async def save_to_db(self, owner=None):
+        """Сохраняет все значения в БД."""
+        owner = owner or self._owner
+        if owner is None:
+            return
+        kernel = getattr(owner, "kernel", None)
+        if kernel is None:
+            return
+        db_set = getattr(kernel, "db_set", None)
+        if db_set is None:
+            return
+        ns = getattr(owner, "name", "unnamed")
+        for key, cv in self._values.items():
+            try:
+                await db_set(ns, f"cfg_{key}", cv.get_value())
+            except Exception as e:
+                log.warning(f"save_to_db({key}): {e}")
 
     def get(self, key, default=None):
         try:

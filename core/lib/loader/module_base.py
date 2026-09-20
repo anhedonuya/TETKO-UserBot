@@ -62,6 +62,16 @@ def bot_command(pattern, **kwargs):
     return deco
 
 
+def event(event_type, *args, bot_client=False, **kwargs):
+    """MCUB-декоратор @event — регистрирует обработчик события."""
+    def deco(fn):
+        meta = list(getattr(fn, "_mcub_events", []))
+        meta.append((event_type, args, kwargs))
+        fn._mcub_events = meta
+        return fn
+    return deco
+
+
 def inline(pattern, **kwargs):
     def deco(fn):
         meta = list(getattr(fn, "_mcub_inline", []))
@@ -71,4 +81,4 @@ def inline(pattern, **kwargs):
     return deco
 
 
-__all__ = ["ModuleBase", "command", "watcher", "callback", "loop", "bot_command", "inline"]
+__all__ = ["ModuleBase", "command", "watcher", "callback", "loop", "bot_command", "inline", "event"]

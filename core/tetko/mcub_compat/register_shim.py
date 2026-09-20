@@ -155,6 +155,48 @@ def _event_builder(event_type, args, kwargs):
     return cls(*args, **kwargs)
 
 
+def _patch_event_mcub(event):
+    """Добавляет MCUB-совместимые атрибуты к Telethon-событию.
+
+    MCUB-модули используют event.html_text, event.text (как у Message),
+    но Telethon даёт raw_text / message. Патчим на лету.
+    """
+    if event is None:
+        return event
+
+    # raw_text — базовый текст
+    raw = getattr(event, "raw_text", None)
+    if raw is None:
+        raw = getattr(event, "message", "") or getattr(event, "text", "") or ""
+
+    # text — plain
+    if not hasattr(event, "text") or getattr(event, "text", None) is None:
+        try:
+            event.text = raw
+        except Exception:
+            pass
+
+    # html_text — HTML-escape (MCUB-стиль)
+    if not hasattr(event, "html_text") or getattr(event, "html_text", None) is None:
+        try:
+            import html as _html
+            event.html_text = _html.escape(raw, quote=False)
+        except Exception:
+            try:
+                event.html_text = raw
+            except Exception:
+                pass
+
+    # markdown_text — raw (пока без конвертации)
+    if not hasattr(event, "markdown_text") or getattr(event, "markdown_text", None) is None:
+        try:
+            event.markdown_text = raw
+        except Exception:
+            pass
+
+    return event
+
+
 class RegisterShim:
     MAX_LOOPS_PER_MODULE = 20
 
@@ -324,6 +366,9 @@ class RegisterShim:
         return await self.kernel.client.send_message(chat_id, text, reply_to=reply_to)
 
     def get_commands(self): return dict(self._commands)
+    def command_list(self): return list(self._commands.keys())
+    def get_command(self, name): return self._commands.get(name)
+    def alias_list(self): return list(self._aliases.keys())
     def get_command(self, command): return {"handler": self._commands.get(command), "owner": self.module_name if command in self._commands else None, "docs": {}}
     def get_bot_commands(self): return dict(self._bot_commands)
     def get_watchers(self): return list(self._watchers)
@@ -349,6 +394,10 @@ class RegisterShim:
         self._bot_commands.pop(cmd, None); return True
 
     async def _invoke_handler(self, fn, event, args=None):
+
+        # MCUB-совместимые атрибуты (html_text, text, markdown_text)
+        event = _patch_event_mcub(event)
+
         try:
             sig = inspect.signature(fn)
             params = [p for p in sig.parameters.values() if p.kind not in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)]
