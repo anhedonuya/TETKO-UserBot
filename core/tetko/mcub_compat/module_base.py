@@ -662,7 +662,6 @@ class _SubInline:
     def __init__(self, module):
         self._module = module
 
-    # --- доступ к клиентам ---
     def _kk(self):
         k = getattr(self._module, "kernel", None)
         return getattr(k, "_k", k)
@@ -675,7 +674,6 @@ class _SubInline:
     def client(self):
         return getattr(self._kk(), "client", None)
 
-    # --- внутренняя логика ---
     def _find_rich_client(self):
         """Найти TelegramClient для отправки.
 
@@ -735,7 +733,6 @@ class _SubInline:
             return None
 
 
-    # --- публичный API ---
     async def rich_form(self, event, text, **kwargs):
         """Отправка rich-сообщения через inline-бота (плашка via @bot)."""
         import logging

@@ -54,7 +54,6 @@ class BotClient:
         self._menus: dict[str, dict] = {}
         self._inline_sends: dict[str, str] = {}
 
-    # ─── Старт / стоп ───
     async def start(self) -> None:
         await self.client.start(bot_token=self._bot_token)
         me = await self.client.get_me()
@@ -87,7 +86,6 @@ class BotClient:
     async def stop(self) -> None:
         await self.client.disconnect()
 
-    # ─── Регистрация меню ───
     def register_menu(
         self,
         key: str,
@@ -109,7 +107,6 @@ class BotClient:
             "ttl": ttl,
         }
 
-    # ─── Отправка inline-меню в чат ───
     async def edit_inline_menu(
         self,
         inline_message_id: str,
@@ -287,7 +284,6 @@ class BotClient:
                     import traceback
         return message
 
-    # ─── Обработчики ───
     async def _handle_inline(self, event) -> None:
         """Обработка inline-запросов от юзербота."""
         query = (event.text or "").strip()
@@ -385,27 +381,6 @@ class BotClient:
                     return
                 except Exception as e:
                     log.warning(f"_handle_inline: table result failed: {e}")
-
-        # ── ТЕСТ премиум emoji ──
-        if query == "test_emoji":
-            text = "❤️ TETKO ❤️"
-            entities = [
-                MessageEntityCustomEmoji(offset=0, length=2, document_id=5282797322969852134),
-                MessageEntityCustomEmoji(offset=8, length=2, document_id=5208814909273445904),
-            ]
-            results = [InputBotInlineResult(
-                id="test",
-                type="article",
-                title="Test emoji",
-                description="Test",
-                send_message=InputBotInlineMessageText(
-                    message=text,
-                    entities=entities,
-                ),
-            )]
-            await event.answer(results, cache_time=0, gallery=False)
-            return
-        # ── /ТЕСТ ──
 
         # ищем меню по ключу
         menu = self._menus.get(query)

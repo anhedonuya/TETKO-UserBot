@@ -67,9 +67,7 @@ class Registry:
         self._callbacks: list[tuple[Any, Callable]] = []
         self._loops: list[tuple[Any, Callable, float]] = []
 
-    # ═══════════════════════════════════════
     #   МОДУЛИ
-    # ═══════════════════════════════════════
     def register_module(self, module: Any) -> None:
         """Зарегистрировать модуль."""
         if module.name in self._modules:
@@ -114,9 +112,7 @@ class Registry:
         """{имя: версия}"""
         return {m.name: m.version for m in self._modules.values()}
 
-    # ═══════════════════════════════════════
     #   КОМАНДЫ
-    # ═══════════════════════════════════════
     def register_command(self, cmd: Command) -> None:
         """Зарегистрировать команду."""
         key = cmd.name.lower()
@@ -153,9 +149,7 @@ class Registry:
             for name, cmd in self._commands.items()
         }
 
-    # ═══════════════════════════════════════
     #   WATCHERS / CALLBACKS / LOOPS
-    # ═══════════════════════════════════════
     def register_watcher(self, module: Any, func: Callable) -> None:
         self._watchers.append((module, func))
         log.debug(f"[+] Watcher: {func.__name__} ({module.name})")
@@ -177,9 +171,7 @@ class Registry:
     def list_loops(self) -> list:
         return list(self._loops)
 
-    # ═══════════════════════════════════════
     #   ОБЩЕЕ
-    # ═══════════════════════════════════════
     def clear(self) -> None:
         self._modules.clear()
         self._commands.clear()

@@ -12,9 +12,7 @@ import types
 from typing import Any, Iterator
 
 
-# ────────────────────────────────────────────────────────────────────
 #  Базовые заглушки (будут заменены на реальные в этапах 2-7)
-# ────────────────────────────────────────────────────────────────────
 
 class _Unavailable:
     """Объект-заглушка: обращение к нему кидает понятную ошибку."""
@@ -45,9 +43,7 @@ def _make_module(name: str, attrs: dict[str, Any] | None = None) -> types.Module
     return mod
 
 
-# ────────────────────────────────────────────────────────────────────
 #  Минимальный ModuleBase (реальный класс — нужен для isinstance)
-# ────────────────────────────────────────────────────────────────────
 
 from .module_base import MCUBModuleBase as _MCUB_ModuleBase
 from .module_base import (
@@ -68,9 +64,7 @@ def _noop_decorator(*args, **kwargs):
     return deco
 
 
-# ────────────────────────────────────────────────────────────────────
 #  Регистрация фейков в sys.modules
-# ────────────────────────────────────────────────────────────────────
 
 def _mcub_event(event_type, *args, bot_client=False, **kwargs):
     """MCUB-декоратор @event — регистрирует обработчик события."""
@@ -85,7 +79,6 @@ def _mcub_event(event_type, *args, bot_client=False, **kwargs):
 def _build_fake_modules() -> dict[str, types.ModuleType]:
     fake: dict[str, types.ModuleType] = {}
 
-    # ── core.lib.loader.module_base ──
     module_base = _make_module("core.lib.loader.module_base", {
         "ModuleBase": _MCUB_ModuleBase,
         "command": _mcub_command,
@@ -98,7 +91,6 @@ def _build_fake_modules() -> dict[str, types.ModuleType]:
     })
     fake["core.lib.loader.module_base"] = module_base
 
-    # ── core.lib.loader.kernel_proxy ──
     def _wrap_event_for_module(event, *a, **kw):
         return event
 
@@ -125,7 +117,6 @@ def _build_fake_modules() -> dict[str, types.ModuleType]:
     })
     fake["core.lib.loader.kernel_proxy"] = kernel_proxy
 
-    # ── core.lib.loader.repository ──
     def _validate_remote_url(url):
         return True, ""
 
@@ -134,7 +125,6 @@ def _build_fake_modules() -> dict[str, types.ModuleType]:
         {"validate_remote_url": _validate_remote_url},
     )
 
-    # ── core.lib.types (и подпакеты) ──
     types_mod = _make_module("core.lib.types", {
         "Event": _Unavailable("Event"),
         "InlineMessage": _Unavailable("InlineMessage"),
@@ -150,7 +140,6 @@ def _build_fake_modules() -> dict[str, types.ModuleType]:
     fake["core.lib.types.message"] = _make_module("core.lib.types.message", {"Message": _Unavailable("Message")})
     fake["core.lib.types.register"] = _make_module("core.lib.types.register", {"Register": _Unavailable("Register")})
 
-    # ── core.lib.utils.* ──
     fake["core.lib.utils"] = _make_module("core.lib.utils", {"purge_caches": lambda *a, **kw: {}})
     fake["core.lib.utils.colors"] = _make_module("core.lib.utils.colors", {
         "Colors": type("Colors", (), {
@@ -181,7 +170,6 @@ def _build_fake_modules() -> dict[str, types.ModuleType]:
         "run_and_capture": _Unavailable("run_and_capture"),
     })
 
-    # ── core.lib.base.* ──
     fake["core.lib.base"] = _make_module("core.lib.base", {})
     fake["core.lib.base.client"] = _make_module("core.lib.base.client", {"ClientManager": _Unavailable("ClientManager")})
     fake["core.lib.base.config"] = _make_module("core.lib.base.config", {"ConfigManager": _Unavailable("ConfigManager")})
@@ -191,18 +179,15 @@ def _build_fake_modules() -> dict[str, types.ModuleType]:
         "check_trust": _Unavailable("check_trust"),
     })
 
-    # ── core.lib.time.* ──
     fake["core.lib.time"] = _make_module("core.lib.time", {})
     fake["core.lib.time.cache"] = _make_module("core.lib.time.cache", {"TTLCache": _Unavailable("TTLCache")})
     fake["core.lib.time.scheduler"] = _make_module("core.lib.time.scheduler", {"TaskScheduler": _Unavailable("TaskScheduler")})
 
 
-    # ── core_inline.* ──
     fake["core_inline"] = _make_module("core_inline", {})
     fake["core_inline.bot"] = _make_module("core_inline.bot", {"InlineBot": _Unavailable("InlineBot")})
     fake["core_inline.handlers"] = _make_module("core_inline.handlers", {"InlineHandlers": _Unavailable("InlineHandlers")})
 
-    # ── utils.* (заглушки; реальный пакет поставим в этапе 5) ──
     fake["utils.arg_parser"] = _make_module("utils.arg_parser", {
         "ArgumentParser": _Unavailable("ArgumentParser"),
         "ArgumentValidator": _Unavailable("ArgumentValidator"),
@@ -236,9 +221,7 @@ def _build_fake_modules() -> dict[str, types.ModuleType]:
     return fake
 
 
-# ────────────────────────────────────────────────────────────────────
 #  Публичный API
-# ────────────────────────────────────────────────────────────────────
 
 _FAKE_MODULES: dict[str, types.ModuleType] | None = None
 _SAVED_ORIGINALS: dict[str, Any] = {}

@@ -16,9 +16,7 @@ from typing import Any, Callable, Optional
 log = logging.getLogger("TETKO.mcub_compat.module_config")
 
 
-# ────────────────────────────────────────────────────────────────────
 #  Валидаторы
-# ────────────────────────────────────────────────────────────────────
 
 class ValidationError(Exception):
     pass
@@ -242,9 +240,7 @@ class NoneType(Validator):
         raise ValidationError("Expected None")
 
 
-# ────────────────────────────────────────────────────────────────────
 #  UI-элементы (простые маркеры, для этапа 3 — храним, но UI базовый)
-# ────────────────────────────────────────────────────────────────────
 
 class _UIItem:
     ui_only = True
@@ -409,9 +405,7 @@ class Buttons(_UIItem):
         self.button_text = button_text or title
 
 
-# ────────────────────────────────────────────────────────────────────
 #  ConfigValue + ModuleConfig
-# ────────────────────────────────────────────────────────────────────
 
 class ConfigValue:
     """Значение конфига в стиле MCUB."""

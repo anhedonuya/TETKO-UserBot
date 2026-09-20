@@ -54,7 +54,6 @@ class Storage:
         except Exception as e:
             log.error(f"[{namespace}] ошибка сохранения {path}: {e}")
 
-    # ─── Публичный API ───
     def get(self, namespace: str, key: str, default: Any = None) -> Any:
         return self._load(namespace).get(key, default)
 

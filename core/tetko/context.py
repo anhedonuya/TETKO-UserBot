@@ -35,14 +35,12 @@ class Context:
         # Хук на централизованную обработку ошибок (можно переопределить)
         self._error_handler = None
 
-    # ─── Владелец ───
     def is_owner(self, user_id: Optional[int]) -> bool:
         """Проверка: пользователь — владелец?"""
         if user_id is None or self.admin_id is None:
             return False
         return int(user_id) == int(self.admin_id)
 
-    # ─── Ошибки ───
     def set_error_handler(self, handler) -> None:
         """Установить обработчик ошибок (callable(event, exc))."""
         self._error_handler = handler
@@ -70,7 +68,6 @@ class Context:
             except Exception:
                 pass
 
-    # ─── Удобные геттеры ───
     def get(self, key: str, default: Any = None) -> Any:
         return self.config.get(key, default)
 
