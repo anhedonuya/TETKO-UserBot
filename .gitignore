@@ -51,6 +51,7 @@ main.py.mybackup
 *.tmp
 .cache/
 .pytest_cache/
+logs/
 
 # ─── Sessions (никогда не пушить!) ───
 sessions/
