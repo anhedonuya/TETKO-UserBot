@@ -104,6 +104,61 @@ class KernelProxy:
             object.__setattr__(self, "_register", r)
         return r
 
+    @property
+    def inline(self):
+        return getattr(object.__getattribute__(self, "_k"), "inline", None)
+
+    @property
+    def inline_callback_map(self):
+        k = object.__getattribute__(self, "_k")
+        if not hasattr(k, "inline_callback_map"): k.inline_callback_map = {}
+        return k.inline_callback_map
+
+    @property
+    def _inline_cb_lock(self):
+        k = object.__getattribute__(self, "_k")
+        lock = getattr(k, "_inline_cb_lock", None)
+        if lock is None:
+            import threading
+            lock = threading.Lock(); k._inline_cb_lock = lock
+        return lock
+
+    @property
+    def callback_handlers(self):
+        return getattr(object.__getattribute__(self, "_k"), "callback_handlers", {})
+
+    @property
+    def current_loading_module(self):
+        return getattr(object.__getattribute__(self, "_k"), "current_loading_module", None)
+
+    @property
+    def current_loading_module_type(self):
+        return getattr(object.__getattribute__(self, "_k"), "current_loading_module_type", "mcub")
+
+    @property
+    def db_manager(self):
+        return getattr(object.__getattribute__(self, "_k"), "db_manager", None)
+
+    def register_inline_handler(self, pattern, handler):
+        k = object.__getattribute__(self, "_k")
+        # TETKO's inline subsystem exposes a compatible handler map in newer builds.
+        if hasattr(k, "register_inline_handler"):
+            return k.register_inline_handler(pattern, handler)
+        inline = getattr(k, "inline", None)
+        if inline is not None and hasattr(inline, "register_handler"):
+            token = inline.register_handler(handler)
+            return token
+        return None
+
+    def set_live_module_config(self, module_name, config):
+        k = object.__getattribute__(self, "_k")
+        live = getattr(k, "_live_module_configs", None)
+        if live is None:
+            live = {}; setattr(k, "_live_module_configs", live)
+        try: live[module_name] = config
+        except Exception: pass
+
+
     async def db_get(self, namespace, key, default=None):
         from core.tetko import db_get
         try:
@@ -203,6 +258,68 @@ class KernelProxy:
     def command_handlers(self):
         reg = object.__getattribute__(self, "_k").registry
         return {n: c.func for n, c in reg._commands.items()}
+
+    # ---- Broad MCUB kernel compatibility ---------------------------------
+    # MCUB modules historically accessed the kernel as a large service
+    # object.  TETKO remains the real runtime, but these aliases let old
+    # modules use the same surface without requiring MCUB to own the process.
+    def __getattr__(self, name):
+        k = object.__getattribute__(self, "_k")
+        if name == "prefix":
+            return self.custom_prefix
+        if name == "VERSION":
+            try:
+                from core.version import __version__
+                return __version__
+            except Exception:
+                return "0.0.9.11"
+        if name == "MODULES_LOADED_DIR":
+            return str(object.__getattribute__(self, "_repo_root") / "modules")
+        if name in {"loaded_modules", "system_modules"}:
+            return getattr(k, "registry", None)._modules if getattr(k, "registry", None) else {}
+        if name == "cache":
+            return object.__getattribute__(self, "_cache")
+        if name == "version_manager":
+            vm = object.__getattribute__(self, "_version_manager")
+            if vm is None:
+                vm = _VersionManager(object.__getattribute__(self, "_repo_root"))
+                object.__setattr__(self, "_version_manager", vm)
+            return vm
+        if name in {"custom_prefix", "prefix"}:
+            return self.custom_prefix
+        if name == "ADMIN_ID":
+            return self.ADMIN_ID
+        if name in {"premium_user", "is_premium"}:
+            ctx = getattr(k, "context", None)
+            return bool(getattr(ctx, "user_premium", False)) if ctx else False
+        if name == "session":
+            return getattr(getattr(k, "client", None), "session", None)
+        if name == "log":
+            return self.logger
+        if name == "register":
+            return self.register
+        if name == "repositories":
+            return getattr(k, "repositories", [])
+        if name in {"command_docs", "bot_command_docs", "command_metadata", "callback_permissions"}:
+            return getattr(k, name, {})
+        if name in {"inline_handlers", "bot_command_handlers"}:
+            return getattr(k, name, {})
+        if name in {"is_admin", "should_process_command_event", "process_command",
+                    "reply_with_html", "restart", "get_prefix_for_sender",
+                    "install_from_url", "store_module_config_schema",
+                    "get_module_config", "save_module_config"}:
+            attr = getattr(k, name, None)
+            if attr is not None:
+                return attr
+        # Safe fallback for optional MCUB-only state.  This avoids AttributeError
+        # for modules that merely probe for an optional subsystem.
+        if name.startswith("_hikka_compat_") or name in {
+            "_disabled_watchers", "_inline_temp_map", "_inline_temp_uuids",
+            "_inline_runtime_dedup", "_system_loader_active",
+            "_system_loader_token", "_is_command_event_processed",
+        }:
+            return {} if name.endswith("map") or name.endswith("state") else None
+        raise AttributeError(name)
 
     @property
     def command_owners(self):

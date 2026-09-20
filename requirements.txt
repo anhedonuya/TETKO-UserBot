@@ -1,4 +1,4 @@
-telethon @ git+https://github.com/anhedonuya/Telethon-Tetko.git
+telethon-tetko>=1.42.0.post2
 aiosqlite==0.22.1
 pyyaml==6.0.3
 psutil==7.2.2

@@ -416,9 +416,15 @@ class Tek(Module):
                 return
             try:
                 from telethon.tl.functions.messages import EditInlineBotMessageRequest
+                close_html = "🗑 <i>Меню закрыто</i>"
+                try:
+                    parsed, entities = await bot.client._parse_message_text(close_html, "html")
+                except Exception:
+                    parsed, entities = close_html, None
                 await bot.client(EditInlineBotMessageRequest(
                     id=imid,
-                    message="🗑 <i>Меню закрыто</i>",
+                    message=parsed,
+                    entities=entities,
                     reply_markup=None,
                 ))
             except Exception as e:

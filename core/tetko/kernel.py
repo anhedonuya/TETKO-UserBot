@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from typing import Any, Optional
 
 from telethon import TelegramClient, events
@@ -26,6 +27,9 @@ from core.tetko.registry import Registry
 log = logging.getLogger("TETKO.tetko.kernel")
 
 
+
+class Kernel:
+    """Ядро TETKO (tetko-compat API 0.0.9.0)."""
 
     async def setup_mcub_inline(self):
         """Подключить MCUB InlineBot + InlineHandlers к ядру."""
@@ -66,9 +70,6 @@ log = logging.getLogger("TETKO.tetko.kernel")
             log.exception(f"Не удалось запустить MCUB inline: {e}")
 
 
-class Kernel:
-    """Ядро TETKO (tetko-compat API 0.0.9.0)."""
-
     def __init__(
         self,
         client: TelegramClient,
@@ -78,6 +79,26 @@ class Kernel:
         self.client = client
         self.prefix = prefix
         self.config = dict(config or {})
+        # MCUB core_inline compatibility aliases.
+        self.logger = log
+        self.CONFIG_FILE = "config.json"
+        # MCUB core_inline expects these names on the kernel.  TETKO keeps
+        # the canonical values in config, so expose read-only-compatible
+        # aliases here instead of making core_inline depend on TETKO internals.
+        self.API_ID = int(self.config.get("api_id") or 0)
+        self.API_HASH = str(self.config.get("api_hash") or "")
+        # MCUB-compatible loading context.  TETKO remains the authoritative
+        # runtime; these fields are populated only while an MCUB module is
+        # being registered.
+        self.current_loading_module = None
+        self.current_loading_module_type = None
+        self.callback_handlers = {}
+        self.inline_handlers_owners = {}
+        self.command_owners = {}
+        self.bot_command_owners = {}
+        self._module_commands_index = {}
+        self._live_module_configs = {}
+        self.start_time = time.time()
 
         # Контекст ядра: admin_id, prefix, language, config, handle_error
         self.context = Context(

@@ -10,87 +10,42 @@ from typing import Any
 
 from .detector import is_mcub_module
 from .kernel_proxy import KernelProxy
-from .module_base import MCUBModuleBase
-from .register_shim import RegisterShim, run_autostart_loops, stop_all_loops
+from .register_shim import RegisterShim, run_autostart_loops, stop_all_loops, unregister_all_events, unregister_all_callbacks
 
 
 log = logging.getLogger("TETKO.mcub_compat.loader")
 
 
 def _install_fakes() -> None:
-    """Подменить ModuleBase в core.lib.loader.module_base на MCUBModuleBase.
-
-    Декораторы (command/watcher/loop/...) остаются РЕАЛЬНЫМИ — они уже
-    вешают `_mcub_*` атрибуты на функции в core/lib/loader/module_base.py.
-    """
-    # 1. Убеждаемся, что реальный модуль core.lib.loader.module_base загружен
-    if "core.lib.loader.module_base" not in sys.modules:
-        importlib.import_module("core.lib.loader.module_base")
-
-    mb = sys.modules["core.lib.loader.module_base"]
-    mb.ModuleBase = MCUBModuleBase
-
-    # 2. kernel_proxy — wrap_event_for_module no-op
-    if "core.lib.loader.kernel_proxy" not in sys.modules:
-        importlib.import_module("core.lib.loader.kernel_proxy")
-    kp = sys.modules["core.lib.loader.kernel_proxy"]
-    kp.wrap_event_for_module = lambda e, *a, **kw: e
-
-    
-    # 4. core_inline.* — подменяем на inline_shim
-    try:
-        from . import inline_shim as _ishim
-        import types as _t2
-        for _mod_name in (
-            "core_inline",
-            "core_inline.lib",
-            "core_inline.lib.manager",
-            "core_inline.api",
-            "core_inline.api.inline",
-            "core_inline.api.core",
-            "core_inline.handlers",
-            "core_inline.bot",
-        ):
-            if _mod_name not in sys.modules:
-                sys.modules[_mod_name] = _t2.ModuleType(_mod_name)
-            _m = sys.modules[_mod_name]
-            # Пихаем весь shim во все подмодули, чтобы любые импорты находились
-            for _n in dir(_ishim):
-                if _n.startswith("_"):
-                    continue
-                setattr(_m, _n, getattr(_ishim, _n))
-    except Exception as _e:
-        log.warning(f"[mcub_compat] core_inline fake: {_e}")
-
-# 3. module_config — подменяем на mcub_compat.module_config
-    import importlib as _il
-    if "core.lib.loader.module_config" not in sys.modules:
+    """Install only compatibility aliases; keep the real MCUB API intact."""
+    import importlib
+    # The full MCUB core/lib is shipped with TETKO.  Do not replace ModuleBase,
+    # decorators or ModuleConfig with reduced shims: that was the source of
+    # several subtle incompatibilities in older builds.
+    for name in (
+        "core.lib.loader.module_base",
+        "core.lib.loader.decorators",
+        "core.lib.loader.base",
+        "core.lib.loader.module_config",
+        "core.lib.loader.kernel_proxy",
+        "core.lib.loader.register",
+    ):
         try:
-            _il.import_module("core.lib.loader.module_config")
-        except Exception:
-            pass
+            importlib.import_module(name)
+        except Exception as exc:
+            log.debug("[mcub_compat] optional import %s: %s", name, exc)
+
+    # TETKO still owns the runtime.  MCUB's event wrapper must not attempt to
+    # replace it, so wrap_event_for_module is deliberately a no-op here.
     try:
-        from . import module_config as _mcm
-        if "core.lib.loader.module_config" in sys.modules:
-            _target = sys.modules["core.lib.loader.module_config"]
-        else:
-            import types as _types
-            _target = _types.ModuleType("core.lib.loader.module_config")
-            sys.modules["core.lib.loader.module_config"] = _target
-        for _name in (
-            "ValidationError", "Validator",
-            "Boolean", "Integer", "Float", "String", "Choice", "List",
-            "DictType", "Secret", "Placeholders", "RegExp", "Link", "TelegramID",
-            "EntityLike", "Emoji", "MultiChoice", "Union", "Hidden", "NoneType",
-            "ConfigValue", "ModuleConfig",
-            "Row", "Divider", "Group", "Buttons",
-        ):
-            if hasattr(_mcm, _name):
-                setattr(_target, _name, getattr(_mcm, _name))
-    except Exception as _e:
-        log.warning(f"[mcub_compat] module_config fake: {_e}")
+        kp = sys.modules.get("core.lib.loader.kernel_proxy")
+        if kp is not None:
+            kp.wrap_event_for_module = lambda event, *a, **kw: event
+    except Exception:
+        pass
 
-
+    # Keep MCUB's core_inline package available.  TETKO's implementation is
+    # already shipped from the MCUB fork and is loaded normally.
 
 def _stub_decorator(*args, **kwargs):
     def deco(fn):
@@ -101,19 +56,23 @@ def _stub_decorator(*args, **kwargs):
 
 
 def _find_module_class(py_module: Any) -> Any:
+    try:
+        from core.lib.loader.module_base import ModuleBase
+    except Exception:
+        ModuleBase = None
     for attr_name in dir(py_module):
         if attr_name.startswith("_"):
             continue
         attr = getattr(py_module, attr_name)
         if not isinstance(attr, type):
             continue
-        if attr is MCUBModuleBase:
+        if ModuleBase is not None and attr is ModuleBase:
             continue
         try:
-            if issubclass(attr, MCUBModuleBase):
+            if ModuleBase is not None and issubclass(attr, ModuleBase):
                 return attr
         except TypeError:
-            continue
+            pass
     return None
 
 
@@ -161,11 +120,6 @@ async def load_mcub_module(
         spec.loader.exec_module(py_module)
     except Exception as e:
         log.exception(f"[mcub_compat] ошибка исполнения {path.name}")
-        try:
-            path.unlink()
-            log.warning(f"[mcub_compat] удалён сбойный модуль: {path}")
-        except Exception as _rm_err:
-            log.warning(f"[mcub_compat] не удалось удалить {path}: {_rm_err}")
         raise ImportError(f"Ошибка импорта MCUB-модуля {mod_name}: {e}") from e
 
     module_class = _find_module_class(py_module)
@@ -179,14 +133,24 @@ async def load_mcub_module(
         name = "Pending"
     proxy.register.module = _PlaceholderModule()
 
+    old_loading = getattr(tetko_kernel, "current_loading_module", None)
+    old_loading_type = getattr(tetko_kernel, "current_loading_module_type", None)
+    tetko_kernel.current_loading_module = getattr(module_class, "name", None) or mod_name
+    tetko_kernel.current_loading_module_type = "mcub"
     try:
-        instance = module_class(
-            kernel=proxy,
-            client=getattr(tetko_kernel, "client", None),
-            register=proxy.register,
-        )
-    except TypeError:
-        instance = module_class(proxy)
+        try:
+            instance = module_class(
+                kernel=proxy,
+                client=getattr(tetko_kernel, "client", None),
+                register=proxy.register,
+            )
+        except TypeError:
+            instance = module_class(proxy)
+    finally:
+        # Keep MCUB's loading context available for the tiny registration window,
+        # then restore TETKO's previous state.
+        tetko_kernel.current_loading_module = old_loading
+        tetko_kernel.current_loading_module_type = old_loading_type
 
     # Дописываем module_instance в proxy (нужен register_shim)
     object.__setattr__(proxy, "_module", instance)
@@ -195,17 +159,60 @@ async def load_mcub_module(
     instance.kernel = proxy
     instance._register = proxy.register
 
+    # ── Регистрация команд/watcher'ов из @command-декораторов ──
+    try:
+        _reg = getattr(type(instance), "_mcub_registry", None) or {}
+        _shim = proxy.register
+        for pattern, kw, attr_name in _reg.get("commands", []):
+            method = getattr(instance, attr_name, None)
+            if method is not None:
+                _shim.command(pattern, **kw)(method)
+        for kw, attr_name in _reg.get("watchers", []):
+            method = getattr(instance, attr_name, None)
+            if method is not None:
+                _shim.watcher(method, **kw)
+        for kw, attr_name in _reg.get("callbacks", []):
+            method = getattr(instance, attr_name, None)
+            if method is not None:
+                _shim.callback(method, **kw)
+        for kw, attr_name in _reg.get("loops", []):
+            method = getattr(instance, attr_name, None)
+            if method is not None:
+                _shim.loop(**kw)(method)
+        for pattern, kw, attr_name in _reg.get("bot_commands", []):
+            method = getattr(instance, attr_name, None)
+            if method is not None:
+                _shim.bot_command(pattern, **kw)(method)
+        for pattern, kw, attr_name in _reg.get("inlines", []):
+            method = getattr(instance, attr_name, None)
+            if method is not None and hasattr(_shim, "inline"):
+                _shim.inline(pattern, **kw)(method)
+    except Exception as e:
+        log.warning(f"[mcub_compat] _mcub_registry register: {e}")
+
+
     registry = tetko_kernel.registry
-
-    # Если модуль уже загружен — сначала выгружаем
-    existing = registry.get_module(mod_name)
-    if existing is not None:
+    # MCUB's canonical module identity is the class name, not the filename.
+    canonical_name = getattr(instance, "name", None) or mod_name
+    existing = registry.get_module(canonical_name)
+    if existing is not None and existing is not instance:
+        existing_path = getattr(existing, "_mcub_source_path", None)
+        # Reloading the same module should replace the old instance cleanly.
         try:
-            await unload_mcub_module(tetko_kernel, mod_name)
+            await unload_mcub_module(tetko_kernel, canonical_name)
         except Exception as e:
-            log.warning(f"[mcub_compat] unload-existing {mod_name}: {e}")
-
-    registry.register_module(instance)
+            log.warning("[mcub_compat] unload-existing %s: %s", canonical_name, e)
+    try:
+        registry.register_module(instance)
+    except Exception as exc:
+        # A second copy with the same class name can be the result of a user
+        # loading "Foo (1).py".  Reuse the existing instance rather than
+        # falling back into TETKO's native Module validation path.
+        existing = registry.get_module(canonical_name)
+        if existing is not None:
+            return existing
+        raise
+    instance._mcub_source_path = str(path)
 
     try:
         run_autostart_loops(proxy.register)
@@ -238,10 +245,12 @@ async def unload_mcub_module(tetko_kernel: Any, module_name: str) -> bool:
 
     proxy = getattr(mod, "kernel", None)
     if proxy is not None and hasattr(proxy, "register"):
-        try:
-            stop_all_loops(proxy.register)
-        except Exception:
-            pass
+        try: stop_all_loops(proxy.register)
+        except Exception: pass
+        try: unregister_all_events(proxy.register)
+        except Exception: pass
+        try: unregister_all_callbacks(proxy.register)
+        except Exception: pass
 
     try:
         on_unload = getattr(mod, "on_unload", None)

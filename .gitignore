@@ -5,6 +5,7 @@ data/
 *.db
 *.db-journal
 *.log
+logs/
 
 # ─── Конфиги с секретами ───
 config.json
@@ -44,6 +45,9 @@ desktop.ini
 
 # ─── Прочее ───
 *.bak
+*.backup
+*.mybackup
+main.py.mybackup
 *.tmp
 .cache/
 .pytest_cache/
@@ -60,13 +64,12 @@ data/tetko_db/
 token.txt
 secrets.json
 tetko.session
+bump.sh
+
+# ─── Старые модули ───
+modules_legacy/
 
 # ─── Пользовательские модули (не публикуются) ───
 modules_custom/
 modules_custom/**/*.py
-modules_custom/*.bak
-
-bump.sh
-
-# ─── Старые модули (убраны из репо) ───
-modules_legacy/
+modules_custom/**/*.bak
