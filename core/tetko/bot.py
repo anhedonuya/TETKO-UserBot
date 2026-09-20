@@ -314,7 +314,6 @@ class BotClient:
                     reply_markup = None
                     buttons = menu.get("buttons") or []
                     if buttons:
-                        from telethon.tl.types import KeyboardButtonRow
                         kb_rows = []
                         for row in buttons:
                             kb_row = []
@@ -497,7 +496,7 @@ class BotClient:
         if isinstance(data, bytes):
             data = data.decode("utf-8", errors="replace")
 
-        log.info(f"🤖 Bot callback: data={data!r}")
+        log.debug(f"🤖 Bot callback: data={data!r}")
 
         if self.kernel is not None and hasattr(self.kernel, "inline"):
             h = self.kernel.inline.get_handler(data)
