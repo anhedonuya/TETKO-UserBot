@@ -731,9 +731,21 @@ class Trusted(Module):
 
         async def on_close(cb_event, uid):
             try:
-                await cb_event.delete()
+                await cb_event.answer()
             except Exception:
                 pass
+            bot = getattr(self.kernel, "bot_client", None)
+            imid = getattr(cb_event, "inline_message_id", None)
+            if bot is not None and imid is not None:
+                try:
+                    from telethon.tl.functions.messages import DeleteInlineBotMessageRequest
+                    from telethon.tl.types import InputBotInlineMessageID, InputBotInlineMessageID64
+                    _id = imid
+                    if not isinstance(_id, (InputBotInlineMessageID, InputBotInlineMessageID64)):
+                        pass
+                    await bot.client(DeleteInlineBotMessageRequest(id=_id))
+                except Exception:
+                    pass
 
         async def on_cmds(cb_event, uid):
             sender = cb_event.sender_id
@@ -1622,7 +1634,6 @@ class Trusted(Module):
                 self.out = True
                 self.is_reply = False
                 self.reply_to_msg_id = None
-                self.input_chat = None
 
             async def edit(self, text, **kw):
                 return await self._sent_msg.edit(text, **kw)
@@ -1638,6 +1649,50 @@ class Trusted(Module):
 
             async def get_reply_message(self):
                 return None
+
+            def get_input_chat(self):
+                try:
+                    return self._sent_msg.get_input_chat()
+                except Exception:
+                    return None
+
+            async def get_chat(self):
+                try:
+                    return await self._sent_msg.get_chat()
+                except Exception:
+                    return None
+
+            @property
+            def input_chat(self):
+                try:
+                    return self._sent_msg.input_chat
+                except Exception:
+                    return None
+
+            @property
+            def chat(self):
+                return getattr(self._sent_msg, "chat", None)
+
+            @property
+            def sender(self):
+                return getattr(self._sent_msg, "sender", None)
+
+            @property
+            def id(self):
+                return getattr(self._sent_msg, "id", None)
+
+            @property
+            def date(self):
+                return getattr(self._sent_msg, "date", None)
+
+            async def get_sender(self):
+                return getattr(self._sent_msg, "sender", None)
+
+            async def get_entities_text(self, *a, **kw):
+                try:
+                    return await self._sent_msg.get_entities_text(*a, **kw)
+                except Exception:
+                    return []
 
             async def answer(self, text="", **kw):
                 return None
