@@ -24,10 +24,19 @@ class EventDispatcher:
         self.context = context
 
     async def handle_message(self, client: Any, event: Any) -> None:
-        """Обработка входящих сообщений Telegram."""
         text = getattr(event, "raw_text", "") or ""
 
-        # 1. Команды (начинаются с префикса)
+        for module, watcher_func in self.registry.list_watchers():
+            if getattr(event, "_tetko_handled", False):
+                break
+            try:
+                await watcher_func(event)
+            except Exception as e:
+                log.exception(f"Ошибка ватчера в модуле {module.name}: {e}")
+
+        if getattr(event, "_tetko_handled", False):
+            return
+
         if text.startswith(self.prefix):
             body = text[len(self.prefix):]
             parts = body.split(maxsplit=1)
@@ -37,7 +46,6 @@ class EventDispatcher:
 
                 command = self.registry.find_command(cmd_name)
                 if command:
-                    # ── Проверка прав ──
                     if command.only_for == "owner":
                         sender_id = getattr(event, "sender_id", None)
                         if self.context is None or not self.context.is_owner(sender_id):
@@ -48,7 +56,6 @@ class EventDispatcher:
                             return
 
                     try:
-                        # Прокидываем client в модуль
                         if hasattr(command.module, "client"):
                             try:
                                 command.module.client = client
@@ -65,13 +72,6 @@ class EventDispatcher:
                         except Exception:
                             pass
                     return
-
-        # 2. Watchers
-        for module, watcher_func in self.registry.list_watchers():
-            try:
-                await watcher_func(event)
-            except Exception as e:
-                log.exception(f"Ошибка ватчера в модуле {module.name}: {e}")
 
     async def handle_callback(self, client: Any, event: Any) -> None:
         """Обработка inline-кнопок (callback query).

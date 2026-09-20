@@ -191,6 +191,10 @@ class Kernel:
         async def message_handler(event):
             await self.dispatcher.handle_message(self.client, event)
 
+        @self.client.on(events.NewMessage(incoming=True))
+        async def message_handler_incoming(event):
+            await self.dispatcher.handle_message(self.client, event)
+
         @self.client.on(events.CallbackQuery())
         async def callback_handler(event):
             await self.dispatcher.handle_callback(self.client, event)

@@ -1632,18 +1632,60 @@ class Trusted(Module):
         reg = getattr(self.kernel, "registry", None)
         if reg is None:
             return
+        cmd = reg.find_command(resolved_cmd)
+        if cmd is None:
+            return
+        cmd_args = " ".join(rest) if rest else []
+        event._tetko_handled = True
+        new_text = f"{owner_prefix}{resolved_cmd}"
+        if cmd_args:
+            new_text += " " + cmd_args
         try:
-            cmd = reg.find_command(resolved_cmd)
-            if cmd is None:
-                return
-            cmd_args = " ".join(rest) if rest else []
-            await cmd.func(event, cmd_args)
+            _res = await self.client.send_message(event.chat_id, new_text)
         except Exception as e:
             full = "".join(traceback.format_exception(type(e), e, e.__traceback__))
+            return
+
+        class _FakeEvent:
+            def __init__(self, client, sent_msg, admin_id, raw_text):
+                self._client = client
+                self._sent_msg = sent_msg
+                self.sender_id = admin_id
+                self.chat_id = sent_msg.chat_id
+                self.raw_text = raw_text
+                self.text = raw_text
+                self.message = sent_msg
+                self.out = True
+                self.is_reply = False
+                self.reply_to_msg_id = None
+                self.input_chat = None
+
+            async def edit(self, text, **kw):
+                return await self._sent_msg.edit(text, **kw)
+
+            async def reply(self, text, **kw):
+                return await self._sent_msg.reply(text, **kw)
+
+            async def respond(self, text, **kw):
+                return await self._sent_msg.respond(text, **kw)
+
+            async def delete(self, **kw):
+                return await self._sent_msg.delete(**kw)
+
+            async def get_reply_message(self):
+                return None
+
+            async def answer(self, text="", **kw):
+                return None
+
+        _fake = _FakeEvent(self.client, _res, self.kernel.context.admin_id, new_text)
+        try:
             try:
-                await event.edit(self.strings["error"].format(error=e, full_error=full))
-            except Exception:
-                pass
+                await cmd.func(_fake, rest)
+            except TypeError:
+                await cmd.func(_fake)
+        except Exception as e:
+            full = "".join(traceback.format_exception(type(e), e, e.__traceback__))
 
     @loop(interval=30, autostart=True)
     async def update_callback_permissions(self):

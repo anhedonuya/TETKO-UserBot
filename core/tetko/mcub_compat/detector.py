@@ -17,8 +17,6 @@ _MCUB_MARKERS = (
     "from core.lib.time",
     "import core.lib",
     "from core.langpacks",
-    "from core_inline",
-    "import core_inline",
     # ModuleBase-стиль
     "ModuleBase",
     # локализация mcub

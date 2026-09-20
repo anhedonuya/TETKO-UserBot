@@ -1,6 +1,6 @@
 # TETKO UserBot
 
-Версия **0.0.9.14**. Юзербот для Telegram на базе Telethon.
+Версия **0.0.9.15**. Юзербот для Telegram на базе Telethon.
 
 **Ядро:** TETKO · **Стиль модулей:** tetko-compat 0.0.9.0
 
