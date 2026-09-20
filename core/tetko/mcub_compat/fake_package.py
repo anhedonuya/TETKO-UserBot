@@ -196,60 +196,13 @@ def _build_fake_modules() -> dict[str, types.ModuleType]:
     fake["core.lib.time.cache"] = _make_module("core.lib.time.cache", {"TTLCache": _Unavailable("TTLCache")})
     fake["core.lib.time.scheduler"] = _make_module("core.lib.time.scheduler", {"TaskScheduler": _Unavailable("TaskScheduler")})
 
-    # ── core.langpacks ──
-    _LP_CACHE: dict = {
-        "en": {"kernel": {"welcome": "Welcome"}, "core_inline": {"welcome": "Welcome"}},
-        "ru": {"kernel": {"welcome": "Добро пожаловать"}, "core_inline": {"welcome": "Добро пожаловать"}},
-    }
-    fake["core.langpacks"] = _make_module("core.langpacks", {
-        "get_langpacks": lambda: _LP_CACHE,
-        "get_module_strings": lambda module_name, locale: _LP_CACHE.get(locale, {}).get(module_name, {}),
-        "get_available_locales": lambda: ["en", "ru"],
-        "clear_langpacks_cache": lambda: None,
-    })
 
     # ── core_inline.* ──
     fake["core_inline"] = _make_module("core_inline", {})
-    fake["core_inline.api"] = _make_module("core_inline.api", {})
-    fake["core_inline.api.inline"] = _make_module("core_inline.api.inline", {
-        "make_cb_button": _Unavailable("make_cb_button"),
-    })
-    fake["core_inline.lib"] = _make_module("core_inline.lib", {})
-    fake["core_inline.lib.manager"] = _make_module("core_inline.lib.manager", {
-        "InlineManager": _Unavailable("InlineManager"),
-    })
     fake["core_inline.bot"] = _make_module("core_inline.bot", {"InlineBot": _Unavailable("InlineBot")})
     fake["core_inline.handlers"] = _make_module("core_inline.handlers", {"InlineHandlers": _Unavailable("InlineHandlers")})
 
     # ── utils.* (заглушки; реальный пакет поставим в этапе 5) ──
-    fake["utils"] = _make_module("utils", {
-        "answer": _Unavailable("utils.answer"),
-        "answer_file": _Unavailable("utils.answer_file"),
-        "config_placeholders": _Unavailable("utils.config_placeholders"),
-        "format_placeholders": _Unavailable("utils.format_placeholders"),
-        "get_placeholders": _Unavailable("utils.get_placeholders"),
-        "list_placeholder_keys": _Unavailable("utils.list_placeholder_keys"),
-        "placeholders": _noop_decorator,
-        "register_decorated_placeholders": _Unavailable("utils.register_decorated_placeholders"),
-        "register_placeholder": _Unavailable("utils.register_placeholder"),
-        "resolve_placeholders": _Unavailable("utils.resolve_placeholders"),
-        "unregister_placeholder": _Unavailable("utils.unregister_placeholder"),
-        "unregister_scope": _Unavailable("utils.unregister_scope"),
-        "get_args": _Unavailable("utils.get_args"),
-        "get_args_raw": _Unavailable("utils.get_args_raw"),
-        "get_args_html": _Unavailable("utils.get_args_html"),
-        "get_prefix": lambda *a, **kw: ".",
-        "get_lang": lambda *a, **kw: "ru",
-        "Strings": type("Strings", (), {}),  # для type-аннотаций
-        "make_button": _Unavailable("utils.make_button"),
-        "make_buttons": _Unavailable("utils.make_buttons"),
-        "restart_kernel": _Unavailable("utils.restart_kernel"),
-    })
-    fake["utils.strings"] = _make_module("utils.strings", {
-        "Strings": _Unavailable("utils.strings.Strings"),
-        "get_available_locales": lambda: ["en", "ru"],
-        "reload_packs": lambda: None,
-    })
     fake["utils.arg_parser"] = _make_module("utils.arg_parser", {
         "ArgumentParser": _Unavailable("ArgumentParser"),
         "ArgumentValidator": _Unavailable("ArgumentValidator"),
@@ -269,15 +222,6 @@ def _build_fake_modules() -> dict[str, types.ModuleType]:
     })
     fake["utils.message_helpers"] = _make_module("utils.message_helpers", {})
     fake["utils.raw_html"] = _make_module("utils.raw_html", {})
-    fake["utils.security"] = _make_module("utils.security", {
-        "get_db_path": lambda *a, **kw: "userbot.db",
-        "get_config_path": lambda *a, **kw: "config.json",
-        "get_session_path": lambda *a, **kw: "user_session.session",
-        "session_exists": lambda *a, **kw: False,
-        "safe_extract_archive": _Unavailable("safe_extract_archive"),
-        "safe_extract_zip": _Unavailable("safe_extract_zip"),
-        "safe_extract_tar": _Unavailable("safe_extract_tar"),
-    })
     fake["utils.restart"] = _make_module("utils.restart", {
         "restart_kernel": _Unavailable("restart_kernel"),
         "read_restart_context": _Unavailable("read_restart_context"),

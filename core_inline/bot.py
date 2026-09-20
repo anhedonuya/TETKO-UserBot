@@ -931,7 +931,17 @@ class InlineBot:
             handlers = InlineHandlers(self.kernel, self.bot_client)
             await handlers.register_handlers()
 
-            self.kernel.bot_client = self.bot_client
+            # Не перезаписываем существующий TETKO BotClient
+            _existing = getattr(self.kernel, "bot_client", None)
+            _existing_type = type(_existing).__name__ if _existing is not None else "None"
+            if _existing is None or _existing_type == "TelegramClient":
+                self.kernel.bot_client = self.bot_client
+                self.logger.info("[InlineBot] kernel.bot_client = %s", type(self.bot_client).__name__)
+            else:
+                self.logger.info(
+                    "[InlineBot] сохраняем существующий kernel.bot_client=%s (не перезаписываем)",
+                    _existing_type,
+                )
             await self._register_module_commands()
 
             self.logger.info(

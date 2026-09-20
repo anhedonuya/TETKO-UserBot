@@ -231,16 +231,12 @@ async def main():
 
     kernel = Kernel(client=client, prefix=prefix, config=cfg)
 
-    await kernel.start()
-
-    # ── Inline-бот ──
-    # Kernel.start() уже поднимает MCUB core_inline. Не запускаем второй
-    # Telethon-клиент с тем же токеном — это давало двойную регистрацию
-    # обработчиков и гонки при старте. Старый BotClient оставляем как
-    # fallback только если MCUB inline действительно не поднялся.
-    bot_client = getattr(kernel, "bot_client", None)
+    # ── Inline-бот (TETKO BotClient) ──
+    # Создаём ДО kernel.start(), чтобы MCUB inline (setup_mcub_inline)
+    # не перезаписал kernel.bot_client на сырой TelegramClient.
     bot_token = cfg.get("inline_bot_token")
-    if bot_token and bot_client is None:
+    bot_client = getattr(kernel, "bot_client", None)
+    if bot_token and not isinstance(bot_client, BotClient):
         try:
             bot_client = BotClient(
                 api_id=api_id,
@@ -254,6 +250,10 @@ async def main():
         except Exception as e:
             log.error(f"❌ Не удалось запустить inline-бота: {e}")
             bot_client = None
+
+    await kernel.start()
+
+
 
     os.system("clear")
 

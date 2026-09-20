@@ -28,6 +28,18 @@ log = logging.getLogger("TETKO.tetko.kernel")
 
 
 
+
+
+class _DummyCallbackPermissions:
+    def allow(self, uid, command="", duration_seconds=60):
+        pass
+
+    def prohibit(self, uid):
+        pass
+
+    def is_allowed(self, uid, command="", duration_seconds=60):
+        return True
+
 class Kernel:
     """Ядро TETKO (tetko-compat API 0.0.9.0)."""
 
@@ -61,7 +73,12 @@ class Kernel:
             handlers = InlineHandlers(self, bot_client)
             self._mcub_inline_handlers = handlers
 
-            self.bot_client = bot_client
+                # Не перезаписываем существующий TETKO BotClient
+            if getattr(self, "bot_client", None) is None:
+                self.bot_client = bot_client
+            else:
+                log.info("setup_mcub_inline: сохраняем существующий bot_client=%s",
+                         type(self.bot_client).__name__)
             self.inline_bot = bot_manager
 
             await handlers.register_handlers()
@@ -86,6 +103,14 @@ class Kernel:
         )
         # лог-чат
         self.log_chat_id = self.config.get("log_chat_id") or None
+        # MCUB-совместимые алиасы
+        self.bot_command_handlers = {}
+        self.premium_user = False
+        self.user_premium = False
+        self.command_handlers = {}
+        self.inline_handlers = {}
+        self.callback_permissions = _DummyCallbackPermissions()
+
         # MCUB core_inline compatibility aliases.
         self.logger = log
         self.CONFIG_FILE = "config.json"
