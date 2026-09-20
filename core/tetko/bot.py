@@ -477,21 +477,7 @@ class BotClient:
         await event.answer(results, cache_time=0, gallery=False)
 
     async def _handle_callback(self, event) -> None:
-        """Callback от кнопок (только владелец)."""
-        # ── ЗАЩИТА: только владелец ──
-        sender_id = getattr(event, "sender_id", None)
-        admin_id = None
-        if self.kernel is not None and hasattr(self.kernel, "context"):
-            admin_id = self.kernel.context.admin_id
-
-        if admin_id is None or sender_id != admin_id:
-            log.warning(f"🤖 Bot callback: отказано sender={sender_id} (owner={admin_id})")
-            try:
-                await event.answer("🚫 Нет доступа", alert=True)
-            except Exception:
-                pass
-            return
-
+        """Callback от inline-меню или owner-кнопок."""
         data = event.data
         if isinstance(data, bytes):
             data = data.decode("utf-8", errors="replace")
@@ -506,6 +492,19 @@ class BotClient:
                 except Exception as e:
                     log.exception(f"inline handler error: {e}")
                 return
+
+        sender_id = getattr(event, "sender_id", None)
+        admin_id = None
+        if self.kernel is not None and hasattr(self.kernel, "context"):
+            admin_id = self.kernel.context.admin_id
+
+        if admin_id is None or sender_id != admin_id:
+            log.warning(f"🤖 Bot callback: отказано sender={sender_id} (owner={admin_id})")
+            try:
+                await event.answer("🚫 Нет доступа", alert=True)
+            except Exception:
+                pass
+            return
 
         try:
             await event.answer()

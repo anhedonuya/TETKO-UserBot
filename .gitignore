@@ -74,3 +74,4 @@ modules_custom/
 modules_custom/**/*.py
 modules_custom/**/*.bak
 *.logcd
+*.old
