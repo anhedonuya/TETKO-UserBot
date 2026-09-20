@@ -130,7 +130,7 @@ async def load_mcub_module(
     proxy = KernelProxy(tetko_kernel, None)
 
     class _PlaceholderModule:
-        name = "Pending"
+        name = getattr(module_class, "name", None) or mod_name
     proxy.register.module = _PlaceholderModule()
 
     old_loading = getattr(tetko_kernel, "current_loading_module", None)
@@ -158,37 +158,6 @@ async def load_mcub_module(
 
     instance.kernel = proxy
     instance._register = proxy.register
-
-    # ── Регистрация команд/watcher'ов из @command-декораторов ──
-    try:
-        _reg = getattr(type(instance), "_mcub_registry", None) or {}
-        _shim = proxy.register
-        for pattern, kw, attr_name in _reg.get("commands", []):
-            method = getattr(instance, attr_name, None)
-            if method is not None:
-                _shim.command(pattern, **kw)(method)
-        for kw, attr_name in _reg.get("watchers", []):
-            method = getattr(instance, attr_name, None)
-            if method is not None:
-                _shim.watcher(method, **kw)
-        for kw, attr_name in _reg.get("callbacks", []):
-            method = getattr(instance, attr_name, None)
-            if method is not None:
-                _shim.callback(method, **kw)
-        for kw, attr_name in _reg.get("loops", []):
-            method = getattr(instance, attr_name, None)
-            if method is not None:
-                _shim.loop(**kw)(method)
-        for pattern, kw, attr_name in _reg.get("bot_commands", []):
-            method = getattr(instance, attr_name, None)
-            if method is not None:
-                _shim.bot_command(pattern, **kw)(method)
-        for pattern, kw, attr_name in _reg.get("inlines", []):
-            method = getattr(instance, attr_name, None)
-            if method is not None and hasattr(_shim, "inline"):
-                _shim.inline(pattern, **kw)(method)
-    except Exception as e:
-        log.warning(f"[mcub_compat] _mcub_registry register: {e}")
 
 
     registry = tetko_kernel.registry

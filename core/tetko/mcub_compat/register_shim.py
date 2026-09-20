@@ -135,6 +135,7 @@ def _event_builder(event_type, args, kwargs):
             try: return event_type(*args, **kwargs)
             except TypeError: return event_type()
     key = str(event_type or "newmessage").lower()
+    _join_req = getattr(events, "JoinRequest", None)
     mapping = {
         "newmessage": events.NewMessage, "message": events.NewMessage,
         "messageedited": events.MessageEdited, "edited": events.MessageEdited,
@@ -142,11 +143,13 @@ def _event_builder(event_type, args, kwargs):
         "messageread": events.MessageRead, "read": events.MessageRead,
         "userupdate": events.UserUpdate, "user": events.UserUpdate,
         "chataction": events.ChatAction, "action": events.ChatAction,
-        "joinrequest": events.JoinRequest, "request": events.JoinRequest,
+        "joinrequest": _join_req, "request": _join_req,
         "album": events.Album, "inlinequery": events.InlineQuery, "inline": events.InlineQuery,
         "callbackquery": events.CallbackQuery, "callback": events.CallbackQuery,
         "raw": events.Raw, "custom": events.Raw,
     }
+    # Удаляем события, которых нет в форке (например, JoinRequest)
+    mapping = {k: v for k, v in mapping.items() if v is not None}
     cls = mapping.get(key)
     if cls is None: raise ValueError(f"Unknown MCUB event type: {event_type!r}")
     return cls(*args, **kwargs)
@@ -259,7 +262,7 @@ class RegisterShim:
 
     def loop(self, interval=60, autostart=True, wait_before=False, **kwargs):
         def decorator(fn):
-            obj = InfiniteLoop(lambda: self._invoke_handler(fn, None), interval, autostart, wait_before)
+            obj = InfiniteLoop(lambda *a, **kw: self._invoke_handler(fn, None), interval, autostart, wait_before)
             obj._kernel = self.kernel
             self._loops.append(obj)
             return obj

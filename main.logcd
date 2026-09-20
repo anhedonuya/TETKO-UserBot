@@ -1,0 +1,32 @@
+15:31:55 - [INFO] - TETKO: 🔥 Инициализация TETKO UserBot...
+15:31:55 - [INFO] - TETKO:    • api_id: 30038091
+15:31:55 - [INFO] - TETKO:    • phone:  +79142001032
+15:31:55 - [INFO] - TETKO:    • prefix: 't'
+15:31:55 - [INFO] - TETKO: 📡 Подключение к Telegram...
+Traceback (most recent call last):
+  File "/data/data/com.termux/files/home/TETKO_developing/main.py", line 287, in <module>
+    asyncio.run(main())
+    ~~~~~~~~~~~^^^^^^^^
+  File "/data/data/com.termux/files/usr/lib/python3.13/asyncio/runners.py", line 195, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "/data/data/com.termux/files/usr/lib/python3.13/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/data/data/com.termux/files/usr/lib/python3.13/asyncio/base_events.py", line 725, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "/data/data/com.termux/files/home/TETKO_developing/main.py", line 219, in main
+    await client.start(phone=phone)
+  File "/data/data/com.termux/files/usr/lib/python3.13/site-packages/telethon/client/auth.py", line 135, in _start
+    await self.connect()
+  File "/data/data/com.termux/files/usr/lib/python3.13/site-packages/telethon/client/telegrambaseclient.py", line 572, in connect
+    self.session.auth_key = self._sender.auth_key
+    ^^^^^^^^^^^^^^^^^^^^^
+  File "/data/data/com.termux/files/usr/lib/python3.13/site-packages/telethon/sessions/sqlite.py", line 191, in auth_key
+    self._update_session_table()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/data/data/com.termux/files/usr/lib/python3.13/site-packages/telethon/sessions/sqlite.py", line 210, in _update_session_table
+    c.execute('delete from sessions')
+    ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+sqlite3.OperationalError: database is locked
