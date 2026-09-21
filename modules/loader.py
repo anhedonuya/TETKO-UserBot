@@ -278,7 +278,7 @@ class Loader(Module):
             return
 
         await event.edit(
-            f"rm mod: Success\n<blockquote>\n<code>{name}</code>\n</blockquote>",
+            f"✅ rm mod: Success\n<blockquote><code>{name}</code></blockquote>",
             parse_mode="html",
         )
 
