@@ -82,10 +82,15 @@ class Loader(Module):
             )
             if file_name and file_name.endswith(".py"):
                 await event.edit("📥 Скачивание файла модуля...")
-                file_path = await self.client.download_media(reply, file=f"{MODULES_DIR}/")
-                mod_name = os.path.basename(file_path)[:-3]
-                with open(file_path, "r", encoding="utf-8") as f:
+                tmp_dir = os.path.join(MODULES_DIR, ".tmp")
+                os.makedirs(tmp_dir, exist_ok=True)
+                tmp_path = await self.client.download_media(reply, file=tmp_dir)
+                with open(tmp_path, "r", encoding="utf-8") as f:
                     code_content = f.read()
+                mod_name = os.path.splitext(file_name)[0]
+                file_path = os.path.join(MODULES_DIR, f"{mod_name}.py")
+                if os.path.abspath(tmp_path) != os.path.abspath(file_path):
+                    os.replace(tmp_path, file_path)
             else:
                 await event.edit("❌ Файл должен иметь расширение <code>.py</code>.", parse_mode="html")
                 return
