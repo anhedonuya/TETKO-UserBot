@@ -131,14 +131,13 @@ class Loader(Module):
                 shown_compat = meta.get("compat") or "—"
                 shown_author = meta.get("author") or "—"
                 prefix = getattr(self.kernel, "prefix", ".") or "."
-                module_obj = loaded_module
-                if module_obj is None:
-                    module_obj = self.kernel.registry.get_module(shown_name)
                 cmds = []
-                if module_obj:
-                    for cmd in self.kernel.registry._commands.values():
-                        if cmd.module is module_obj:
+                for cmd in self.kernel.registry._commands.values():
+                    try:
+                        if getattr(cmd.module, "name", "") == shown_name:
                             cmds.append(f"<code>{prefix}{self._esc(cmd.name)}</code>")
+                    except Exception:
+                        pass
                 cmds_text = " ".join(sorted(set(cmds))) or "<i>нет команд</i>"
                 text = (
                     f"<blockquote><b>{self._esc(shown_name)}</b></blockquote>\n"
