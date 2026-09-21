@@ -86,6 +86,13 @@ class ModuleLoader:
                 )
 
         mod_instance = module_class(kernel=self.kernel)
+        existing = self.registry.get_module(mod_instance.name)
+        if existing is not None and existing is not mod_instance:
+            try:
+                await existing.on_unload()
+            except Exception:
+                pass
+            self.registry.unregister_module(mod_instance.name)
         self.registry.register_module(mod_instance)
 
         for attr_name in dir(mod_instance):

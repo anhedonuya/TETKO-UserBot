@@ -82,10 +82,15 @@ class Loader(Module):
             )
             if file_name and file_name.endswith(".py"):
                 await event.edit("📥 Скачивание файла модуля...")
-                file_path = await self.client.download_media(reply, file=f"{MODULES_DIR}/")
-                mod_name = os.path.basename(file_path)[:-3]
-                with open(file_path, "r", encoding="utf-8") as f:
+                tmp_dir = os.path.join(MODULES_DIR, ".tmp")
+                os.makedirs(tmp_dir, exist_ok=True)
+                tmp_path = await self.client.download_media(reply, file=tmp_dir)
+                with open(tmp_path, "r", encoding="utf-8") as f:
                     code_content = f.read()
+                mod_name = os.path.splitext(file_name)[0]
+                file_path = os.path.join(MODULES_DIR, f"{mod_name}.py")
+                if os.path.abspath(tmp_path) != os.path.abspath(file_path):
+                    os.replace(tmp_path, file_path)
             else:
                 await event.edit("❌ Файл должен иметь расширение <code>.py</code>.", parse_mode="html")
                 return
@@ -123,23 +128,37 @@ class Loader(Module):
         if loader and hasattr(loader, "load_module_from_file"):
             try:
                 from pathlib import Path
-                await loader.load_module_from_file(Path(file_path))
+                before_modules = set(self.kernel.registry._modules)
+                loaded_module = await loader.load_module_from_file(Path(file_path))
 
                 meta = self._extract_meta(code_content or "")
                 shown_name = meta.get("name") or mod_name
                 shown_desc = meta.get("description") or "—"
                 shown_compat = meta.get("compat") or "—"
                 shown_author = meta.get("author") or "—"
-
+                prefix = getattr(self.kernel, "prefix", ".") or "."
+                cmds = []
+                for cmd in self.kernel.registry._commands.values():
+                    try:
+                        if getattr(cmd.module, "name", "") == shown_name:
+                            cmds.append(f"<code>{prefix}{self._esc(cmd.name)}</code>")
+                    except Exception:
+                        pass
+                cmds_text = " ".join(sorted(set(cmds))) or "<i>нет команд</i>"
                 text = (
-                    f"<blockquote><b>Модуль <i>{self._esc(shown_name)}</i> загружен!!</b></blockquote>\n\n"
-                    f"<blockquote><i>Описание</i>: {self._esc(shown_desc)}\n"
-                    f"Компат: <code>{self._esc(shown_compat)}</code></blockquote>\n\n"
-                    f"<blockquote>Автор: {self._esc(shown_author)}</blockquote>"
+                    f"<blockquote><b>{self._esc(shown_name)}</b></blockquote>\n"
+                    f"<blockquote><b>Описание:</b> {self._esc(shown_desc)}</blockquote>\n"
+                    f"<blockquote><b>Автор:</b> {self._esc(shown_author)}</blockquote>\n"
+                    f"<blockquote><b>Команды:</b> {cmds_text}</blockquote>"
                 )
                 await event.edit(text, parse_mode="html")
             except Exception as e:
                 self.log.exception(f"load: ошибка инициализации {mod_name}")
+                try:
+                    if file_path and os.path.exists(file_path):
+                        os.remove(file_path)
+                except Exception:
+                    pass
                 await event.edit(
                     f"❌ Ошибка при инициализации модуля <code>{self._esc(mod_name)}</code>:\n<code>{self._esc(e)}</code>",
                     parse_mode="html",

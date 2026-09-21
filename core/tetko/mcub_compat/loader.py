@@ -171,22 +171,16 @@ async def load_mcub_module(
     canonical_name = getattr(instance, "name", None) or mod_name
     existing = registry.get_module(canonical_name)
     if existing is not None and existing is not instance:
-        existing_path = getattr(existing, "_mcub_source_path", None)
-        # Reloading the same module should replace the old instance cleanly.
         try:
             await unload_mcub_module(tetko_kernel, canonical_name)
         except Exception as e:
             log.warning("[mcub_compat] unload-existing %s: %s", canonical_name, e)
-    try:
-        registry.register_module(instance)
-    except Exception as exc:
-        # A second copy with the same class name can be the result of a user
-        # loading "Foo (1).py".  Reuse the existing instance rather than
-        # falling back into TETKO's native Module validation path.
-        existing = registry.get_module(canonical_name)
-        if existing is not None:
-            return existing
-        raise
+            try:
+                registry.unregister_module(canonical_name)
+            except Exception:
+                pass
+
+    registry.register_module(instance)
     instance._mcub_source_path = str(path)
 
     try:
@@ -236,8 +230,11 @@ async def unload_mcub_module(tetko_kernel: Any, module_name: str) -> bool:
     except Exception as e:
         log.error(f"[mcub_compat] on_unload {module_name}: {e}")
 
+    source_path = getattr(mod, "_mcub_source_path", None)
     registry.unregister_module(module_name)
     sys.modules.pop(f"mcub_compat_modules.{module_name}", None)
+    if source_path:
+        sys.modules.pop(f"mcub_compat_modules.{Path(source_path).stem}", None)
     log.info(f"[mcub_compat] выгружен {module_name}")
     return True
 
