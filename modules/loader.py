@@ -134,7 +134,8 @@ class Loader(Module):
                 text = (
                     f"<blockquote><b>Модуль <i>{self._esc(shown_name)}</i> загружен!!</b></blockquote>\n\n"
                     f"<blockquote><i>Описание</i>: {self._esc(shown_desc)}\n"
-                    f"Компат: <code>{self._esc(shown_compat)}</code></blockquote>\n\n"
+                    f"Компат: <code>{self._esc(shown_compat)}</code></blockquote>\n"
+                    f"<blockquote expanded>Команды:\n</blockquote expanded>\n\n"
                     f"<blockquote>Автор: {self._esc(shown_author)}</blockquote>"
                 )
                 await event.edit(text, parse_mode="html")
