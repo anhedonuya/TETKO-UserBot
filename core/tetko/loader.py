@@ -45,7 +45,7 @@ class ModuleLoader:
         except Exception as e:
             log.warning(f"[loader] mcub-детект для {mod_name}: {e}")
 
-        module_spec_name = f"tetko_user_modules.{mod_name}"
+        module_spec_name = f"core.lib.modules.{mod_name}"
 
         try:
             spec = importlib.util.spec_from_file_location(module_spec_name, path)

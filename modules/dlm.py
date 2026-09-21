@@ -398,9 +398,8 @@ class DLMModule(Module):
 
         if not catalog:
             text = (
-                "📦 <b>DLM — Dynamic Loader of Modules</b>\n\n"
-                "⚠️ Каталог модулей пуст или недоступен.\n"
-                f"<i>Источник: {CATALOG_REPO}</i>"
+                '<blockquote><tg-emoji emoji-id="5463276135125130498">💎</tg-emoji> DLM — Dynamic Loader of Modules.</blockquote>\n\n'
+                "<blockquote>⚠️ Каталог модулей пуст или недоступен.</blockquote>"
             )
 
             async def on_refresh_empty(cb_event):
@@ -417,11 +416,8 @@ class DLMModule(Module):
             page_items = catalog[start_i:start_i + PAGE_SIZE]
 
             text = (
-                "📦 <b>DLM — Dynamic Loader of Modules</b>\n\n"
-                f"В каталоге: <code>{total}</code>\n"
-                f"Установлено: <code>{len(installed)}</code>\n"
-                f"Страница: <code>{page + 1}/{total_pages}</code>\n\n"
-                f"<i>Источник: {CATALOG_REPO}</i>"
+                '<blockquote><tg-emoji emoji-id="5463276135125130498">💎</tg-emoji> DLM — Dynamic Loader of Modules.</blockquote>\n\n'
+                f"<blockquote>Установлено: <code>{len(installed)}</code>/<code>{total}</code></blockquote>"
             )
             buttons = []
 
