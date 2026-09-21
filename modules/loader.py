@@ -123,19 +123,27 @@ class Loader(Module):
         if loader and hasattr(loader, "load_module_from_file"):
             try:
                 from pathlib import Path
-                await loader.load_module_from_file(Path(file_path))
+                loaded_module = await loader.load_module_from_file(Path(file_path))
 
                 meta = self._extract_meta(code_content or "")
                 shown_name = meta.get("name") or mod_name
                 shown_desc = meta.get("description") or "—"
                 shown_compat = meta.get("compat") or "—"
                 shown_author = meta.get("author") or "—"
+                prefix = getattr(self.kernel, "prefix", ".") or "."
+                module_obj = self.kernel.registry.get_module(shown_name)
+                cmds = []
+                if module_obj:
+                    for cmd in self.kernel.registry._commands.values():
+                        if cmd.module is module_obj:
+                            cmds.append(f"✅ <code>{prefix}{self._esc(cmd.name)}</code>")
+                cmds_text = "\n".join(sorted(set(cmds))) or "<i>нет команд</i>"
 
                 text = (
                     f"<blockquote><b>Модуль <i>{self._esc(shown_name)}</i> загружен!!</b></blockquote>\n\n"
                     f"<blockquote><i>Описание</i>: {self._esc(shown_desc)}\n"
                     f"Компат: <code>{self._esc(shown_compat)}</code></blockquote>\n"
-                    f"<blockquote expanded>Команды:\n</blockquote expanded>\n\n"
+                    f"<blockquote expanded>Команды:\n{cmds_text}</blockquote>\n\n"
                     f"<blockquote>Автор: {self._esc(shown_author)}</blockquote>"
                 )
                 await event.edit(text, parse_mode="html")
