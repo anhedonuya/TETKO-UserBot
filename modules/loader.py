@@ -140,6 +140,11 @@ class Loader(Module):
                 await event.edit(text, parse_mode="html")
             except Exception as e:
                 self.log.exception(f"load: ошибка инициализации {mod_name}")
+                try:
+                    if file_path and os.path.exists(file_path):
+                        os.remove(file_path)
+                except Exception:
+                    pass
                 await event.edit(
                     f"❌ Ошибка при инициализации модуля <code>{self._esc(mod_name)}</code>:\n<code>{self._esc(e)}</code>",
                     parse_mode="html",
