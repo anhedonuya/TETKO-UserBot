@@ -139,13 +139,12 @@ class Loader(Module):
                     for cmd in self.kernel.registry._commands.values():
                         if cmd.module is module_obj:
                             cmds.append(f"<code>{prefix}{self._esc(cmd.name)}</code>")
-                cmds_text = "\n".join(sorted(set(cmds))) or "<i>нет команд</i>"
+                cmds_text = " ".join(sorted(set(cmds))) or "<i>нет команд</i>"
                 text = (
-                    f"<blockquote><b>Модуль <i>{self._esc(shown_name)}</i> загружен!!</b></blockquote>\n\n"
-                    f"<blockquote><i>Описание</i>: {self._esc(shown_desc)}\n"
-                    f"Компат: <code>{self._esc(shown_compat)}</code></blockquote>\n"
-                    f"<blockquote expanded>Команды:\n{cmds_text}</blockquote>\n\n"
-                    f"<blockquote>Автор: {self._esc(shown_author)}</blockquote>"
+                    f"<blockquote><b>{self._esc(shown_name)}</b></blockquote>\n"
+                    f"<blockquote><b>Описание:</b> {self._esc(shown_desc)}</blockquote>\n"
+                    f"<blockquote><b>Автор:</b> {self._esc(shown_author)}</blockquote>\n"
+                    f"<blockquote><b>Команды:</b> {cmds_text}</blockquote>"
                 )
                 await event.edit(text, parse_mode="html")
             except Exception as e:
