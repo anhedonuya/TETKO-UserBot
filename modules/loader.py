@@ -123,6 +123,7 @@ class Loader(Module):
         if loader and hasattr(loader, "load_module_from_file"):
             try:
                 from pathlib import Path
+                before_modules = set(self.kernel.registry._modules)
                 loaded_module = await loader.load_module_from_file(Path(file_path))
 
                 meta = self._extract_meta(code_content or "")
