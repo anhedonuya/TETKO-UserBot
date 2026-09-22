@@ -75,10 +75,9 @@ class DLMModule(Module):
         self.log.info("DLM loaded")
 
     async def on_unload(self):
-        self.log.info("DLM unloaded")
+        self.log.debug("DLM unloaded")
 
     async def _fetch_catalog(self, force: bool = False) -> list[dict]:
-        """Получить список модулей из GitHub API (с кэшем)."""
         now = time.time()
         if not force and self._catalog_cache is not None and (now - self._cache_time) < CACHE_TTL:
             return self._catalog_cache
@@ -88,24 +87,48 @@ class DLMModule(Module):
             import aiohttp
             headers = {"Accept": "application/vnd.github+json"}
             async with aiohttp.ClientSession(headers=headers) as session:
-                async with session.get(CATALOG_API, timeout=15) as resp:
-                    if resp.status != 200:
-                        log.error(f"DLM: GitHub API вернул {resp.status}")
-                        return self._catalog_cache or []
-                    data = await resp.json()
+                catalog_url = f"{CATALOG_RAW}/catalog.json"
+                async with session.get(catalog_url, timeout=15) as resp:
+                    if resp.status == 200:
+                        try:
+                            data = await resp.json(content_type=None)
+                            if isinstance(data, dict) and "modules" in data:
+                                for m in data["modules"]:
+                                    if not isinstance(m, dict):
+                                        continue
+                                    f = m.get("file") or ""
+                                    if not f.endswith(".py"):
+                                        continue
+                                    items.append({
+                                        "file": f,
+                                        "name": m.get("name") or f[:-3],
+                                        "description": m.get("description") or "—",
+                                        "size": 0,
+                                        "url": m.get("url") or f"{CATALOG_RAW}/{f}",
+                                    })
+                        except Exception as e:
+                            log.warning(f"DLM: catalog.json parse: {e}")
 
-            for entry in data:
-                if entry.get("type") != "file":
-                    continue
-                name = entry.get("name", "")
-                if not name.endswith(".py") or name.startswith("_"):
-                    continue
-                items.append({
-                    "file": name,
-                    "name": name[:-3],
-                    "size": entry.get("size", 0),
-                    "url": entry.get("download_url") or f"{CATALOG_RAW}/{name}",
-                })
+                if not items:
+                    async with session.get(CATALOG_API, timeout=15) as resp:
+                        if resp.status != 200:
+                            log.error(f"DLM: GitHub API вернул {resp.status}")
+                            return self._catalog_cache or []
+                        data = await resp.json(content_type=None)
+
+                    for entry in data:
+                        if entry.get("type") != "file":
+                            continue
+                        name = entry.get("name", "")
+                        if not name.endswith(".py") or name.startswith("_"):
+                            continue
+                        items.append({
+                            "file": name,
+                            "name": name[:-3],
+                            "description": "—",
+                            "size": entry.get("size", 0),
+                            "url": entry.get("download_url") or f"{CATALOG_RAW}/{name}",
+                        })
         except Exception as e:
             log.exception(f"DLM: ошибка получения каталога: {e}")
             return self._catalog_cache or []
@@ -247,12 +270,12 @@ class DLMModule(Module):
                         await loader.unload_module(real_name)
                         self.log.info(f"DLM: выгружен модуль {real_name}")
                     except Exception as e:
-                        self.log.warning(f"DLM: unload {real_name} failed: {e}")
+                        self.log.debug(f"DLM: unload {real_name} failed: {e}")
                 else:
-                    self.log.warning(f"DLM: модуль {file_stem} не найден в реестре — пропускаем unload")
+                    self.log.debug(f"DLM: модуль {file_stem} не найден в реестре — пропускаем unload")
 
                 await loader.load_module_from_file(target)
-                self.log.info(f"DLM: модуль {file_stem} перезагружен")
+                self.log.debug(f"DLM: модуль {file_stem} перезагружен")
                 return True
         except Exception as e:
             log.exception(f"DLM: ошибка перезагрузки {file}: {e}")
@@ -302,17 +325,19 @@ class DLMModule(Module):
                     if ok:
                         updated_files.append(file)
 
-        # уведомления
+        catalog = await self._fetch_catalog()
+        _names = {it["file"]: it.get("name", it["file"][:-3]) for it in catalog}
+
         if updated_files:
             await self._notify_admin(
-                "🔄 <b>DLM: обновлены модули</b>\n\n"
-                + "\n".join(f"• <code>{f}</code>" for f in updated_files)
+                '<blockquote><tg-emoji emoji-id="6010179991944305029">☺️</tg-emoji>dlm<strong>: обновлены модули</strong></blockquote>\n\n'
+                + "\n".join(f'<blockquote>• {_names.get(f, f)}</blockquote>' for f in updated_files)
             )
         if new_files:
             await self._notify_admin(
-                "🆕 <b>DLM: новые модули в каталоге</b>\n\n"
-                + "\n".join(f"• <code>{f}</code>" for f in new_files)
-                + "\n\n<i>Установи через <code>.dlm</code></i>"
+                '<blockquote><tg-emoji emoji-id="6010179991944305029">☺️</tg-emoji>dlm<strong>: новые модули в каталоге</strong></blockquote>\n\n'
+                + "\n".join(f'<blockquote>• {_names.get(f, f)}</blockquote>' for f in new_files)
+                + '\n\n<blockquote><tg-emoji emoji-id="5197394586938403077">❤️</tg-emoji><em>Установи </em>в dlm</blockquote>'
             )
 
     @command(name="dlm", aliases=["mods", "dlmods"], description="Менеджер модулей", only_for="owner")
@@ -526,17 +551,15 @@ class DLMModule(Module):
 
         status = "✅ Установлен" if installed else "📥 Не установлен"
         size_kb = round(item.get("size", 0) / 1024, 1)
-        versions_line = ""
-        if local_v and remote_v:
-            versions_line = f"\n<b>Локально:</b> <code>{local_v}</code>\n<b>Удалённо:</b> <code>{remote_v}</code>"
-        elif remote_v:
-            versions_line = f"\n<b>Удалённо:</b> <code>{remote_v}</code>"
+        local_str = local_v or "—"
+        remote_str = remote_v or "—"
+        desc = item.get("description") or "—"
 
         text = (
-            f"📦 <b>{item['name']}</b>\n\n"
-            f"<b>Файл:</b> <code>{file}</code>\n"
-            f"<b>Размер:</b> <code>{size_kb} KB</code>\n"
-            f"<b>Статус:</b> {status}{versions_line}"
+            f'<blockquote><tg-emoji emoji-id="5253643754979494754">💎</tg-emoji> {item["name"]}</blockquote>\n\n'
+            f'<blockquote><tg-emoji emoji-id="5429588718052740528">🩴</tg-emoji><strong><em>что делает</em></strong>: {desc}</blockquote>\n\n'
+            f'<blockquote><tg-emoji emoji-id="5345952703933609287">💊</tg-emoji><u>у тебя<strong>:</strong></u> {local_str}\n'
+            f'<tg-emoji emoji-id="5346270183621171895">🤩</tg-emoji>в репо: {remote_str}</blockquote>'
         )
 
         async def on_download(cb_event, f=file, nm=item["name"]):
@@ -562,7 +585,7 @@ class DLMModule(Module):
 
     @command(name="dlm_check", aliases=["checkmods"], description="Проверить обновления модулей", only_for="owner")
     async def dlm_check_cmd(self, event, args):
-        await event.edit("🔍 Проверяю каталог...")
+        await event.edit('<blockquote><tg-emoji emoji-id="5408983827198547771">👀</tg-emoji> Проверяю каталог...</blockquote>', parse_mode="html")
 
         try:
             updates = await self._check_updates()
@@ -574,7 +597,7 @@ class DLMModule(Module):
         new = [(f, i) for f, i in updates.items() if i["status"] == "new"]
 
         if not upd and not new:
-            await event.edit("✅ Всё актуально, новых модулей нет.")
+            await event.edit('<blockquote><tg-emoji emoji-id="6012519825702656293">👌</tg-emoji> неа, новых модулей нету...</blockquote>', parse_mode="html")
             return
 
         lines = ["🔍 <b>Результат проверки</b>\n"]
