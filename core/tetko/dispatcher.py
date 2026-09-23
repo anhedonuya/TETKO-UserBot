@@ -37,6 +37,14 @@ class EventDispatcher:
         if getattr(event, "_tetko_handled", False):
             return
 
+        _admin_id = None
+        if self.context is not None:
+            _admin_id = getattr(self.context, "admin_id", None)
+        _sender = getattr(event, "sender_id", None)
+        _out = getattr(event, "out", False)
+        if _out is False and _admin_id is not None and _sender != _admin_id:
+            return
+
         if text.startswith(self.prefix):
             body = text[len(self.prefix):]
             parts = body.split(maxsplit=1)

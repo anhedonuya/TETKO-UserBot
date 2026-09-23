@@ -76,3 +76,4 @@ modules_custom/**/*.bak
 *.logcd
 *.old
 *.log
+config.json.*

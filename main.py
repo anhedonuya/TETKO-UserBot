@@ -11,6 +11,7 @@ from telethon import TelegramClient
 from core.tetko import Kernel
 from core.tetko.bot import BotClient
 from core.tetko.banner import render_banner
+from core.version import __version__ as TETKO_VERSION
 
 
 logging.getLogger("telethon").setLevel(logging.WARNING)
@@ -24,24 +25,51 @@ log = logging.getLogger("TETKO")
 CONFIG_PATH = Path("config.json")
 
 
+C_RED = "\033[38;5;203m"
+C_WHITE = "\033[97m"
+C_GRAY = "\033[38;5;245m"
+C_DIM = "\033[2m"
+C_BOLD = "\033[1m"
+C_RESET = "\033[0m"
+
+
+def _line():
+    print(f"{C_RED}{'━' * 46}{C_RESET}")
+
+
+def _header(step: str, total: int, title: str, hint: str = ""):
+    print()
+    _line()
+    print()
+    print(f"  🔥{C_BOLD}{C_WHITE} TETKO UserBot{C_RESET} {C_GRAY}— первоначальная настройка{C_RESET}")
+    print()
+    _line()
+    print()
+    print(f"  {C_GRAY}Шаг {step}/{total} · {title}{C_RESET}")
+    print(f"  {C_DIM}─────────────────────────────{C_RESET}")
+    if hint:
+        for line in hint.split("\n"):
+            print(f"  {C_GRAY}{line}{C_RESET}")
+        print()
+
+
 def _ask(prompt: str, default: str = "") -> str:
-    suffix = f" [{default}]" if default else ""
+    suffix = f" {C_GRAY}[{default}]{C_RESET}" if default else ""
     try:
-        value = input(f"{prompt}{suffix}: ").strip()
+        value = input(f"  {prompt}{suffix}: ").strip()
     except (EOFError, KeyboardInterrupt):
         print()
-        raise SystemExit("Настройка отменена.")
+        raise SystemExit(f"{C_RED}Настройка отменена.{C_RESET}")
     return value or default
 
 
 def _ask_secret(prompt: str, default: str = "") -> str:
-    """Read a secret without echoing it when getpass is available."""
     try:
         import getpass
-        value = getpass.getpass(f"{prompt}: ").strip()
+        value = getpass.getpass(f"  {prompt}: ").strip()
     except (EOFError, KeyboardInterrupt):
         print()
-        raise SystemExit("Настройка отменена.")
+        raise SystemExit(f"{C_RED}Настройка отменена.{C_RESET}")
     return value or default
 
 
@@ -56,8 +84,6 @@ def _save_config(cfg: dict) -> None:
 def _needs_first_run(cfg: dict | None) -> bool:
     if not cfg:
         return True
-    # Values shipped in config.example.json are placeholders and must never
-    # be treated as a completed setup.
     placeholders = {
         "api_id": {"12345678", "0", ""},
         "api_hash": {"", "0123456789abcdef0123456789abcdef"},
@@ -74,63 +100,74 @@ def _needs_first_run(cfg: dict | None) -> bool:
 
 
 def first_run_setup(existing: dict | None = None) -> dict:
-    """Interactive first-run wizard for a clean Termux installation."""
     cfg = dict(existing or {})
-    print("\n" + "=" * 60)
-    print("  TETKO UserBot — первоначальная настройка")
-    print("=" * 60)
-    print("Нужны API ID/API HASH с my.telegram.org.")
-    print("Токен inline-бота можно пропустить и добавить позже.")
-    print()
+    total = 3
+
+    _header(
+        1, total, "API",
+        "api_id и api_hash — с https://my.telegram.org\n"
+        "→ API development tools → создать app",
+    )
 
     while True:
-        raw_id = _ask("API ID", str(cfg.get("api_id", "")))
+        raw_id = _ask("🔑 API ID", str(cfg.get("api_id", "")))
         try:
             api_id = int(raw_id)
             if api_id <= 0:
                 raise ValueError
             break
         except ValueError:
-            print("❌ API ID должен быть положительным числом.")
+            print(f"  {C_RED}❌ API ID должен быть положительным числом.{C_RESET}")
 
     while True:
-        api_hash = _ask_secret("API HASH", str(cfg.get("api_hash", "")))
+        api_hash = _ask_secret("🔒 API HASH", str(cfg.get("api_hash", "")))
         if len(api_hash) >= 20:
             break
-        print("❌ API HASH выглядит слишком коротким. Проверь значение с my.telegram.org.")
+        print(f"  {C_RED}❌ API HASH слишком короткий — проверь с my.telegram.org.{C_RESET}")
 
-    phone = _ask("Номер Telegram", str(cfg.get("phone", "")))
+    _header(
+        2, total, "Аккаунт",
+        "Юзербот работает от твоего личного аккаунта.\n"
+        "Используй отдельный, если не хочешь рисковать.",
+    )
+
+    phone = _ask("📱 Номер Telegram", str(cfg.get("phone", "")))
     if phone and not phone.startswith("+"):
         phone = "+" + phone
 
-    prefix = _ask("Префикс команд", str(cfg.get("command_prefix", ".")) or ".")
-    if not prefix:
-        prefix = "."
+    _header(
+        3, total, "Inline-бот",
+        "Создай бота через @BotFather и вставь токен ниже.\n"
+        "Enter — пропустить (можно добавить позже в config.json).",
+    )
 
-    print("\n--- Inline-бот ---")
-    print("Создай бота через @BotFather и вставь токен ниже.")
-    print("Enter — пропустить настройку inline-бота.")
-    bot_token = _ask_secret("Токен бота", str(cfg.get("inline_bot_token") or ""))
-    bot_username = _ask("Username бота без @", str(cfg.get("inline_bot_username") or "")) if bot_token else ""
-    if bot_username.startswith("@"):
-        bot_username = bot_username[1:]
-
-    print("\n--- Дополнительно ---")
-    language = _ask("Язык", str(cfg.get("language", "ru")) or "ru")
+    bot_token = _ask_secret("🤖 Токен бота", str(cfg.get("inline_bot_token") or ""))
+    bot_username = ""
+    if bot_token:
+        bot_username = _ask("👤 Username без @", str(cfg.get("inline_bot_username") or ""))
+        if bot_username.startswith("@"):
+            bot_username = bot_username[1:]
 
     cfg.update({
         "api_id": api_id,
         "api_hash": api_hash,
         "phone": phone,
-        "command_prefix": prefix,
+        "command_prefix": cfg.get("command_prefix", ".") or ".",
         "inline_bot_token": bot_token or None,
         "inline_bot_username": bot_username or None,
-        "language": language or "ru",
+        "language": cfg.get("language", "ru") or "ru",
         "db_version": int(cfg.get("db_version", 2) or 2),
     })
     _save_config(cfg)
-    print(f"\n✅ Настройка сохранена в {CONFIG_PATH}.")
-    print("🔐 Код входа Telegram и пароль 2FA будут запрошены самим Telethon при авторизации.\n")
+
+    print()
+    _line()
+    print()
+    print(f"  {C_WHITE}✅ Настройка сохранена{C_RESET} {C_GRAY}→ {CONFIG_PATH}{C_RESET}")
+    print(f"  {C_GRAY}🔐 Код входа и 2FA запросит Telethon при авторизации{C_RESET}")
+    print()
+    _line()
+    print()
     return cfg
 
 
@@ -214,7 +251,12 @@ async def main():
     print("📡 Подключение к Telegram...")
     sys.stdout.flush()
 
-    client = TelegramClient(session_name, api_id, api_hash)
+    client = TelegramClient(
+        session_name, api_id, api_hash,
+        device_model="TETKO UserBot",
+        system_version="TETKO",
+        app_version=TETKO_VERSION,
+    )
 
     await client.start(phone=phone)
 
@@ -255,7 +297,7 @@ async def main():
 
     os.system("clear")
 
-    print(render_banner(version="0.0.9.18", codename="native"))
+    print(render_banner(version=TETKO_VERSION, codename="native"))
     print()
     print("  \033[1;92m[>]\033[0m Kernel:  loaded successfully")
     modules = list(kernel.registry.list_modules().keys()) or []
