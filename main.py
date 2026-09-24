@@ -293,7 +293,7 @@ async def main():
 
     await kernel.start()
 
-    _l.getLogger().setLevel(_l.INFO)
+    _l.getLogger().setLevel(_l.CRITICAL)
 
     os.system("clear")
 
