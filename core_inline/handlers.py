@@ -1718,7 +1718,7 @@ class InlineHandlers:
                 )
 
                 info_text = (
-                    f"{self.EMOJI_CRYSTAL} <b>{self.lang['mcub_bot_title']}</b>\n"
+                    f"{self.EMOJI_CRYSTAL} <b>{self.lang['tetko_bot_title']}</b>\n"
                     f"<blockquote>{self.EMOJI_SHIELD} {self.lang['version']}: {self.kernel.VERSION}</blockquote>\n"
                     f"<blockquote>{self.EMOJI_TOT} {self.lang['modules']}: {modules_count}</blockquote>\n"
                 )
@@ -1779,7 +1779,7 @@ class InlineHandlers:
 
                 if len(results) == 1:
                     no_cmds_text = (
-                        f"{self.EMOJI_CRYSTAL} <b>{self.lang['mcub_bot_title']}</b>\n\n"
+                        f"{self.EMOJI_CRYSTAL} <b>{self.lang['tetko_bot_title']}</b>\n\n"
                         f"{self.EMOJI_BLOCK} <i>{self.lang['no_commands']}</i>\n\n"
                     )
                     thumb_not_found = InputWebDocument(

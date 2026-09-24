@@ -1,1 +1,0 @@
-class Register: pass

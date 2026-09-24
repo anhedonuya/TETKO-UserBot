@@ -47,7 +47,7 @@ langbutton:
 core_inline:
   no_access: Вибачте, але у вас немає доступу!
   no_access_id: 'ID'
-  mcub_bot_title: TETKO Bot
+  tetko_bot_title: TETKO Bot
   version: Version
   modules: Modules
   bot_limit_warn1: "Видали зайвого бота — у тебе їх забагато, я не можу створити нового."
@@ -137,7 +137,7 @@ command:
   fork: 'fork:'
   original: 'Оригінал:'
   github_repo: Репозиторій
-  original_mcub: Оригінальний TETKOFB
+  original_tetko: Оригінальний TETKOFB
   support: Підтримка
   profile: 'Профіль:'
   name: 'Ім''я:'
@@ -197,8 +197,8 @@ eval:
 kernel:
   success: Перезавантаження <b>успішне!</b>
   loading: але модулі ще завантажуються...
-  loaded: Твій <b>{mcub}</b> повністю завантажився!
-  errors: Твій <b>{mcub}</b> <b>завантажився з помилками</b> :(
+  loaded: Твій <b>{tetko}</b> повністю завантажився!
+  errors: Твій <b>{tetko}</b> <b>завантажився з помилками</b> :(
   modules_not_loaded: 'Модулі, які не завантажились:'
   rpc_error: <b>RPC Помилка:</b> <code>{error}</code>
   call_failed: <b>Виклик <code>{cmd}</code> не виконано через помилку RPC:</b> <code>{rpc_msg}</code>
@@ -339,16 +339,16 @@ api_protection:
   analyze_eta_now: <tg-emoji emoji-id="5388785832956016892">❌</tg-emoji> <b>Вже перевищено</b>
   analyze_eta_in: <code>~{seconds}</code>с
   analyze_profile_insufficient: <i>недостатньо даних</i>
-  mcub_not_supported: <tg-emoji emoji-id="5904692292324692386">⚠️</tg-emoji> <b>Telethon-TETKO не знайдено</b> - штатний захист недоступний
-  mcub_mode_set: <tg-emoji emoji-id="5253671358734281000">🛡</tg-emoji> <b>Режим захисту TETKO:</b> <code>{mode}</code><i>{dry}</i>
-  mcub_mode_dry: "<i>(dry-run: порушення логуються, не блокуються)</i>"
-  mcub_mode_usage: <tg-emoji emoji-id="5332654441508119011">⚙️</tg-emoji> <b>Використання:</b> <code>.api_mode [off|safe|strict|custom] [dry]</code>
-  mcub_violation: "<tg-emoji emoji-id=\"5767151002666929821\">🚫</tg-emoji> <b>TETKO заблокував запит</b>\n<blockquote>• <b>Метод:</b> <code>{method}</code> • <b>Режим:</b> <code>{mode}</code> • <b>Причина:</b> <i>{reason}</i></blockquote>"
-  mcub_status: "<tg-emoji emoji-id=\"5253671358734281000\">🛡</tg-emoji> <b>TETKO захист</b>\n<blockquote>• <b>Режим:</b> <code>{mode}</code> • <b>Dry-run:</b> <i>{dry}</i> • <b>Allowlist:</b> <code>{allowlist}</code></blockquote>"
-  mcub_choose_mode: <tg-emoji emoji-id="5253671358734281000">🛡</tg-emoji> <b>Обери режим захисту TETKO:</b>
-  mcub_mode_default: 👾 За замовчуванням ({mode})
+  tetko_not_supported: <tg-emoji emoji-id="5904692292324692386">⚠️</tg-emoji> <b>Telethon-TETKO не знайдено</b> - штатний захист недоступний
+  tetko_mode_set: <tg-emoji emoji-id="5253671358734281000">🛡</tg-emoji> <b>Режим захисту TETKO:</b> <code>{mode}</code><i>{dry}</i>
+  tetko_mode_dry: "<i>(dry-run: порушення логуються, не блокуються)</i>"
+  tetko_mode_usage: <tg-emoji emoji-id="5332654441508119011">⚙️</tg-emoji> <b>Використання:</b> <code>.api_mode [off|safe|strict|custom] [dry]</code>
+  tetko_violation: "<tg-emoji emoji-id=\"5767151002666929821\">🚫</tg-emoji> <b>TETKO заблокував запит</b>\n<blockquote>• <b>Метод:</b> <code>{method}</code> • <b>Режим:</b> <code>{mode}</code> • <b>Причина:</b> <i>{reason}</i></blockquote>"
+  tetko_status: "<tg-emoji emoji-id=\"5253671358734281000\">🛡</tg-emoji> <b>TETKO захист</b>\n<blockquote>• <b>Режим:</b> <code>{mode}</code> • <b>Dry-run:</b> <i>{dry}</i> • <b>Allowlist:</b> <code>{allowlist}</code></blockquote>"
+  tetko_choose_mode: <tg-emoji emoji-id="5253671358734281000">🛡</tg-emoji> <b>Обери режим захисту TETKO:</b>
+  tetko_mode_default: 👾 За замовчуванням ({mode})
 updates:
-  restarting: Твій <b>{mcub}</b> перезавантажується...
+  restarting: Твій <b>{tetko}</b> перезавантажується...
   restart_log: Перезавантаження...
   already_updated: <tg-emoji emoji-id="5902002809573740949">✅</tg-emoji> <b>Вже остання версія {version}</b>
   git_pull_success: '<tg-emoji emoji-id="5332654441508119011">📝</tg-emoji> <b>Git pull успішний!</b>
@@ -369,7 +369,7 @@ updates:
   cant_check_version: <tg-emoji emoji-id="5388785832956016892">❌</tg-emoji> <b>Не вдалося перевірити версію</b>
   cant_get_update: <tg-emoji emoji-id="5388785832956016892">❌</tg-emoji> <b>Не вдалося отримати оновлення</b>
   error: <tg-emoji emoji-id="5388785832956016892">❌</tg-emoji> <b>Помилка:</b> <code>{error}</code>
-  stopping: <tg-emoji emoji-id="5372892693024218813">🧲</tg-emoji> <b>Твій <i>{mcub}</i> зупиняється...</b> {emoji}
+  stopping: <tg-emoji emoji-id="5372892693024218813">🧲</tg-emoji> <b>Твій <i>{tetko}</i> зупиняється...</b> {emoji}
   backup_not_found: <tg-emoji emoji-id="5388785832956016892">❌</tg-emoji> <b>Бекап не знайдено</b>
   rolling_back: <tg-emoji emoji-id="5248998218212392977">🔙</tg-emoji> <b>Відкочую до попередньої версії...</b> <i>{emoji}</i>
   rollback_success: '<tg-emoji emoji-id="5332654441508119011">⚗️</tg-emoji> <b>Відкат завершено!</b> {emoji}
@@ -479,7 +479,7 @@ settings:
   aliases_cleared: <tg-emoji emoji-id="5902002809573740949">✅</tg-emoji> Аліаси очищено
   api_enabled: <tg-emoji emoji-id="5902002809573740949">✅</tg-emoji> увімкнено
   api_disabled: ❌ вимкнено
-  mcubinfo_error: '🌩️ <b>error, check logs</b>
+  tetko_info_error: '🌩️ <b>error, check logs</b>
 
     Full Logs: <pre>{e}<pre>'
   powersave_status: 🔋 Power save mode {status}{features}
@@ -495,7 +495,7 @@ settings:
   btn_api_protection: '{status} api protection'
   btn_powersave: '{status} powersave'
   btn_2fa: '{status} 2fa'
-  btn_mcubinfo: mcub info
+  btn_tetko_info: TETKO info
   btn_kernel_version: 'Kernel version: {version}'
   api_protection_status: API protection {status}
   2fa_status: 2FA {status}
@@ -522,7 +522,7 @@ settings:
   clearcache_done: <tg-emoji emoji-id="5118861066981344121">✅</tg-emoji> Кеш очищено
   clearcache_error: '<tg-emoji emoji-id="5767151002666929821">🚫</tg-emoji> Не вдалося очистити кеш: <code>{error}</code>'
   danger_cancelled: <tg-emoji emoji-id="5453892731094973831">❄️</tg-emoji> Дію скасовано
-  mcubinfo_html: '<tg-emoji emoji-id="5472164874886846699">✨</tg-emoji> <b>Що таке юзербот?</b>
+  tetko_info_html: '<tg-emoji emoji-id="5472164874886846699">✨</tg-emoji> <b>Що таке юзербот?</b>
 
     <blockquote expandable>Це програма, яка працює через ваш особистий акаунт Telegram, використовуючи клієнтський API. На відміну від звичайних ботів (<code>Bot API</code>), юзербот має доступ до всіх функцій звичайного користувача — може надсилати повідомлення, управляти групами, автоматизувати дії та багато іншого.</blockquote>
 
@@ -550,11 +550,11 @@ settings:
   piped_usage: '<tg-emoji emoji-id="5767151002666929821">🚫</tg-emoji> Використання: {prefix}piped [on/off]'
 loader:
   choose: |-
-    <b>{mcub_emoji} installation</b>
+    <b>{tetko_emoji} installation</b>
 
     Оберіть платформу:
   choose_category: |-
-    <b>{mcub_emoji} installation</b>
+    <b>{tetko_emoji} installation</b>
 
     Оберіть тип пристрою:
   arch: |-
@@ -855,7 +855,7 @@ loader:
   dlm_repo_choice_cancelled: Вибір скасовано
   btn_back: Назад
   btn_next: Вперед
-  modules_not_mcub: '{warning} Модуль не {mcub} типу <i>[Heroku/Hikka]</i>'
+  modules_not_tetko: '{warning} Модуль не {tetko} типу <i>[Heroku/Hikka]</i>'
   log_hikka_detected: =+ Виявлено Hikka/Heroku модуль
   hikka_no_compat: '{warning} <b>Hikka compat не знайдено.</b>'
   hikka_disabled: '{warning} <b>Підтримку Hikka/Heroku модулів вимкнено через конфіг loader (loader_allow_hikka_modules).</b>'
@@ -1050,14 +1050,14 @@ tester:
   teaser_empty_log: "<b>Записів у kernel.log не знайдено</b>"
   teaser_recording_event: "⏺️ Записую виклики event..."
   teaser_recording_kernel: "⏺️ Записую логи kernel..."
-  logs_level_caption: '{logs_title} <b>{logs}</b> {mcub}
+  logs_level_caption: '{logs_title} <b>{logs}</b> {tetko}
 
     <blockquote>{pen} <b>{kernel_version}</b> {version}#<a href="{commit_url}">{commit_sha}</a>
 
     {satellite} <b>{branch_label}:</b> {branch}
 
     {printer} <b>Рівень:</b> <code>{level}</code></blockquote>'
-mcub_info:
+tetko_info:
   custom_text_error: "<b>Помилка у форматуванні:</b> {error}"
   error_see_logs: "{warning} <b>Помилка, дивись логи</b>"
 trusted:
@@ -1322,5 +1322,5 @@ config:
 zen:
   success: 'Перезавантаження <b>успішне!</b>'
   loading: 'але модулі ще завантажуються...'
-  loaded: 'Ваш <b>{mcub}</b> повністю завантажено!'
-  errors: 'Ваш <b>{mcub}</b> <b>завантажився з помилками</b> :('
+  loaded: 'Ваш <b>{tetko}</b> повністю завантажено!'
+  errors: 'Ваш <b>{tetko}</b> <b>завантажився з помилками</b> :('

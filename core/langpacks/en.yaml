@@ -47,7 +47,7 @@ langbutton:
 core_inline:
   no_access: I'm sorry, but you don't have access!
   no_access_id: 'ID'
-  mcub_bot_title: TETKO Bot
+  tetko_bot_title: TETKO Bot
   version: Version
   modules: Modules
   bot_limit_warn1: "Delete one of your bots - you have too many, I can't create a new one."
@@ -142,7 +142,7 @@ command:
   fork: 'fork:'
   original: 'Original:'
   github_repo: Repository
-  original_mcub: Original TETKOFB
+  original_tetko: Original TETKOFB
   support: Support
   profile: 'Profile:'
   name: 'Name:'
@@ -203,13 +203,13 @@ eval:
 zen:
   success: Reboot <b>successful!</b>
   loading: but modules are still loading...
-  loaded: Your <b>{mcub}</b> is fully loaded!
-  errors: Your <b>{mcub}</b> <b>loaded with errors</b> :(
+  loaded: Your <b>{tetko}</b> is fully loaded!
+  errors: Your <b>{tetko}</b> <b>loaded with errors</b> :(
 kernel:
   success: Reboot <b>successful!</b>
   loading: but modules are still loading...
-  loaded: Your <b>{mcub}</b> is fully loaded!
-  errors: Your <b>{mcub}</b> <b>loaded with errors</b> :(
+  loaded: Your <b>{tetko}</b> is fully loaded!
+  errors: Your <b>{tetko}</b> <b>loaded with errors</b> :(
   modules_not_loaded: 'Modules that did not load:'
   rpc_error: <b>RPC error:</b> <code>{error}</code>
   call_failed: <b>Call <code>{cmd}</code> failed due to RPC error:</b> <code>{rpc_msg}</code>
@@ -433,24 +433,24 @@ api_protection:
   analyze_eta_now: <tg-emoji emoji-id="5388785832956016892">❌</tg-emoji> <b>Already exceeded</b>
   analyze_eta_in: <code>~{seconds}</code>s
   analyze_profile_insufficient: <i>insufficient data</i>
-  mcub_not_supported: <tg-emoji emoji-id="5904692292324692386">⚠️</tg-emoji> <b>Telethon-TETKO not detected</b> - native protection unavailable
-  mcub_mode_set: <tg-emoji emoji-id="5253671358734281000">🛡</tg-emoji> <b>TETKO protection mode:</b> <code>{mode}</code><i>{dry}</i>
-  mcub_mode_dry: "<i>(dry-run: violations logged, not blocked)</i>"
-  mcub_mode_usage: <tg-emoji emoji-id="5332654441508119011">⚙️</tg-emoji> <b>Usage:</b> <code>.api_mode [off|safe|strict|custom] [dry]</code>
-  mcub_violation: <tg-emoji emoji-id="5767151002666929821">🚫</tg-emoji> <b>TETKO blocked a request</b>
+  tetko_not_supported: <tg-emoji emoji-id="5904692292324692386">⚠️</tg-emoji> <b>Telethon-TETKO not detected</b> - native protection unavailable
+  tetko_mode_set: <tg-emoji emoji-id="5253671358734281000">🛡</tg-emoji> <b>TETKO protection mode:</b> <code>{mode}</code><i>{dry}</i>
+  tetko_mode_dry: "<i>(dry-run: violations logged, not blocked)</i>"
+  tetko_mode_usage: <tg-emoji emoji-id="5332654441508119011">⚙️</tg-emoji> <b>Usage:</b> <code>.api_mode [off|safe|strict|custom] [dry]</code>
+  tetko_violation: <tg-emoji emoji-id="5767151002666929821">🚫</tg-emoji> <b>TETKO blocked a request</b>
 
     <blockquote>• <b>Method:</b> <code>{method}</code>
     • <b>Mode:</b> <code>{mode}</code>
     • <b>Reason:</b> <i>{reason}</i></blockquote>
-  mcub_status: <tg-emoji emoji-id="5253671358734281000">🛡</tg-emoji> <b>TETKO protection</b>
+  tetko_status: <tg-emoji emoji-id="5253671358734281000">🛡</tg-emoji> <b>TETKO protection</b>
 
     <blockquote>• <b>Mode:</b> <code>{mode}</code>
     • <b>Dry-run:</b> <i>{dry}</i>
     • <b>Allowlist:</b> <code>{allowlist}</code></blockquote>
-  mcub_choose_mode: <tg-emoji emoji-id="5253671358734281000">🛡</tg-emoji> <b>Choose TETKO protection mode:</b>
-  mcub_mode_default: 👾 Default ({mode})
+  tetko_choose_mode: <tg-emoji emoji-id="5253671358734281000">🛡</tg-emoji> <b>Choose TETKO protection mode:</b>
+  tetko_mode_default: 👾 Default ({mode})
 updates:
-  restarting: 'Your <b>{mcub}</b> is restarting...'
+  restarting: 'Your <b>{tetko}</b> is restarting...'
   restart_log: Restarting...
   already_updated: <tg-emoji emoji-id="5902002809573740949">✅</tg-emoji> <b>Already
     latest version {version}</b>
@@ -479,7 +479,7 @@ updates:
   cant_get_update: <tg-emoji emoji-id="5388785832956016892">❌</tg-emoji> <b>Could
     not get update</b>
   error: <tg-emoji emoji-id="5388785832956016892">❌</tg-emoji> <b>Error:</b> <code>{error}</code>
-  stopping: <tg-emoji emoji-id="5372892693024218813">🧲</tg-emoji> <b>Your <i>{mcub}</i>
+  stopping: <tg-emoji emoji-id="5372892693024218813">🧲</tg-emoji> <b>Your <i>{tetko}</i>
     is stopping...</b> {emoji}
   backup_not_found: <tg-emoji emoji-id="5388785832956016892">❌</tg-emoji> <b>Backup
     not found</b>
@@ -599,7 +599,7 @@ settings:
   aliases_cleared: <tg-emoji emoji-id="5902002809573740949">✅</tg-emoji> Aliases cleared
   api_enabled: <tg-emoji emoji-id="5902002809573740949">✅</tg-emoji> enabled
   api_disabled: <tg-emoji emoji-id="5767151002666929821">🚫</tg-emoji> disabled
-  mcubinfo_error: '🌩️ <b>error, check logs</b>
+  tetko_info_error: '🌩️ <b>error, check logs</b>
 
     Full Logs: <pre>{e}<pre>'
   powersave_status: 🔋 Power save mode {status}{features}
@@ -617,7 +617,7 @@ settings:
   btn_api_protection: '{status} api protection'
   btn_powersave: '{status} powersave'
   btn_2fa: '{status} 2fa'
-  btn_mcubinfo: mcub info
+  btn_tetko_info: TETKO info
   btn_kernel_version: 'Kernel version: {version}'
   api_protection_status: API protection {status}
   2fa_status: 2FA {status}
@@ -645,7 +645,7 @@ settings:
   clearcache_done: <tg-emoji emoji-id="5472164874886846699">✨</tg-emoji> Cache cleared
   clearcache_error: '<tg-emoji emoji-id="5767151002666929821">🚫</tg-emoji> Failed to clear cache: <code>{error}</code>'
   danger_cancelled: <tg-emoji emoji-id="5453892731094973831">❄️</tg-emoji> Action cancelled
-  mcubinfo_html: '<tg-emoji emoji-id="5472164874886846699">✨</tg-emoji> <b>What is a userbot?</b>
+  tetko_info_html: '<tg-emoji emoji-id="5472164874886846699">✨</tg-emoji> <b>What is a userbot?</b>
 
     <blockquote expandable>This is a program that works through your personal Telegram
     account using the client API. Unlike regular bots (<code>Bot API</code>), a userbot
@@ -680,11 +680,11 @@ settings:
     the userbot</blockquote>'
 loader:
   choose: |-
-    <b>{mcub_emoji} installation</b>
+    <b>{tetko_emoji} installation</b>
 
     Choose your platform:
   choose_category: |-
-    <b>{mcub_emoji} installation</b>
+    <b>{tetko_emoji} installation</b>
 
     Select device type:
   arch: |-
@@ -1007,7 +1007,7 @@ loader:
   dlm_repo_choice_cancelled: Selection cancelled
   btn_back: Back
   btn_next: Next
-  modules_not_mcub: '{warning} Module is not {mcub} type, [Heroku/Hikka]'
+  modules_not_tetko: '{warning} Module is not {tetko} type, [Heroku/Hikka]'
   log_hikka_detected: =+ Hikka/Heroku module detected - loading via compat layer
   hikka_no_compat: '{warning} <b>Hikka compat, not found.</b>'
   hikka_disabled: '{warning} <b>Hikka/Heroku modules support is disabled via loader
@@ -1225,14 +1225,14 @@ tester:
   teaser_empty_log: "<b>No kernel log entries recorded</b>"
   teaser_recording_event: "⏺️ Recording event calls..."
   teaser_recording_kernel: "⏺️ Recording kernel logs..."
-  logs_level_caption: '{logs_title} <b>{logs}</b> {mcub}
+  logs_level_caption: '{logs_title} <b>{logs}</b> {tetko}
 
   <blockquote>{pen} <b>{kernel_version}</b> {version}#<a href="{commit_url}">{commit_sha}</a>
 
   {satellite} <b>{branch_label}:</b> {branch}
 
   {printer} <b>Level:</b> <code>{level}</code></blockquote>'
-mcub_info:
+tetko_info:
   custom_text_error: "<b>Error in custom text format:</b> {error}"
   error_see_logs: "{warning} <b>Error, see logs</b>"
 trusted:

@@ -77,3 +77,4 @@ modules_custom/**/*.bak
 *.old
 *.log
 config.json.*
+TETKO-UserBot-main/

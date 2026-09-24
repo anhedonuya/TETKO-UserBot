@@ -717,7 +717,7 @@ class InlineBot:
             ("start", "start"),
             ("profile", "profile"),
             ("ping", "ping"),
-            ("delete_mcub_bot", "remove bot from chat"),
+            ("delete_tetko_bot", "remove bot from chat"),
         ]
 
         if (
