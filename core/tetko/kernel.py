@@ -37,7 +37,7 @@ class _DummyCallbackPermissions:
         pass
 
     def is_allowed(self, uid, command="", duration_seconds=60):
-        return True
+        return False
 
 class Kernel:
     """Ядро TETKO (tetko-compat API 0.0.9.0)."""

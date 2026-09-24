@@ -81,6 +81,47 @@ class EventDispatcher:
                             pass
                     return
 
+    async def _callback_allowed(self, kernel: Any, event: Any) -> bool:
+        sender = getattr(event, "sender_id", None)
+        if sender is None:
+            sender = getattr(getattr(event, "from_user", None), "id", None)
+        try:
+            sender = int(sender) if sender is not None else None
+        except (ValueError, TypeError):
+            sender = None
+        if sender is None:
+            return False
+
+        cfg = getattr(kernel, "config", None) or {}
+        owner = cfg.get("admin_id") or cfg.get("owner_id")
+        if owner is not None:
+            try:
+                if int(owner) == sender:
+                    return True
+            except (ValueError, TypeError):
+                pass
+
+        try:
+            from core.tetko import db as _db
+            import json as _json
+            raw = _db.db_get("inline_perm", "allowed_users")
+            if raw:
+                users = _json.loads(raw) if isinstance(raw, str) else raw
+                if sender in (users or []):
+                    return True
+            denied_raw = _db.db_get("inline_perm", "denied_users")
+            if denied_raw:
+                denied = _json.loads(denied_raw) if isinstance(denied_raw, str) else denied_raw
+                if sender in (denied or []):
+                    return False
+            mode = _db.db_get("inline_perm", "everyone_mode")
+            if mode:
+                return True
+        except Exception:
+            pass
+
+        return False
+
     async def handle_callback(self, client: Any, event: Any) -> None:
         """Обработка inline-кнопок (callback query).
 
@@ -93,6 +134,13 @@ class EventDispatcher:
             data = data.decode("utf-8", errors="replace")
 
         kernel = getattr(client, "kernel", None)
+        if kernel is not None and not await self._callback_allowed(kernel, event):
+            try:
+                await event.answer("🚫 Нет доступа", alert=True)
+            except Exception:
+                pass
+            return
+
         if kernel is not None and hasattr(kernel, "inline"):
             h = kernel.inline.get_handler(data)
             if h is not None:

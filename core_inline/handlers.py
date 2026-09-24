@@ -1635,15 +1635,26 @@ class InlineHandlers:
     async def check_admin(self, event):
         try:
             user_id = int(event.sender_id)
-            if getattr(self, "_inline_manager", False):
-                result = await self._inline_manager.is_allowed(user_id, context=event)
-            else:
-                result = False
-
-            return result
         except (ValueError, TypeError) as e:
             self.kernel.logger.error(f"Oшибкa в check_admin: {e}")
             return False
+
+        cfg = getattr(self.kernel, "config", None) or {}
+        owner = cfg.get("admin_id") or cfg.get("owner_id")
+        if owner is not None:
+            try:
+                if int(owner) == user_id:
+                    return True
+            except (ValueError, TypeError):
+                pass
+
+        try:
+            if getattr(self, "_inline_manager", False):
+                return await self._inline_manager.is_allowed(user_id, context=event)
+        except Exception as e:
+            self.kernel.logger.error(f"check_admin is_allowed: {e}")
+
+        return False
 
     async def register_handlers(self):
         """Registers all handlers for the bot.
@@ -2047,6 +2058,38 @@ class InlineHandlers:
 
         try:
             if not event.data:
+                return
+
+            _sender = getattr(event, "sender_id", None)
+            if _sender is None:
+                _sender = getattr(getattr(event, "from_user", None), "id", None)
+            try:
+                _sender = int(_sender) if _sender is not None else None
+            except (ValueError, TypeError):
+                _sender = None
+
+            _allowed = False
+            _cfg = getattr(self.kernel, "config", None) or {}
+            _owner = _cfg.get("admin_id") or _cfg.get("owner_id")
+            if _owner is not None and _sender is not None:
+                try:
+                    if int(_owner) == _sender:
+                        _allowed = True
+                except (ValueError, TypeError):
+                    pass
+            if not _allowed and _sender is not None:
+                try:
+                    _allowed = await self._inline_manager.is_allowed(
+                        _sender, context=event
+                    )
+                except Exception:
+                    _allowed = False
+
+            if not _allowed:
+                try:
+                    await event.answer(self.lang["no_access"], alert=True)
+                except Exception:
+                    pass
                 return
 
             data_str = (

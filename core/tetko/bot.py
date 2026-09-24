@@ -454,6 +454,51 @@ class BotClient:
 
         log.debug(f"🤖 Bot callback: data={data!r}")
 
+        sender = getattr(event, "sender_id", None)
+        if sender is None:
+            sender = getattr(getattr(event, "from_user", None), "id", None)
+        try:
+            sender = int(sender) if sender is not None else None
+        except (ValueError, TypeError):
+            sender = None
+
+        cfg = getattr(self.kernel, "config", None) or {}
+        owner = cfg.get("admin_id") or cfg.get("owner_id")
+        allowed = False
+        if owner is not None and sender is not None:
+            try:
+                if int(owner) == sender:
+                    allowed = True
+            except (ValueError, TypeError):
+                pass
+        if not allowed and sender is not None:
+            try:
+                from core.tetko import db as _db
+                import json as _json
+                raw = _db.db_get("inline_perm", "allowed_users")
+                if raw:
+                    users = _json.loads(raw) if isinstance(raw, str) else raw
+                    if sender in (users or []):
+                        allowed = True
+                denied_raw = _db.db_get("inline_perm", "denied_users")
+                if denied_raw:
+                    denied = _json.loads(denied_raw) if isinstance(denied_raw, str) else denied_raw
+                    if sender in (denied or []):
+                        allowed = False
+                mode = _db.db_get("inline_perm", "everyone_mode")
+                if mode:
+                    allowed = True
+            except Exception:
+                pass
+
+        if not allowed:
+            log.warning(f"🤖 Bot callback: отказано sender={sender} (owner={owner})")
+            try:
+                await event.answer("🚫 Нет доступа", alert=True)
+            except Exception:
+                pass
+            return
+
         if self.kernel is not None and hasattr(self.kernel, "inline"):
             h = self.kernel.inline.get_handler(data)
             if h is not None:

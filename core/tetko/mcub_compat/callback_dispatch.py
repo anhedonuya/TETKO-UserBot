@@ -57,7 +57,50 @@ def _lookup_token(kernel, token: str) -> dict | None:
     return entry
 
 
-async def _call_handler(entry: dict, event: Any) -> None:
+async def _is_allowed(kernel, event) -> bool:
+    sender = getattr(event, "sender_id", None)
+    if sender is None:
+        sender = getattr(getattr(event, "from_user", None), "id", None)
+    try:
+        sender = int(sender) if sender is not None else None
+    except (ValueError, TypeError):
+        sender = None
+    if sender is None:
+        return False
+
+    cfg = getattr(kernel, "config", None) or {}
+    owner = cfg.get("admin_id") or cfg.get("owner_id")
+    if owner is not None:
+        try:
+            if int(owner) == sender:
+                return True
+        except (ValueError, TypeError):
+            pass
+
+    try:
+        from core.tetko import db as _db
+        raw = _db.db_get("inline_perm", "allowed_users")
+        if raw:
+            import json as _json
+            users = _json.loads(raw) if isinstance(raw, str) else raw
+            if sender in (users or []):
+                return True
+        denied_raw = _db.db_get("inline_perm", "denied_users")
+        if denied_raw:
+            import json as _json
+            denied = _json.loads(denied_raw) if isinstance(denied_raw, str) else denied_raw
+            if sender in (denied or []):
+                return False
+        mode = _db.db_get("inline_perm", "everyone_mode")
+        if mode:
+            return True
+    except Exception:
+        pass
+
+    return False
+
+
+async def _call_handler(entry: dict, event: Any, kernel: Any = None) -> None:
     """Вызывает handler с учётом сигнатуры."""
     handler = entry.get("handler")
     if not callable(handler):
@@ -120,16 +163,21 @@ def install_callback_handler(kernel, bot_client) -> None:
 
             entry = _lookup_token(kernel, data)
             if entry is None:
-                # не наш токен — пусть обрабатывают другие
                 return
 
-            # сначала гасим спиннер, потом зовём handler
+            if not await _is_allowed(kernel, event):
+                try:
+                    await event.answer("🚫 Нет доступа", alert=True)
+                except Exception:
+                    pass
+                return
+
             try:
                 await event.answer()
             except Exception:
                 pass
 
-            await _call_handler(entry, event)
+            await _call_handler(entry, event, kernel)
         except Exception as e:
             log.exception(f"callback dispatcher: {e}")
 
