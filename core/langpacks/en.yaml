@@ -553,6 +553,11 @@ translations:
   reloadlang_done: 'Language packs reloaded from disk'
 
 settings:
+  setlang_current: '🌐 <b>Current language:</b> <code>{lang}</code>'
+  setlang_available: '📚 <b>Available:</b> {list}'
+  setlang_changed: '✅ Language changed to <code>{lang}</code>'
+  setlang_unknown: '❌ Language <code>{lang}</code> not found'
+  setlang_usage: 'Usage: <code>.setlang &lt;code&gt;</code>'
   prefix_usage: '❌ Usage: {prefix}setprefix [symbol] [id/@username/reply]'
   prefix_one_char: ❌ <b>Prefix must be exactly 1 character</b>
   prefix_changed: '<tg-emoji emoji-id="5902002809573740949">✅</tg-emoji> <b>Prefix
@@ -1236,6 +1241,13 @@ tetko_info:
   custom_text_error: "<b>Error in custom text format:</b> {error}"
   error_see_logs: "{warning} <b>Error, see logs</b>"
 trusted:
+  trusted_error: |-
+    ❌ <b>Error:</b> {error}
+    <code>{full_error}</code>
+  groups: 'groups'
+  pm: 'PM'
+  all: 'everywhere'
+  aliases: 'aliases'
   not_owner: '<tg-emoji emoji-id="5408830797513784663">🚫</tg-emoji> Only the owner can use this command.'
   usage: '<tg-emoji emoji-id="5409117246062625941">⚙️</tg-emoji> Usage: <code>.trust</code> / <code>.untrust</code> (reply, @username or ID)'
   trust_added: '<tg-emoji emoji-id="5330561907671727296">✅</tg-emoji> <b>User added to trusted list.</b>'

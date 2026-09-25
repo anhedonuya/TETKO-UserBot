@@ -36,6 +36,31 @@ class Module:
             return self.kernel.client
         return None
 
+    def _get_lang(self) -> str:
+        try:
+            cfg = getattr(self.kernel, "config", None) or {}
+            return cfg.get("language") or "ru"
+        except Exception:
+            return "ru"
+
+    @property
+    def strings(self) -> dict:
+        try:
+            from core.langpacks import get_module_strings
+            return get_module_strings(self.name.lower(), self._get_lang()) or {}
+        except Exception:
+            return {}
+
+    def _t(self, key: str, **kwargs) -> str:
+        data = self.strings
+        value = data.get(key, key)
+        if kwargs and isinstance(value, str):
+            try:
+                return value.format(**kwargs)
+            except (KeyError, IndexError, ValueError):
+                return value
+        return value
+
     async def on_load(self) -> None:
         pass
 

@@ -303,7 +303,8 @@ async def main():
     print("  \033[1;92m[>]\033[0m Kernel:  loaded successfully")
     modules = list(kernel.registry.list_modules().keys()) or []
     print(f"  \033[1;92m[>]\033[0m Modules: {len(modules)}")
-    print("  \033[1;92m[>]\033[0m Compat:  tetko-compat 0.0.9.0")
+    from core.tetko import __compat__ as _tetko_compat
+    print(f"  \033[1;92m[>]\033[0m Compat:  tetko-compat {_tetko_compat}")
     _owner_name = getattr(me, "first_name", None) or getattr(me, "username", None) or str(kernel.context.admin_id)
     _owner_tag = f" (@{me.username})" if getattr(me, "username", None) else ""
     print(f"  \033[1;92m[>]\033[0m Owner:   {_owner_name}{_owner_tag}")

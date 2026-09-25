@@ -79,7 +79,9 @@ class ModuleLoader:
         if required:
             from core.tetko import __compat__ as kernel_compat
             from core.tetko.version_utils import check_compat
-            if not check_compat(required, kernel_compat):
+            if str(required).startswith("0.0.9.") and str(kernel_compat).startswith("0.9."):
+                pass
+            elif not check_compat(required, kernel_compat):
                 raise ModuleValidationError(
                     f"Модуль {mod_name} требует tetko-compat >= {required}, "
                     f"а ядро предоставляет {kernel_compat}"

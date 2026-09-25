@@ -4,39 +4,17 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from core.tetko import Module, command, db_get, db_set
+from core.tetko import Module, command
 
 CONFIG_PATH = Path("config.json")
 
 
 class Settings(Module):
-    name = "Settings"
+    name = "settings"
     version = "1.0.0"
     author = "@anhedonuya"
-    __compat__ = "0.0.9.0"
+    __compat__ = "0.9.1"
     description = "Настройки TETKO UserBot"
-
-    strings = {
-        "ru": {
-            "current": "🌐 <b>Текущий язык:</b> <code>{lang}</code>",
-            "available": "📚 <b>Доступные языки:</b> {list}",
-            "changed": "✅ Язык изменён на <code>{lang}</code>",
-            "unknown": "❌ Язык <code>{lang}</code> не найден",
-            "usage": "Использование: <code>.setlang &lt;код&gt;</code>",
-        },
-        "en": {
-            "current": "🌐 <b>Current language:</b> <code>{lang}</code>",
-            "available": "📚 <b>Available:</b> {list}",
-            "changed": "✅ Language changed to <code>{lang}</code>",
-            "unknown": "❌ Language <code>{lang}</code> not found",
-            "usage": "Usage: <code>.setlang &lt;code&gt;</code>",
-        },
-    }
-
-    def _t(self, key, **kwargs):
-        lang = self.kernel.config.get("language", "ru") or "ru"
-        s = self.strings.get(lang, self.strings["ru"])
-        return s.get(key, key).format(**kwargs) if kwargs else s.get(key, key)
 
     @command(name="setlang", aliases=["lang"], description="Сменить язык бота")
     async def setlang_cmd(self, event, args):
@@ -44,12 +22,13 @@ class Settings(Module):
 
         available = get_available_locales()
         current = self.kernel.config.get("language", "ru") or "ru"
+        pretty = ", ".join(f"<code>{x}</code>" for x in available)
 
         if not args:
             await event.edit(
-                self._t("current", lang=current)
+                self._t("setlang_current", lang=current)
                 + "\n"
-                + self._t("available", list=", ".join(f"<code>{x}</code>" for x in available)),
+                + self._t("setlang_available", list=pretty),
                 parse_mode="html",
             )
             return
@@ -57,9 +36,9 @@ class Settings(Module):
         new_lang = args[0].strip().lower()
         if new_lang not in available:
             await event.edit(
-                self._t("unknown", lang=new_lang)
+                self._t("setlang_unknown", lang=new_lang)
                 + "\n"
-                + self._t("available", list=", ".join(f"<code>{x}</code>" for x in available)),
+                + self._t("setlang_available", list=pretty),
                 parse_mode="html",
             )
             return
@@ -77,4 +56,7 @@ class Settings(Module):
 
         clear_langpacks_cache()
 
-        await event.edit(self._t("changed", lang=new_lang), parse_mode="html")
+        await event.edit(
+            self._t("setlang_changed", lang=new_lang),
+            parse_mode="html",
+        )

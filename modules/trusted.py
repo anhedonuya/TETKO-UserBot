@@ -151,116 +151,6 @@ class Trusted(Module):
     __compat__ = "0.0.9.0"
     description = "Доверенные пользователи могут выполнять команды владельца"
 
-    _STRINGS = {
-        "ru": {
-            "not_owner": "🚫 <b>Только для владельца.</b>",
-            "usage": "Использование: <code>.trust &lt;reply/id/username&gt;</code>",
-            "trust_already": "✅ Пользователь уже в списке доверенных.",
-            "trust_added": "✅ Пользователь добавлен в доверенные.",
-            "trust_added_timed": "✅ Пользователь добавлен в доверенные на {time}.",
-            "trust_removed": "🗑 Пользователь удалён из доверенных.",
-            "trust_not_in_list": "❌ Пользователь не в списке доверенных.",
-            "trust_expired": "⏰ Время доверия истекло у {user}.",
-            "trustlist_empty": "📭 Список доверенных пуст.",
-            "trustlist_title": "👥 <b>Доверенные пользователи:</b>",
-            "trust_time_title": "⏱ <b>На какой срок добавить?</b>",
-            "trust_time_desc": "Выбери кнопкой ниже.",
-            "btn_1h": "1 час",
-            "btn_24h": "24 часа",
-            "btn_7d": "7 дней",
-            "btn_permanent": "Навсегда",
-            "btn_cancel": "Отмена",
-            "nonick_step_title": "🔑 <b>Добавить в NoNick для {name}?</b>",
-            "nonick_step_desc": "NoNick позволяет использовать короткие команды без @{alias}.",
-            "nonick_step_desc_no_alias": "NoNick позволяет использовать короткие команды.",
-            "btn_nonick_yes": "✅ Да",
-            "btn_nonick_no": "❌ Нет",
-            "nonick_usage": "Использование: <code>.nonickuser &lt;reply/id&gt;</code>",
-            "nonick_toggled_on": "🔑 NoNick включён для {name}.",
-            "nonick_toggled_off": "🔓 NoNick выключен для {name}.",
-            "nonick_list_empty": "📭 Список NoNick пуст.",
-            "nonick_list_title": "🔑 <b>NoNick:</b>",
-            "timed_trusted_empty": "📭 Нет временных доверенных.",
-            "timed_trusted_title": "⏱ <b>Временные доверенные:</b>",
-            "trust_expiring": " — осталось {time}",
-            "ownerprefix_usage": "Использование: <code>.ownerprefix [reply/id/username]</code>",
-            "ownerprefix_one": "👤 <b>{user}</b> (<code>{user_id}</code>)\nПрефикс: <code>{prefix}</code> ({source})",
-            "ownerprefix_list_title": "👑 <b>Префиксы owner'ов:</b>",
-            "ownerprefix_list_item": "• {user} (<code>{user_id}</code>) — <code>{prefix}</code> ({source})",
-            "ownerprefix_source_personal": "личный",
-            "ownerprefix_source_fallback": "по умолчанию",
-            "trustaccess_title": "🔐 <b>Доступы для {user}:</b>",
-            "trustaccess_footer": "<i>Нажми на категорию, чтобы переключить.</i>",
-            "trustaccess_usage": "Использование: <code>.trustaccess &lt;reply/id&gt;</code>",
-            "access_allowed": "разрешено",
-            "access_allowed_group": "разрешено через группу",
-            "access_denied": "запрещено",
-            "btn_allow_all": "✅ Разрешить всё",
-            "btn_deny_all": "🚫 Запретить всё",
-            "btn_close": "🗑 Закрыть",
-            "btn_cmds": "📋 Команды",
-            "btn_inline_cmds": "🔮 Inline-команды",
-            "percmd_title": "📋 <b>Команды для {user}:</b>",
-            "percmd_back": "← Назад",
-            "trustcmd_usage": "Использование: <code>.trustcmd &lt;reply/id&gt; &lt;+/-/list&gt; [команда]</code>",
-            "trustcmd_added": "✅ {cmd} разрешён для {user}.",
-            "trustcmd_removed": "🚫 {cmd} запрещён для {user}.",
-            "trustcmd_not_found": "❌ Команда {cmd} не найдена.",
-            "trustcmd_list_empty": "📭 Персональные доступы пусты.",
-            "trustcmd_list_title": "📋 <b>Команды для {user}:</b>",
-            "inlinecmd_title": "🔮 <b>Inline-команды для {user}:</b>",
-            "inlinecmd_empty": "📭 Нет inline-команд.",
-            "inlinesec_usage": "Использование: <code>.inlinesec &lt;reply/id&gt; [команда]</code>",
-            "inlinesec_not_found": "❌ Inline-команда {cmd} не найдена.",
-            "inlinesec_allowed": "✅ Inline-команда {cmd} разрешена для {user}.",
-            "inlinesec_denied": "🚫 Inline-команда {cmd} запрещена для {user}.",
-            "sgroup_usage": "Использование: <code>.sgroup create/delete/add/remove/access/list/info &lt;имя&gt;</code>",
-            "sgroup_already_exists": "❌ Группа {name} уже существует.",
-            "sgroup_created": "✅ Группа {name} создана.",
-            "sgroup_deleted": "🗑 Группа {name} удалена.",
-            "sgroup_not_found": "❌ Группа {name} не найдена.",
-            "sgroup_user_in_group": "⚠️ Пользователь уже в группе.",
-            "sgroup_user_not_in_group": "⚠️ Пользователя нет в группе.",
-            "sgroup_user_added": "✅ {user} добавлен в {group}.",
-            "sgroup_user_removed": "🗑 {user} удалён из {group}.",
-            "sgroup_list_empty": "📭 Нет групп доступа.",
-            "sgroup_list_title": "👥 <b>Группы доступа:</b>",
-            "sgroup_menu_title": "👥 <b>Группа {name}</b>",
-            "sgroup_info_users_empty": "пусто",
-            "sgroup_info_access_empty": "нет доступов",
-            "sgroup_btn_add_user": "➕ Добавить",
-            "sgroup_btn_remove_user": "➖ Удалить",
-            "sgroup_btn_delete": "🗑 Удалить группу",
-            "sgroup_btn_access": "🔐 Доступы",
-            "sgroup_confirm_delete": "🗑 Удалить группу {name}?",
-            "btn_confirm_delete": "✅ Удалить",
-            "watchers_title": "👁 <b>Watcher'ы:</b>",
-            "watchers_empty": "📭 Нет watcher'ов.",
-            "watchers_debug_title": "👁 <b>Watcher debug:</b>",
-            "watchers_debug_empty": "📭 Ничего не найдено.",
-            "watcher_usage": "Использование: <code>.watcher &lt;module&gt; &lt;method&gt;</code>",
-            "watcher_not_found": "❌ Watcher {module}.{watcher} не найден.",
-            "watcher_enabled": "✅ Watcher {module}.{watcher} включён.",
-            "watcher_disabled": "🚫 Watcher {module}.{watcher} выключен.",
-            "error": "❌ <b>Ошибка:</b> {error}\n<code>{full_error}</code>",
-            "groups": "группы",
-            "pm": "ЛС",
-            "all": "всюду",
-            "aliases": "алиасы",
-        },
-    }
-
-    @property
-    def strings(self):
-        """Активный словарь переводов (по языку из config)."""
-        data = getattr(type(self), "_STRINGS", {}) or {}
-        lang = "ru"
-        try:
-            lang = (self.kernel.config or {}).get("language", "ru") or "ru"
-        except Exception:
-            pass
-        return data.get(lang) or data.get("ru") or data.get("en") or {}
-
     def _mk_btn(self, label, fn, *args, ttl=600, style="primary"):
         async def wrapped(cb):
             return await fn(cb, *args)
@@ -1489,7 +1379,7 @@ class Trusted(Module):
             lines.append("</blockquote>")
             await event.edit("\n".join(lines), parse_mode="html")
         except Exception as e:
-            await event.edit(self.strings["error"].format(error=e, full_error=""), parse_mode="html")
+            await event.edit(self.strings["trusted_error"].format(error=e, full_error=""), parse_mode="html")
 
     @command(name="watchersdebug", description="Отладка watcher'ов")
     async def cmd_watchersdebug(self, event, args):
@@ -1519,7 +1409,7 @@ class Trusted(Module):
             lines.append("</blockquote>")
             await event.edit("\n".join(lines), parse_mode="html")
         except Exception as e:
-            await event.edit(self.strings["error"].format(error=e, full_error=""), parse_mode="html")
+            await event.edit(self.strings["trusted_error"].format(error=e, full_error=""), parse_mode="html")
 
     @watcher()
     async def trusted_watcher(self, event):

@@ -1,6 +1,6 @@
 """TETKO — модульная система TETKO UserBot."""
 
-__compat__ = "0.0.9.0"
+__compat__ = "0.9.1"
 __compat_style__ = "tetko-compat"
 from core.tetko.module import Module
 from core.tetko.decorators import command, watcher, callback, loop

@@ -436,6 +436,11 @@ translations:
   reloadlang_done: 'Мовні пакети перезавантажено з диску'
 
 settings:
+  setlang_current: '🌐 <b>Поточна мова:</b> <code>{lang}</code>'
+  setlang_available: '📚 <b>Доступні:</b> {list}'
+  setlang_changed: '✅ Мову змінено на <code>{lang}</code>'
+  setlang_unknown: '❌ Мову <code>{lang}</code> не знайдено'
+  setlang_usage: 'Використання: <code>.setlang &lt;код&gt;</code>'
   prefix_usage: '❌ Використання: {prefix}setprefix [символ] [id/@username/reply]'
   prefix_one_char: <tg-emoji emoji-id="5767151002666929821">🚫</tg-emoji> <b>Префікс має бути рівно 1 символом</b>
   prefix_changed: '<tg-emoji emoji-id="5902002809573740949">✅</tg-emoji><b> Префікс змінено на </b><code>{prefix}</code>, <b>щоб повернути, напишіть:</b>
@@ -1061,6 +1066,13 @@ tetko_info:
   custom_text_error: "<b>Помилка у форматуванні:</b> {error}"
   error_see_logs: "{warning} <b>Помилка, дивись логи</b>"
 trusted:
+  trusted_error: |-
+    ❌ <b>Помилка:</b> {error}
+    <code>{full_error}</code>
+  groups: 'групи'
+  pm: 'ЛС'
+  all: 'усюди'
+  aliases: 'аліаси'
   not_owner: '<tg-emoji emoji-id="5408830797513784663">🚫</tg-emoji> Тільки власник може використовувати цю команду.'
   usage: '<tg-emoji emoji-id="5409117246062625941">⚙️</tg-emoji> Використання: <code>.trust</code> / <code>.untrust</code> (реплай, @username або ID)'
   trust_added: '<tg-emoji emoji-id="5330561907671727296">✅</tg-emoji> <b>Користувача додано до списку довірених.</b>'
