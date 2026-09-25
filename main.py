@@ -260,8 +260,9 @@ async def main():
 
     await client.start(phone=phone)
 
+    me = await client.get_me()
+
     if not cfg.get("admin_id"):
-        me = await client.get_me()
         cfg["admin_id"] = me.id
         try:
             with open(CONFIG_PATH, "w", encoding="utf-8") as f:
@@ -303,7 +304,9 @@ async def main():
     modules = list(kernel.registry.list_modules().keys()) or []
     print(f"  \033[1;92m[>]\033[0m Modules: {len(modules)}")
     print("  \033[1;92m[>]\033[0m Compat:  tetko-compat 0.0.9.0")
-    print(f"  \033[1;92m[>]\033[0m Owner:   {kernel.context.admin_id}")
+    _owner_name = getattr(me, "first_name", None) or getattr(me, "username", None) or str(kernel.context.admin_id)
+    _owner_tag = f" (@{me.username})" if getattr(me, "username", None) else ""
+    print(f"  \033[1;92m[>]\033[0m Owner:   {_owner_name}{_owner_tag}")
     print()
     print("\033[1;92mTETKO loaded\033[0m")
     sys.stdout.flush()
