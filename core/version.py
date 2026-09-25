@@ -30,6 +30,23 @@ def bump_version(v: str | None = None) -> str:
     return ".".join(str(p) for p in parts)
 
 
+import re as _re
+
+_VERSION_LINE_RE = _re.compile(
+    r"^\s*(?:#+\s*)?(\d+\.\d+\.\d+(?:\.\d+)?)\b",
+    _re.MULTILINE,
+)
+
+
+def _parse_version_md(text: str) -> str | None:
+    if not text:
+        return None
+    match = _VERSION_LINE_RE.search(text)
+    if match:
+        return match.group(1)
+    return None
+
+
 class VersionManager:
     def __init__(self, kernel):
         self.kernel = kernel
@@ -169,15 +186,20 @@ class VersionManager:
                 parts = parts[:-1]
             parts[-1] = branch
             base_url = "/".join(parts) + "/"
-        url = base_url + "version.txt"
+        url = base_url + "VERSION.md"
 
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get(url, timeout=5) as resp:
                     if resp.status == 200:
-                        version = (await resp.text()).strip()
-                        self._latest_version_cache = (time.time(), version)
-                        return version
+                        raw = await resp.text()
+                        version = _parse_version_md(raw)
+                        if version:
+                            self._latest_version_cache = (time.time(), version)
+                            return version
+                        self.logger.warning(
+                            "VERSION.md fetched but no version line found"
+                        )
         except Exception as e:
             self.logger.error(f"Error fetching latest kernel version: {e}")
 

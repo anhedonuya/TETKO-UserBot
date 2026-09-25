@@ -84,8 +84,9 @@
 
 ## Документация
 
-- [Написание модулей (RU)](docs/ru/modules.md)
-- [Writing modules (EN)](docs/en/modules.md)
+- [Установка (RU)](docs/ru/installation.md) · [Installation (EN)](docs/en/installation.md)
+- [Написание модулей (RU)](docs/ru/modules.md) · [Writing modules (EN)](docs/en/modules.md)
+- [Ядро (RU)](docs/ru/kernel.md) · [Kernel (EN)](docs/en/kernel.md)
 
 ## Лицензия
 
