@@ -1506,3 +1506,40 @@ config:
   btn_close: "❌ Close"
   kernel_config_title_short: Kernel Config - {page}
   modules_config_title_short: Modules Config - {page}
+
+tek:
+  help_title: 'Which modules do you need help with?'
+  btn_sys: 'system modules'
+  btn_user: 'user modules'
+  close: 'close tek'
+  back: 'back'
+  title: 'TETKO'
+  modules_line: 'modules: sys m: {sys} | user m: {user}'
+  no_cmds: '(no commands)'
+  module_not_found: '🫥 Module <code>{name}</code> not found'
+  kind_system: 'system'
+  kind_user: 'user'
+  module_header: '✅ Module {name} <code>v{version}</code> <i>({kind})</i>'
+  module_desc: '💡 Description: <i>{desc}</i>'
+  module_cmds: '🧩 Commands ({count}):'
+  module_author: '💖 Author: {author}'
+  module_compat: '⚙️ Compat: <code>{compat}</code>'
+  hide_title: 'Hide modules'
+  page: 'p. {page}/{total}'
+  updated: 'Updated'
+  menu_closed: '🗑 Menu closed'
+  prefix_current: 'ℹ️ Current prefix: <code>{prefix}</code>'
+  prefix_usage: 'Usage: <code>.setprefix &lt;char&gt;</code>'
+  prefix_empty: "❌ Prefix can't be empty"
+  prefix_too_long: '❌ Prefix too long (max 3 chars)'
+  prefix_space: "❌ Prefix can't be space"
+  prefix_changed: '✅ Prefix changed: <code>{old}</code> → <code>{new}</code>'
+  cfg_title: '❤️ TETKO — System'
+  cfg_uptime: '⏱ Uptime: <code>{time}</code>'
+  cfg_modules: '📦 Modules: <code>{count}</code>'
+  cfg_commands: '⌨️ Commands: <code>{count}</code>'
+  cfg_python: '🐍 Python: <code>{version}</code>'
+  cfg_style: '⚡ Style: <code>tetko-compat {compat}</code>'
+  cfg_premium: '👑 Premium: <code>{premium}</code>'
+  cfg_authors: '👥 Authors: @anhedonuya, @flexownerAL'
+  uptime_fmt: '{h}h {m}m {s}s'

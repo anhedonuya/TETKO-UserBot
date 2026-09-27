@@ -1,4 +1,4 @@
-"""Tek — модули, скрытие, инфо о системе."""
+"""Tek — модули, инфо о системе."""
 import time
 import logging
 import sys
@@ -24,38 +24,6 @@ PAGE_SIZE = 10
 CMD_LIMIT = 3
 
 
-def _lang(kernel) -> str:
-    try:
-        lang = kernel.config.get("language", "ru")
-        return "en" if lang == "en" else "ru"
-    except Exception:
-        return "ru"
-
-
-def _texts(lang: str) -> dict:
-    if lang == "en":
-        return {
-            "help_title": "Which modules do you need help with?",
-            "btn_sys": "system modules",
-            "btn_user": "user modules",
-            "close": "close tek",
-            "back": "back",
-            "title": "TETKO",
-            "modules_line": "modules: sys m: {sys} | user m: {user}",
-            "no_cmds": "(no commands)",
-        }
-    return {
-        "help_title": "С какими модулями тебе нужна помощь?",
-        "btn_sys": "систем модули",
-        "btn_user": "юзер модули",
-        "close": "закрыть список",
-        "back": "назад",
-        "title": "TETKO",
-        "modules_line": "modules: sys m: {sys} | user m: {user}",
-        "no_cmds": "(нет команд)",
-    }
-
-
 def _premium(kernel) -> bool:
     try:
         return bool(getattr(kernel.context, "user_premium", False))
@@ -65,7 +33,7 @@ def _premium(kernel) -> bool:
 
 class Tek(Module):
     name = "Tek"
-    __compat__ = "0.0.9.0"
+    __compat__ = "0.9.1"
     version = "2.1.0"
     author = "@anhedonuya & @flexownerAL"
     description = {
@@ -120,7 +88,6 @@ class Tek(Module):
             if cmd_mod is mod:
                 result.append(cmd)
                 continue
-            # MCUB: команды регистрируются под _PlaceholderModule с тем же name
             _cmd_mod_name = getattr(cmd_mod, "name", None) or (
                 type(cmd_mod).__name__ if cmd_mod is not None else None
             )
@@ -133,8 +100,7 @@ class Tek(Module):
     def _module_line(self, mod, lang: str) -> str:
         cmds = self._cmds_for_module(mod)
         if not cmds:
-            t = _texts(lang)
-            return f"▫️ <b>{mod.name}</b>: <i>{t['no_cmds']}</i>"
+            return f"▫️ <b>{mod.name}</b>: <i>{self._t('no_cmds')}</i>"
 
         _prefix = getattr(self.kernel, "prefix", ".") or "."
         parts = []
@@ -175,21 +141,21 @@ class Tek(Module):
         mod = self._find_module(name)
         if mod is None:
             await event.edit(
-                f"<blockquote>🫥 Модуль <code>{self._esc(name)}</code> не найден</blockquote>",
+                "<blockquote>" + self._t("module_not_found", name=self._esc(name)) + "</blockquote>",
                 parse_mode="html",
             )
             return
 
-        _lang_code = _lang(self.kernel)
+        lang_code = self._get_lang()
         if hasattr(mod, "get_description"):
             try:
-                desc = mod.get_description(_lang_code)
+                desc = mod.get_description(lang_code)
             except Exception:
                 desc = "—"
         else:
             _d = getattr(mod, "description", "—")
             if isinstance(_d, dict):
-                desc = _d.get(_lang_code) or _d.get("ru") or _d.get("en") or next(iter(_d.values()), "—")
+                desc = _d.get(lang_code) or _d.get("ru") or _d.get("en") or next(iter(_d.values()), "—")
             else:
                 desc = _d or "—"
         if not isinstance(desc, str):
@@ -198,7 +164,6 @@ class Tek(Module):
         author = getattr(mod, "author", "—")
         compat = getattr(mod, "__compat__", None)
         if not compat:
-            # Определяем: MCUB или TETKO-модуль
             try:
                 mro = type(mod).__mro__
                 _is_mcub = any("MCUBModuleBase" in c.__name__ for c in mro)
@@ -206,7 +171,7 @@ class Tek(Module):
                 _is_mcub = False
             compat = "mcub-compat" if _is_mcub else "—"
         is_sys = self._is_system(mod)
-        kind = "системный" if is_sys else "пользовательский"
+        kind = self._t("kind_system") if is_sys else self._t("kind_user")
 
         cmds = self._cmds_for_module(mod)
         if cmds:
@@ -221,21 +186,26 @@ class Tek(Module):
                     line += f" <i>({self._esc(c.only_for)})</i>"
                 if c.doc:
                     doc = c.doc if isinstance(c.doc, str) else (
-                        c.doc.get(_lang(self.kernel)) or c.doc.get("ru") or c.doc.get("en") or ""
+                        c.doc.get(lang_code) or c.doc.get("ru") or c.doc.get("en") or ""
                     )
                     if doc:
                         line += f" — {self._esc(doc)}"
                 cmd_lines.append(line)
             cmds_block = "\n".join(cmd_lines)
         else:
-            cmds_block = "<i>нет команд</i>"
+            cmds_block = "<i>" + self._t("no_cmds") + "</i>"
+
+        header = self._t("module_header", name=self._esc(mod.name), version=self._esc(ver), kind=kind)
+        desc_line = self._t("module_desc", desc=self._esc(desc))
+        cmds_header = self._t("module_cmds", count=len(cmds))
+        author_line = self._t("module_author", author=self._esc(author))
+        compat_line = self._t("module_compat", compat=self._esc(compat))
 
         text = (
-            f"<blockquote><b>✅ Модуль {self._esc(mod.name)}</b> <code>v{self._esc(ver)}</code> <i>({kind})</i></blockquote>\n"
-            f"<blockquote><b>💡 Описание:</b> <i>{self._esc(desc)}</i></blockquote>\n"
-            f"<blockquote><b>🧩 Команды ({len(cmds)}):</b>\n{cmds_block}</blockquote>\n"
-            f"<blockquote><b>💖 Автор:</b> {self._esc(author)}\n"
-            f"<b>⚙️ Компат:</b> <code>{self._esc(compat)}</code></blockquote>"
+            f"<blockquote><b>{header}</b></blockquote>\n"
+            f"<blockquote>{desc_line}</blockquote>\n"
+            f"<blockquote><b>{cmds_header}</b>\n{cmds_block}</blockquote>\n"
+            f"<blockquote>{author_line}\n{compat_line}</blockquote>"
         )
         await event.edit(text, parse_mode="html")
 
@@ -244,15 +214,13 @@ class Tek(Module):
         if bot is None:
             return
 
-        lang = _lang(self.kernel)
-        t = _texts(lang)
         premium = _premium(self.kernel)
 
         sys_emoji = FB_SYS
         user_emoji = FB_USER
         q_emoji = EMOJI_Q if premium else FB_Q
 
-        text = f"{t['help_title']} {q_emoji}{q_emoji}"
+        text = f"{self._t('help_title')} {q_emoji}{q_emoji}"
 
         async def on_sys(cb):
             await self._show_list(cb, "system", 0)
@@ -261,8 +229,8 @@ class Tek(Module):
             await self._show_list(cb, "user", 0)
 
         buttons = [[
-            self.kernel.inline.make_button(f"{sys_emoji} {t['btn_sys']}", on_sys, ttl=600),
-            self.kernel.inline.make_button(f"{user_emoji} {t['btn_user']}", on_user, ttl=600),
+            self.kernel.inline.make_button(f"{sys_emoji} {self._t('btn_sys')}", on_sys, ttl=600),
+            self.kernel.inline.make_button(f"{user_emoji} {self._t('btn_user')}", on_user, ttl=600),
         ]]
 
         if is_cb:
@@ -285,8 +253,6 @@ class Tek(Module):
         if bot is None:
             return
 
-        lang = _lang(self.kernel)
-        t = _texts(lang)
         premium = _premium(self.kernel)
 
         sys_mods, user_mods = self._modules_split()
@@ -300,13 +266,14 @@ class Tek(Module):
 
         h1 = EMOJI_HEART1 if premium else "❤️"
         h2 = EMOJI_HEART2 if premium else "❤️"
+        modules_line = self._t("modules_line", sys=len(sys_mods), user=len(user_mods))
         text = (
-            f"{h1} <b>{t['title']}</b>\n"
-            f"{h2} <b>{t['modules_line'].format(sys=len(sys_mods), user=len(user_mods))}</b>\n\n"
+            f"{h1} <b>{self._t('title')}</b>\n"
+            f"{h2} <b>{modules_line}</b>\n\n"
             "<blockquote expandable>"
         )
         for mod in page_mods:
-            text += self._module_line(mod, lang) + "\n"
+            text += self._module_line(mod, None) + "\n"
         text += "</blockquote>"
 
         rows = []
@@ -357,7 +324,7 @@ class Tek(Module):
                 from telethon.tl.functions.messages import EditInlineBotMessageRequest
                 await bot.client(EditInlineBotMessageRequest(
                     id=imid,
-                    message="🗑 Меню закрыто",
+                    message=self._t("menu_closed"),
                     reply_markup=None,
                 ))
             except Exception as e:
@@ -365,8 +332,8 @@ class Tek(Module):
 
         trash = FB_TRASH
         rows.append([
-            self.kernel.inline.make_button(f"← {t['back']}", on_back, ttl=600),
-            self.kernel.inline.make_button(f"{trash} {t['close']}", on_close, ttl=600),
+            self.kernel.inline.make_button(f"← {self._t('back')}", on_back, ttl=600),
+            self.kernel.inline.make_button(f"{trash} {self._t('close')}", on_close, ttl=600),
         ])
 
         await self.kernel.inline.edit(cb_event, text, rows)
@@ -380,8 +347,6 @@ class Tek(Module):
         if bot is None:
             return
 
-        lang = _lang(self.kernel)
-        t = _texts(lang)
         premium = _premium(self.kernel)
         hidden = self._get_hidden()
 
@@ -393,7 +358,8 @@ class Tek(Module):
         start = page * PAGE_SIZE
         page_mods = all_mods[start:start + PAGE_SIZE]
 
-        text = f"<b>Скрытие модулей</b> (стр. {page + 1}/{total_pages})\n\n"
+        page_line = self._t("page", page=page + 1, total=total_pages)
+        text = f"<b>{self._t('hide_title')}</b> ({page_line})\n\n"
         text += "<blockquote expandable>"
         for name in page_mods:
             mark = "🔒" if name in hidden else "▫️"
@@ -414,7 +380,7 @@ class Tek(Module):
                     if n not in h:
                         h.append(n)
                 self._set_hidden(h)
-                await cb.answer("Обновлено")
+                await cb.answer(self._t("updated"))
                 await self._show_hide(cb, is_cb=True, page=p)
 
             rows.append([self.kernel.inline.make_button(label, on_toggle, ttl=600)])
@@ -450,7 +416,7 @@ class Tek(Module):
                 return
             try:
                 from telethon.tl.functions.messages import EditInlineBotMessageRequest
-                close_html = "🗑 <i>Меню закрыто</i>"
+                close_html = self._t("menu_closed")
                 try:
                     parsed, entities = await bot.client._parse_message_text(close_html, "html")
                 except Exception:
@@ -466,8 +432,8 @@ class Tek(Module):
 
         trash = FB_TRASH
         rows.append([
-            self.kernel.inline.make_button(f"← {t['back']}", on_back, ttl=600),
-            self.kernel.inline.make_button(f"{trash} {t['close']}", on_close, ttl=600),
+            self.kernel.inline.make_button(f"← {self._t('back')}", on_back, ttl=600),
+            self.kernel.inline.make_button(f"{trash} {self._t('close')}", on_close, ttl=600),
         ])
 
         if is_cb:
@@ -492,43 +458,39 @@ class Tek(Module):
         only_for="owner",
     )
     async def cmd_setprefix(self, event, args):
-        """Сменить префикс команд. Использование: .setprefix <символ>"""
         if not args:
             cur = self.kernel.prefix
             await event.edit(
-                f"ℹ️ Текущий префикс: <code>{self._esc(cur)}</code>\n"
-                "Использование: <code>.setprefix &lt;символ&gt;</code>",
+                self._t("prefix_current", prefix=self._esc(cur))
+                + "\n"
+                + self._t("prefix_usage"),
                 parse_mode="html",
             )
             return
 
         new_prefix = args[0].strip()
 
-        # проверки
         if not new_prefix:
-            await event.edit("❌ Префикс не может быть пустым", parse_mode="html")
+            await event.edit(self._t("prefix_empty"), parse_mode="html")
             return
         if len(new_prefix) > 3:
-            await event.edit("❌ Префикс слишком длинный (макс 3 символа)", parse_mode="html")
+            await event.edit(self._t("prefix_too_long"), parse_mode="html")
             return
         if new_prefix.isspace():
-            await event.edit("❌ Префикс не может быть пробелом", parse_mode="html")
+            await event.edit(self._t("prefix_space"), parse_mode="html")
             return
 
         old_prefix = self.kernel.prefix
 
-        # применяем в рантайме
         self.kernel.prefix = new_prefix
         if hasattr(self.kernel, "context") and self.kernel.context is not None:
             self.kernel.context.prefix = new_prefix
         if hasattr(self.kernel, "dispatcher") and self.kernel.dispatcher is not None:
             self.kernel.dispatcher.prefix = new_prefix
-        # обновляем в MCUB kernel_proxy (если есть)
         kk = getattr(self.kernel, "_k", None)
         if kk is not None and hasattr(kk, "_custom_prefix"):
             kk._custom_prefix = new_prefix
 
-        # сохраняем в config.json
         try:
             import json
             from pathlib import Path as _Path
@@ -544,8 +506,7 @@ class Tek(Module):
             log.warning(f"setprefix: save failed: {e}")
 
         await event.edit(
-            f"✅ Префикс изменён: <code>{self._esc(old_prefix)}</code> → "
-            f"<code>{self._esc(new_prefix)}</code>",
+            self._t("prefix_changed", old=self._esc(old_prefix), new=self._esc(new_prefix)),
             parse_mode="html",
         )
 
@@ -560,14 +521,17 @@ class Tek(Module):
         total_cmds = len(registry._commands)
         premium = _premium(self.kernel)
 
+        from core.tetko import __compat__ as _compat
+        uptime_str = self._t("uptime_fmt", h=hours, m=minutes, s=seconds)
+
         text = (
-            "<b>❤️ TETKO — System</b>\n\n"
-            f"⏱ <b>Uptime:</b> <code>{hours}ч {minutes}м {seconds}с</code>\n"
-            f"📦 <b>Модулей:</b> <code>{total_mods}</code>\n"
-            f"⌨️ <b>Команд:</b> <code>{total_cmds}</code>\n"
-            f"🐍 <b>Python:</b> <code>{sys.version.split()[0]}</code>\n"
-            "⚡ <b>Стиль:</b> <code>tetko-compat 0.0.9.0</code>\n"
-            f"👑 <b>Premium:</b> <code>{premium}</code>\n"
-            "👥 <b>Авторы:</b> @anhedonuya, @flexownerAL"
+            f"<b>{self._t('cfg_title')}</b>\n\n"
+            + self._t("cfg_uptime", time=uptime_str) + "\n"
+            + self._t("cfg_modules", count=total_mods) + "\n"
+            + self._t("cfg_commands", count=total_cmds) + "\n"
+            + self._t("cfg_python", version=sys.version.split()[0]) + "\n"
+            + self._t("cfg_style", compat=_compat) + "\n"
+            + self._t("cfg_premium", premium=premium) + "\n"
+            + self._t("cfg_authors")
         )
         await event.edit(text, parse_mode="html")
