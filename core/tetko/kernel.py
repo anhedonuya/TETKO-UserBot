@@ -144,19 +144,16 @@ class Kernel:
             context=self.context,
         )
         self.inline = _TetkoInline(kernel=self)
+        from core.tetko.inline_manager import InlineManager as _InlineManager
+        self.inline_manager = _InlineManager(self)
         self._mcub_inline_handlers = None
         self._mcub_inline_bot = None
-        # Ссылка на inline_callback_map (для make_cb_button и InlineHandlers)
         if not hasattr(self, "inline_callback_map"):
             self.inline_callback_map = {}
         if not hasattr(self, "_inline_cb_lock"):
             import threading as _th
             self._inline_cb_lock = _th.Lock()
         self._loop_tasks: list[asyncio.Task] = []
-
-        # лог-чат
-
-        # Связываем важные объекты с клиентом Telethon для быстрого доступа из модулей
         self.client.kernel = self
         self.client.loader = self.loader
         self.client.registry = self.registry

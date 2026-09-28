@@ -9,7 +9,7 @@ import traceback
 from datetime import datetime, timezone
 
 from core.tetko import Module, command, watcher, loop
-from core_inline.lib.manager import InlineManager
+from core.tetko import InlineManager
 
 
 ACCESS_CATEGORIES = {

@@ -472,24 +472,12 @@ class BotClient:
             except (ValueError, TypeError):
                 pass
         if not allowed and sender is not None:
-            try:
-                from core.tetko import db as _db
-                import json as _json
-                raw = _db.db_get("inline_perm", "allowed_users")
-                if raw:
-                    users = _json.loads(raw) if isinstance(raw, str) else raw
-                    if sender in (users or []):
-                        allowed = True
-                denied_raw = _db.db_get("inline_perm", "denied_users")
-                if denied_raw:
-                    denied = _json.loads(denied_raw) if isinstance(denied_raw, str) else denied_raw
-                    if sender in (denied or []):
-                        allowed = False
-                mode = _db.db_get("inline_perm", "everyone_mode")
-                if mode:
-                    allowed = True
-            except Exception:
-                pass
+            im = getattr(self.kernel, "inline_manager", None)
+            if im is not None:
+                try:
+                    allowed = await im.is_allowed(sender, context=event)
+                except Exception:
+                    allowed = False
 
         if not allowed:
             log.warning(f"🤖 Bot callback: отказано sender={sender} (owner={owner})")

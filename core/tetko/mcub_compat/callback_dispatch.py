@@ -77,27 +77,13 @@ async def _is_allowed(kernel, event) -> bool:
         except (ValueError, TypeError):
             pass
 
+    im = getattr(kernel, "inline_manager", None)
+    if im is None:
+        return False
     try:
-        from core.tetko import db as _db
-        raw = _db.db_get("inline_perm", "allowed_users")
-        if raw:
-            import json as _json
-            users = _json.loads(raw) if isinstance(raw, str) else raw
-            if sender in (users or []):
-                return True
-        denied_raw = _db.db_get("inline_perm", "denied_users")
-        if denied_raw:
-            import json as _json
-            denied = _json.loads(denied_raw) if isinstance(denied_raw, str) else denied_raw
-            if sender in (denied or []):
-                return False
-        mode = _db.db_get("inline_perm", "everyone_mode")
-        if mode:
-            return True
+        return await im.is_allowed(sender, context=event)
     except Exception:
-        pass
-
-    return False
+        return False
 
 
 async def _call_handler(entry: dict, event: Any, kernel: Any = None) -> None:
