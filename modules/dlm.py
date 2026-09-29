@@ -1,7 +1,7 @@
 """DLM — Dynamic Loader of Modules.
 
 Системный модуль: тянет модули строго из официального каталога
-flexOwnerAL/repo-TETKO-modules.
+anhedonuya/TETKO-dlm.
 Автообновление: проверяет новые версии, скачивает и перезагружает.
 """
 from __future__ import annotations
@@ -16,7 +16,7 @@ from core.tetko import Module, command, loop
 
 log = logging.getLogger("TETKO.module.dlm")
 
-CATALOG_REPO = "flexOwnerAL/repo-TETKO-modules"
+CATALOG_REPO = "anhedonuya/TETKO-dlm"
 CATALOG_BRANCH = "main"
 CATALOG_API = f"https://api.github.com/repos/{CATALOG_REPO}/contents/"
 CATALOG_RAW = f"https://raw.githubusercontent.com/{CATALOG_REPO}/{CATALOG_BRANCH}"
