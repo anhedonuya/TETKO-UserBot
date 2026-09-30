@@ -837,9 +837,6 @@ class InlineHandlers:
         )
 
     def _setup_inline_send_handler(self) -> None:
-        # Only register with Telethon clients (which have .on() method).
-        # Aiogram Bot objects do not have .on() - they use Dispatcher routers,
-        # and there is no aiogram equivalent for UpdateBotInlineSend.
         on = self._get_bot_client_on()
         if on is None:
             self.kernel.logger.debug(
@@ -848,12 +845,6 @@ class InlineHandlers:
             )
             return
 
-        # InlineHandlers is instantiated many times throughout the codebase
-        # (once per inline_form/inline_query_and_click/... call). Each call
-        # to .on() registers a brand new closure, and Telethon does not
-        # deduplicate handlers - so without this guard, UpdateBotInlineSend
-        # would trigger inline_temp handlers once per InlineHandlers instance
-        # ever created, causing handlers to fire multiple times.
         if getattr(self.bot_client, "_mcub_inline_send_handler_registered", False):
             return
         self.bot_client._mcub_inline_send_handler_registered = True
@@ -912,9 +903,6 @@ class InlineHandlers:
 
                     if allow_user:
                         if allow_user != "all":
-                            # allow_user is a user ID (or list) from inline_temp.
-                            # callback_permissions is for callback tokens only;
-                            # inline_temp stores allow_user directly in temp_data.
                             is_allowed = False
                             if isinstance(allow_user, int):
                                 is_allowed = user_id == allow_user
@@ -1075,7 +1063,6 @@ class InlineHandlers:
         self._form_counter += 1
         form_id = self._make_form_id()
 
-        # Keep the ttl around so we can expire ad-hoc callbacks attached to buttons
         self._current_form_ttl = ttl
         self._cleanup_inline_callback_map()
 
@@ -1474,8 +1461,6 @@ class InlineHandlers:
         style = btn_dict.get("style")
 
         if b_type == "callback":
-            # Support both traditional byte data and callable callbacks with
-            # auto-generated callback tokens.
             data = btn_dict.get("data", btn_dict.get("callback_data", ""))
             callback = btn_dict.get("callback")
 
@@ -1536,8 +1521,6 @@ class InlineHandlers:
                     markup.append([btn])
             return markup
         except Exception as e:
-            # json.JSONDecodeError is a subclass of ValueError which is a
-            # subclass of Exception - no need to list it separately
             self.kernel.logger.warning(f"{self.lang['json_parsing_error']}: {e}")
             return []
 
@@ -1919,7 +1902,6 @@ class InlineHandlers:
                                 **article_kwargs,
                             )
                         except TypeError:
-                            # formatted article instead of failing the form.
                             try:
                                 builder = event.builder.article(
                                     "Inline Form",
@@ -2133,7 +2115,6 @@ class InlineHandlers:
                     elif not self._callback_entry_allows_user(entry, event.sender_id):
                         return await event.answer(self.lang["no_access"], alert=False)
 
-            # 1. Built-in service callbacks
             if data_str.startswith("show_tb:"):
                 await self._handle_show_traceback(event, data_str)
             elif data_str.startswith("find_similar:"):
@@ -2180,7 +2161,6 @@ class InlineHandlers:
                 elif entry.get("kwargs", {}).get("url"):
                     return
 
-            # 3. Legacy prefix/pattern handlers
             for pattern, handler in list(self.kernel.callback_handlers.items()):
                 p_str = pattern.decode() if isinstance(pattern, bytes) else str(pattern)
                 if data_str.startswith(p_str):
@@ -2210,7 +2190,6 @@ class InlineHandlers:
     async def _handle_show_traceback(self, event, data_str: str) -> None:
         """Show the stored traceback for a given error ID."""
         try:
-            # Format is always "show_tb:{error_id}"
             parts = data_str.split(":", 1)
             if len(parts) < 2 or not parts[1]:
                 return await event.answer(
@@ -2225,7 +2204,6 @@ class InlineHandlers:
                     f"⚠️ {self.lang['traceback_expired']}", alert=True
                 )
 
-            # traceback_text is already HTML-formatted by ErrorFormatter
             if len(traceback_text) > 3800:
                 traceback_text = (
                     traceback_text[:3800] + "\n<code>... [truncated]</code>"
@@ -2260,7 +2238,6 @@ class InlineHandlers:
             if klogger is not None:
                 similar_ids = klogger.get_similar_errors_by_hash(func_hash)
             else:
-                # Fallback: access cache directly
                 raw = self.kernel.cache.get(f"similar:{func_hash}")
                 similar_ids = list(raw) if raw else []
 
@@ -2285,8 +2262,6 @@ class InlineHandlers:
     async def _handle_mute_error(self, event, data_str: str) -> None:
         """Mute a specific error type+source for one hour."""
         try:
-            # New format: "mute_err:{token}". The full source is stored in cache.
-            # Old format "mute_err:{error_type}:{source}" is kept as a fallback.
             parts = data_str.split(":", 2)
             if len(parts) < 2 or not parts[1]:
                 return await event.answer(
@@ -2314,7 +2289,6 @@ class InlineHandlers:
             if klogger is not None:
                 klogger.mute_error(error_type, source)
             else:
-                # Fallback: write directly to cache
                 self.kernel.cache.set(f"mute:{error_type}:{source}", True, ttl=3600)
 
             await event.answer(
@@ -2376,9 +2350,6 @@ class InlineHandlers:
         )
 
         try:
-            # Check if this is a hikka-compat handler by explicit markers only.
-            # Hikka/Heroku convention-based handlers are marked by the compat
-            # registration layer; never infer this from arbitrary function names.
             handler_func = getattr(handler, "__func__", handler)
             is_hikka_handler = (
                 getattr(handler, "__hikka_inline_handler__", False)
@@ -2515,10 +2486,8 @@ class InlineHandlers:
                 elif isinstance(result, list):
                     converted = []
                     for item in result:
-                        # Skip if already a Telethon-compatible object (has _bytes method)
                         if hasattr(item, "_bytes"):
                             converted.append(item)
-                        # Check for aiogram types (they have 'id' and 'title' but no '_bytes')
                         elif hasattr(item, "id") and hasattr(item, "title"):
                             converted.append(item)
                         elif isinstance(item, dict):

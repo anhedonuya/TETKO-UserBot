@@ -10,7 +10,6 @@ from telethon import TelegramClient, events
 
 from core.tetko.context import Context
 from core.tetko.dispatcher import EventDispatcher
-# MCUB-compat: используем полноценный InlineHandlers и InlineBot
 try:
     from core_inline.handlers import InlineHandlers
 except Exception as _e:
@@ -93,13 +92,11 @@ class Kernel:
     ):
         self.client = client
         self.config = dict(config or {})
-        # префикс: приоритет — config.json → аргумент → "."
         self.prefix = (
             self.config.get("command_prefix")
             or prefix
             or "."
         )
-        # лог-чат
         self.log_chat_id = self.config.get("log_chat_id") or None
         self.bot_command_handlers = {}
         self.premium_user = False
@@ -110,14 +107,8 @@ class Kernel:
 
         self.logger = log
         self.CONFIG_FILE = "config.json"
-        # MCUB core_inline expects these names on the kernel.  TETKO keeps
-        # the canonical values in config, so expose read-only-compatible
-        # aliases here instead of making core_inline depend on TETKO internals.
         self.API_ID = int(self.config.get("api_id") or 0)
         self.API_HASH = str(self.config.get("api_hash") or "")
-        # MCUB-compatible loading context.  TETKO remains the authoritative
-        # runtime; these fields are populated only while an MCUB module is
-        # being registered.
         self.current_loading_module = None
         self.current_loading_module_type = None
         self.callback_handlers = {}
@@ -128,7 +119,6 @@ class Kernel:
         self._live_module_configs = {}
         self.start_time = time.time()
 
-        # Контекст ядра: admin_id, prefix, language, config, handle_error
         self.context = Context(
             admin_id=self.config.get("admin_id") or self.config.get("owner_id"),
             prefix=self.prefix,
@@ -164,7 +154,6 @@ class Kernel:
         log.info("🚀 Запуск ядра TETKO...")
         await self.setup_mcub_inline()
 
-        # проверяем premium у владельца
         try:
             me = await self.client.get_me()
             self.context.user_premium = bool(getattr(me, "premium", False))
@@ -172,11 +161,9 @@ class Kernel:
         except Exception as e:
             log.warning(f"Не удалось проверить premium: {e}")
 
-        # 1. Загружаем модули из папки modules/
         count = await self.loader.load_all()
         log.info(f"📦 Успешно загружено модулей: {count}")
 
-        # 2. Регистрируем обработчик входящих исходящих сообщений Telethon
         @self.client.on(events.NewMessage(outgoing=True))
         async def message_handler(event):
             await self.dispatcher.handle_message(self.client, event)
@@ -189,7 +176,6 @@ class Kernel:
         async def callback_handler(event):
             await self.dispatcher.handle_callback(self.client, event)
 
-        # 3. Запускаем фоновые задачи модулей (@loop)
         self._start_loops()
 
         log.info("✅ Ядро TETKO полностью инициализировано и готово!")

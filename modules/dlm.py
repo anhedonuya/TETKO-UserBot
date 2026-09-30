@@ -212,16 +212,13 @@ class DLMModule(Module):
     async def _update_module(self, file: str) -> bool:
         """Скачать новую версию модуля в modules_custom/ и перезагрузить."""
         url = f"{CATALOG_RAW}/{file}"
-        # пользовательские модули — в CUSTOM_DIR, иначе ищем в MODULES_DIR
         if (CUSTOM_DIR / file).exists() or not (MODULES_DIR / file).exists():
             target = CUSTOM_DIR / file
         else:
-            # системный модуль — не перезаписываем
             log.warning(f"DLM: {file} — системный, обновление пропущено")
             return False
         backup = target.parent / f"{file}.bak"
 
-        # 1. Скачать
         try:
             import aiohttp
             async with aiohttp.ClientSession() as session:
@@ -234,31 +231,26 @@ class DLMModule(Module):
             log.exception(f"DLM: ошибка скачивания {file}: {e}")
             return False
 
-        # 2. Валидация
         if "class " not in content or "Module" not in content:
             log.error(f"DLM: {file} не похож на TETKO-модуль")
             return False
 
-        # 3. Бэкап
         try:
             if target.exists():
                 backup.write_text(target.read_text(encoding="utf-8"), encoding="utf-8")
         except Exception as e:
             log.warning(f"DLM: не удалось сделать .bak для {file}: {e}")
 
-        # 4. Записать
         try:
             target.write_text(content, encoding="utf-8")
         except Exception as e:
             log.exception(f"DLM: не удалось записать {file}: {e}")
             return False
 
-        # 5. Перезагрузить (если loader поддерживает)
         try:
             file_stem = file[:-3]  # "randomedits"
             loader = getattr(self.client, "loader", None)
             if loader is not None:
-                # ищем реальное имя модуля в реестре (например, "RandomEdits")
                 real_name = None
                 for reg_name in list(self.kernel.registry.list_modules().keys()):
                     if reg_name.lower() == file_stem.lower() or reg_name.lower().replace(" ", "") == file_stem.lower():
@@ -279,7 +271,6 @@ class DLMModule(Module):
                 return True
         except Exception as e:
             log.exception(f"DLM: ошибка перезагрузки {file}: {e}")
-            # откат из .bak
             if backup.exists():
                 try:
                     target.write_text(backup.read_text(encoding="utf-8"), encoding="utf-8")
@@ -296,10 +287,8 @@ class DLMModule(Module):
         if not self.cfg.get("auto_update", True):
             return
 
-        # если интервал в конфиге отличается — пропускаем
         target_interval = int(self.cfg.get("update_interval", 3600))
         if target_interval != 3600:
-            # упрощённо: не поддерживаем разный интервал без перезапуска loop
             pass
 
         try:
@@ -350,7 +339,6 @@ class DLMModule(Module):
         if bot is None:
             return
 
-        # topic_id — для форумов
         topic_id = None
         try:
             rt = getattr(cb_event, "reply_to", None)
@@ -362,10 +350,8 @@ class DLMModule(Module):
         except Exception:
             pass
 
-        # chat_id = 0 у inline-callback → не валидный
         peer = getattr(cb_event, "chat_id", None)
 
-        # если 0/None — берём input_chat, потом sender_id
         if not peer:
             try:
                 peer = await cb_event.get_input_chat()
@@ -385,20 +371,17 @@ class DLMModule(Module):
 
         try:
             if imid:
-                # редактируем inline-сообщение
                 await bot.edit_inline_menu(
                     inline_message_id=imid,
                     text=text,
                     buttons=buttons,
                 )
-                # ВАЖНО: сохраняем imid для НОВЫХ token'ов кнопок
                 if not hasattr(bot, "_inlines"):
                     bot._inlines = {}
                 for row in buttons:
                     for btn in row:
                         bot._inlines[btn["token"]] = imid
             else:
-                # отправляем новое
                 await bot.send_inline_menu(
                     chat_id=peer,
                     key=f"dlm_menu_{int(time.time())}",
@@ -446,7 +429,6 @@ class DLMModule(Module):
             )
             buttons = []
 
-            # список модулей (5 на странице)
             for item in page_items:
                 p = _mod_path(item["file"])
                 if p is None:
@@ -462,7 +444,6 @@ class DLMModule(Module):
 
                 buttons.append([kernel.inline.make_button(label, on_click, ttl=600)])
 
-            # пагинация
             nav = []
             if page > 0:
                 async def on_prev(cb, p=page - 1):
@@ -495,7 +476,6 @@ class DLMModule(Module):
 
             buttons.append([kernel.inline.make_button("🔄 Обновить", on_refresh, ttl=600)])
 
-        # topic_id
         topic_id = None
         try:
             rt = getattr(event_or_cb, "reply_to", None)
@@ -539,7 +519,6 @@ class DLMModule(Module):
             await cb_event.answer("Модуль не найден")
             return
 
-        # путь в одной из папок
         mod_path = None
         for base in (CUSTOM_DIR, MODULES_DIR):
             if (base / file).exists():

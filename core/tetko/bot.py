@@ -50,7 +50,6 @@ class BotClient:
         self.client = TelegramClient("tetko_inline_bot", api_id, api_hash)
         self._bot_token = bot_token
 
-        # Хранилище готовых меню: key → {text, buttons, created, ttl}
         self._menus: dict[str, dict] = {}
         self._inline_sends: dict[str, str] = {}
 
@@ -60,17 +59,14 @@ class BotClient:
         self.username = me.username
         log.info(f"🤖 Inline-бот запущен: @{self.username}")
 
-        # inline-запросы (например, @tetkodevbot <key>)
         @self.client.on(events.InlineQuery())
         async def on_inline(event):
             await self._handle_inline(event)
 
-        # callback от кнопок
         @self.client.on(events.CallbackQuery())
         async def on_callback(event):
             await self._handle_callback(event)
 
-        # /start, /menu, /help
         @self.client.on(events.NewMessage(pattern=r"^/(start|menu|help)"))
         async def on_start(event):
             await self._handle_start(event)
@@ -94,7 +90,6 @@ class BotClient:
     ) -> None:
         """Зарегистрировать готовое меню под ключом key."""
         now = time.time()
-        # чистим только меню (dict-и с "created")
         self._menus = {
             k: v for k, v in self._menus.items()
             if not isinstance(v, dict) or now - v.get("created", 0) < v.get("ttl", 600)
@@ -118,7 +113,6 @@ class BotClient:
             ReplyInlineMarkup, KeyboardButtonRow, KeyboardButtonCallback,
         )
 
-        # парсим HTML в entities
         msg_text = text
         entities = None
         try:
@@ -127,7 +121,6 @@ class BotClient:
         except Exception as e:
             log.debug(f"edit_inline_menu: parse failed: {e}")
 
-        # markup
         rows = []
         for row in buttons:
             kb_row = []
@@ -151,7 +144,6 @@ class BotClient:
         if entities:
             kwargs["entities"] = entities
 
-        # ВАЖНО: редактировать inline-сообщение может ТОЛЬКО бот, не юзербот!
         return await self.client(EditInlineBotMessageRequest(**kwargs))
 
     def get_inline_message_id(self, token: str):
@@ -204,15 +196,12 @@ class BotClient:
           2. Запрашиваем inline-результат у бота
           3. Отправляем результат в чат
         """
-        # 1. Регистрация
         self.register_menu(key, text, buttons)
 
-        # 2. Запрос к боту
         query_str = query or key
         kernel = self.kernel
         userbot = kernel.client
 
-        # если это уже InputPeer — используем как есть
         _t = type(chat_id).__name__
         if _t.startswith('InputPeer'):
             peer = chat_id
@@ -234,13 +223,11 @@ class BotClient:
             log.error(f"send_inline_menu: нет результатов от бота для {query_str}")
             return None
 
-        # 3. Отправка
         from telethon.tl.custom.inlineresult import InlineResult
         inline_results = [
             InlineResult(userbot, r, results.query_id)
             for r in results.results
         ]
-        # если topic_id — используем reply_to с top_msg_id
         if topic_id:
             reply_to_obj = InputReplyToMessage(
                 reply_to_msg_id=topic_id,
@@ -255,7 +242,6 @@ class BotClient:
         else:
             message = await inline_results[0].click(chat_id)
 
-        # ждём inline_message_id из UpdateBotInlineSend
         imid = None
         for _ in range(25):
             await asyncio.sleep(0.2)
@@ -264,7 +250,6 @@ class BotClient:
                 break
 
 
-        # сохраняем inline_message_id для каждого token
         if imid:
             if not hasattr(self, "_inlines"):
                 self._inlines: dict = {}
@@ -273,8 +258,6 @@ class BotClient:
                     token = btn["token"]
                     self._inlines[token] = imid
 
-            # если в тексте есть <tg-emoji> — пересылаем через edit
-            # (InputBotInlineMessageText игнорирует custom_emoji)
             if "<tg-emoji" in text:
                 try:
                     result = await self.edit_inline_menu(imid, text, buttons)
@@ -290,7 +273,6 @@ class BotClient:
             key = query[len("rich:"):]
             menu = self._menus.get(key)
             if menu is None:
-                # fallback: старый формат rich:<html>
                 html_text = key
                 menu = {"text": html_text, "buttons": []}
             html_text = menu.get("text", "")
@@ -303,7 +285,6 @@ class BotClient:
 
             if rich is not None:
                 try:
-                    # строим reply_markup из кнопок
                     reply_markup = None
                     buttons = menu.get("buttons") or []
                     if buttons:
@@ -311,7 +292,6 @@ class BotClient:
                         for row in buttons:
                             kb_row = []
                             for b in row:
-                                # Уже Telethon-объект (KeyboardButtonCopy, KeyboardButtonCallback, ...)
                                 if not isinstance(b, dict):
                                     kb_row.append(b)
                                     continue
@@ -377,10 +357,8 @@ class BotClient:
                 except Exception as e:
                     log.warning(f"_handle_inline: table result failed: {e}")
 
-        # ищем меню по ключу
         menu = self._menus.get(query)
 
-        # чистим просроченные
         now = time.time()
         self._menus = {
             k: v for k, v in self._menus.items()
@@ -388,7 +366,6 @@ class BotClient:
         }
 
         if menu is None:
-            # дефолтный ответ
             results = [InputBotInlineResult(
                 id=f"empty_{secrets.token_hex(4)}",
                 type="article",
@@ -401,7 +378,6 @@ class BotClient:
             await event.answer(results, cache_time=0, gallery=False)
             return
 
-        # строим кнопки
         rows = []
         for row in menu["buttons"]:
             kb_row = []
@@ -416,10 +392,8 @@ class BotClient:
 
         markup = ReplyInlineMarkup(rows=rows) if rows else None
 
-        # ID результата — это же key меню, чтобы юзербот знал, что выбирать
         result_id = query
 
-        # парсим HTML в entities
         msg_text = menu["text"]
         entities = None
         try:

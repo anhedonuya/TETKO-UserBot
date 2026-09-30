@@ -72,7 +72,6 @@ class Inline:
         from telethon.tl.custom import Button
         from telethon.client.buttons import ButtonMethods
 
-        # конвертируем наши dict-ы в Button.inline
         rows = []
         for row in buttons:
             btn_row = []
@@ -85,14 +84,12 @@ class Inline:
                 btn_row.append(Button.inline(btn["label"], data=data))
             rows.append(btn_row)
 
-        # build_reply_markup — метод клиента (self = client)
         client = self.kernel.client
         try:
             return client.build_reply_markup(rows)
         except Exception as e:
             log.warning(f"_build_markup: client.build_reply_markup failed: {e}")
 
-        # fallback — вручную
         from telethon.tl.types import (
             ReplyInlineMarkup, KeyboardButtonRow, KeyboardButtonCallback,
         )
@@ -124,7 +121,6 @@ class Inline:
         markup = self._build_markup(buttons)
         peer = await self.kernel.client.get_input_entity(chat_id)
 
-        # парсим HTML в entities + получаем текст без тегов
         message_text = text
         entities = None
         if parse_mode == "html":
@@ -160,7 +156,6 @@ class Inline:
             except Exception:
                 return None
 
-        # markup
         from telethon.tl.custom import Button
         rows = []
         for row in buttons:
@@ -174,12 +169,9 @@ class Inline:
                 btn_row.append(Button.inline(b["label"], data=data))
             rows.append(btn_row)
 
-        # попробовать через bot_client (inline edit)
         bot = getattr(self.kernel, "bot_client", None)
         imid = None
-        # 1. из события
         imid = getattr(event, "inline_message_id", None)
-        # 2. из кэша _inlines по token кнопки
         if not imid:
             data = getattr(event, "data", b"")
             if isinstance(data, bytes):
@@ -194,7 +186,6 @@ class Inline:
                     text=text,
                     buttons=buttons,
                 )
-                # обновим imid для новых токенов
                 if not hasattr(bot, "_inlines"):
                     bot._inlines = {}
                 for row in buttons:
@@ -204,7 +195,6 @@ class Inline:
             except Exception as e:
                 log.warning(f"inline.edit через bot не сработал: {e}")
 
-        # fallback: обычный edit
         try:
             return await event.edit(text, buttons=rows, parse_mode="html")
         except Exception as e:

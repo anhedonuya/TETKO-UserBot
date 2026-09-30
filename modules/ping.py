@@ -48,7 +48,6 @@ class PingModule(Module):
         try:
             from telethon.tl.functions.messages import EditMessageRequest
 
-            # парсим HTML в entities
             parsed, entities = await self.client._parse_message_text(text, "html")
 
             await self.client(EditMessageRequest(

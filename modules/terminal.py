@@ -13,7 +13,6 @@ MAX_OUTPUT = 3500
 
 CMD_TIMEOUT = 30
 
-# Это защита от СЛУЧАЙНОГО разрушения, не от целенаправленной атаки.
 BLACKLIST = [
     r"rm\s+(-[a-zA-Z]*\s+)*-[a-zA-Z]*[rR][a-zA-Z]*f?\s+/\s*$",
     r"rm\s+(-[a-zA-Z]*\s+)*-[a-zA-Z]*[rR][a-zA-Z]*f?\s+/\*",
@@ -61,7 +60,6 @@ def _clean_error(text: str) -> str:
     import re as _re
     cleaned = []
     for line in text.split("\n"):
-        # убрать префикс "/path/to/sh: N:"
         line = _re.sub(r"^/[^:]*sh:\s*\d+:\s*", "", line)
         line = _re.sub(r"^/data/[^:]+:\s*\d+:\s*", "", line)
         if line.strip():

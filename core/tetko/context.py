@@ -29,10 +29,8 @@ class Context:
         self.prefix = prefix
         self.language = language
         self.config = dict(config or {})
-        # заполняется при kernel.start() — есть ли у владельца Telegram Premium
         self.user_premium: bool = False
 
-        # Хук на централизованную обработку ошибок (можно переопределить)
         self._error_handler = None
 
     def is_owner(self, user_id: Optional[int]) -> bool:
@@ -61,7 +59,6 @@ class Context:
             except Exception as e:
                 log.error(f"error_handler упал: {e}")
 
-        # Fallback: редактируем сообщение, если возможно
         if event is not None and exc is not None:
             try:
                 await event.edit(f"❌ Ошибка: `{exc}`")

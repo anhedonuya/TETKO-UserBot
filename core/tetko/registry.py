@@ -39,13 +39,10 @@ class Command:
         sig = inspect.signature(self.func)
         params = list(sig.parameters.values())
 
-        # bound method — self уже связан, params содержит только реальные аргументы
-        # Ожидаемые варианты:
         if len(params) == 0:
             return await self.func()
         if len(params) == 1:
             return await self.func(event)
-        # >= 2 — передаём event + args
         return await self.func(event, args)
 
     def __repr__(self) -> str:

@@ -81,7 +81,6 @@ ACCESS_CATEGORIES = {
     },
 }
 
-# Flat map: command → category
 _CMD_TO_CAT: dict = {}
 for _cat_key, _cat_info in ACCESS_CATEGORIES.items():
     for _cmd in _cat_info.get("commands", []):

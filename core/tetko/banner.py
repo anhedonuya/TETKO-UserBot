@@ -16,11 +16,9 @@ def _rgb_to_ansi(rgb: tuple) -> str:
 RESET = "\033[0m"
 BOLD = "\033[1m"
 
-# Цвета: красный -> розовый
 COLOR_START = (220, 20, 20)     # ярко-красный
 COLOR_END = (255, 105, 180)     # hot pink
 
-# ASCII-арт TETKO (5 строк) — БЕЗ raw-строк, с двойными бэкслешами
 TETKO_ART = [
     "┌┬┐┌─┐┌┬┐┬┌─┌─┐",
     " │ ├┤  │ ├┴┐│ │",

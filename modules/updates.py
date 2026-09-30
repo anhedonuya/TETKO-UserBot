@@ -148,7 +148,6 @@ class UpdatesModule(Module):
             )
             return
 
-        # сохраняем сообщение, чтобы после рестарта отредактировать
         db_set("updates", "pending_reload", {
             "chat_id": event.chat_id,
             "message_id": event.message.id,

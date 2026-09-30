@@ -510,9 +510,6 @@ class InlineBot:
             await asyncio.sleep(1)
             username_msg = await client.send_message(botfather, requested_username)
 
-            # Only consider messages that arrived *after* we sent the username,
-            # so old BotFather "Done!" replies from previous bot creations are
-            # not accidentally picked up.
             since_id = max(username_msg.id, newbot_msg.id)
 
             token, actual_username, err_kind = await self._wait_for_bot_token(
@@ -609,7 +606,6 @@ class InlineBot:
 
                 lowered = text.lower()
 
-                # can give the user a specific, actionable error.
                 if "can't add more than" in lowered or (
                     "sorry" in lowered and "delete one of your bots" in lowered
                 ):
