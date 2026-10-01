@@ -1,0 +1,224 @@
+{
+    "search": {
+        "timeout": 12.0,
+        "max_bytes": 500000,
+        "max_links": 50,
+        "max_parallel": 5,
+        "max_snippet": 1200,
+        "max_sources_display": 10,
+        "cache_ttl": 300,
+        "default_param": "q",
+        "priority_first": true,
+        "rate_limit_seconds": 0.5,
+        "dedup_threshold": 0.85,
+        "bm25_k1": 1.5,
+        "bm25_b": 0.75,
+        "highlight_matches": true,
+        "morphology_enabled": true,
+        "readability_enabled": true,
+        "boolean_operators_enabled": true,
+        "operators_enabled": true,
+        "entities_enabled": true,
+        "slow_query_threshold": 5.0,
+        "source_weight_default": 1.0,
+        "sites_per_page": 5,
+        "trusted_per_page": 5,
+        "history_size": 50,
+        "latency_max_entries": 200
+    },
+    "net": {
+        "proxies": [],
+        "tor_proxy": "socks5://127.0.0.1:9050",
+        "use_tor": false,
+        "region_ua": true,
+        "use_jina": true,
+        "use_curl_cffi": true,
+        "blocked_detection": true,
+        "js_detection": true,
+        "cf_refuse": true,
+        "captcha_bypass": true,
+        "captcha_bypass_retries": 2,
+        "cookies_enabled": true,
+        "cookie_jar_max": 500,
+        "site_overrides": true,
+        "auto_fallback_url": true
+    },
+    "plugins": {
+        "enabled": true,
+        "dir_legacy": "data/dontdothat_plugins",
+        "dir_new": "data/dontdothat_plugins_new",
+        "state_dir": "data/dontdothat_plugins_state",
+        "logs_dir": "data/dontdothat_plugins_logs",
+        "versions_dir": "data/dontdothat_plugins_versions",
+        "repo": "flexOwnerAL/dontdothat-plugins",
+        "repo_branch": "main",
+        "repo_token": "",
+        "repo_method": "auto",
+        "repo_local_path": "data/dontdothat_repo",
+        "repo_commit_name": "DontDoThatADM",
+        "repo_commit_email": "ddt@local",
+        "index_path": "index.json",
+        "index_ttl": 3600,
+        "trusted_authors": [],
+        "trusted_repos": [],
+        "privileged_authors": [],
+        "trust_overrides": {
+            "rcagent": "trusted",
+            "probe": "sandboxed"
+        },
+        "require_signed": false,
+        "quota_per_minute": 60,
+        "max_versions": 3,
+        "auto_disable_on_error": false,
+        "error_threshold": 5,
+        "per_plugin": {},
+        "dir": "data/dontdothat_plugins"
+    },
+    "roles": {
+        "role_requires_trusted": true,
+        "roles": {
+            "admins": [
+                7217187199
+            ],
+            "superadmins": [
+                855890735,
+                6020965582
+            ],
+            "editors": [
+                7633739044,
+                7273008753
+            ],
+            "contributors": [],
+            "verified": [],
+            "searchers": [],
+            "viewers": [
+                6925543882
+            ],
+            "guests": [],
+            "trusted": []
+        },
+        "role_rate": {
+            "guest": 0,
+            "viewer": 10,
+            "contributor": 20,
+            "verified": 30,
+            "searcher": 30,
+            "editor": 100,
+            "admin": 200,
+            "superadmin": 500
+        },
+        "trusted_quotas": {},
+        "quota_used": {},
+        "rate_limit_per_user": 30,
+        "user_rate_map": {
+            "8196166342": [
+                1790625903.3351853
+            ],
+            "7217187199": [
+                1790788545.1734219,
+                1790788589.2855911
+            ]
+        },
+        "notify_owner_on_trusted": true,
+        "auto_demote_threshold": 60,
+        "auto_demote_window": 3600,
+        "muted_until": {}
+    },
+    "ui": {
+        "log_searches": false,
+        "use_inline_bot": false,
+        "inline_cb_ttl": 900,
+        "inline_edit_in_place": false,
+        "menu_ttl": 3600
+    },
+    "sqlite": {
+        "enabled": true,
+        "db_path": "data/dontdothat.db"
+    },
+    "audit": {
+        "enabled": true,
+        "max_records": 2000
+    },
+    "webhook": {
+        "url": "",
+        "secret": "",
+        "retries": 3
+    },
+    "backup": {
+        "encryption_key": ""
+    },
+    "security": {
+        "allowed_chats": [],
+        "blocked_users": [],
+        "blocked_queries": [],
+        "pii_filter_in_snippet": false,
+        "ssrf_enabled": true
+    },
+    "advanced": {
+        "watchers": [],
+        "notes": {},
+        "saved_results": {},
+        "synonyms": {},
+        "templates": {},
+        "pending_sources": {},
+        "pending_next_id": 1,
+        "pending_actions": {},
+        "pending_actions_ttl": 86400,
+        "snapshots_enabled": true,
+        "morph_cache_max": 5000,
+        "user_activity_max": 500,
+        "trusted_chat_id": null,
+        "trusted_log_chat": null,
+        "require_approval_for_remove": true,
+        "role_require_trusted_hard": true
+    },
+    "_bootstrap": true,
+    "cfg_dir": "data/dontdothat_cfg_new_lib",
+    "cfg_base_dir": "data/tetko_config",
+    "sqlite_db_path": "data/dontdothat.db",
+    "plugins_dir_legacy": "data/dontdothat_plugins",
+    "plugins_dir_new": "data/dontdothat_plugins_new",
+    "plugins_dir_bundles": "data/dontdothat_plugins_bundles",
+    "state_dir": "data/dontdothat_plugins_state",
+    "logs_dir": "data/dontdothat_plugins_logs",
+    "versions_dir": "data/dontdothat_plugins_versions",
+    "sites": {
+        "lite_ddg": {
+            "url": "https://lite.duckduckgo.com/lite/?q={query}",
+            "host": "lite.duckduckgo.com",
+            "alive": true,
+            "tags": [
+                "web"
+            ],
+            "priority": "high"
+        },
+        "mojeek": {
+            "url": "https://www.mojeek.com/search?q={query}",
+            "host": "www.mojeek.com",
+            "alive": true,
+            "tags": [
+                "web"
+            ],
+            "priority": "normal"
+        },
+        "marginalia": {
+            "url": "https://search.marginalia.nu/search?query={query}",
+            "host": "search.marginalia.nu",
+            "alive": true,
+            "tags": [
+                "web"
+            ],
+            "priority": "normal"
+        },
+        "wiki": {
+            "url": "https://ru.wikipedia.org/w/index.php?search={query}",
+            "host": "ru.wikipedia.org",
+            "alive": true,
+            "tags": [
+                "wiki"
+            ],
+            "priority": "normal"
+        }
+    },
+    "sites_initialized": true
+}
