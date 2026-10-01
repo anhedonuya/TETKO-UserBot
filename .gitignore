@@ -1,13 +1,3 @@
-*.bak.*
-*.db-shm
-*.db-wal
-
-data/adder_repo/
-data/dontdothat_repo/
-
-EOF
-PYEOF
-
 __pycache__/
 *.py[cod]
 *$py.class
@@ -43,6 +33,8 @@ session/
 *.db-journal
 *.sqlite
 *.sqlite3
+*.db-shm
+*.db-wal
 
 *.log
 logs/
@@ -66,6 +58,7 @@ Thumbs.db
 desktop.ini
 
 *.bak
+*.bak.*
 *.backup
 *.mybackup
 *.tmp
@@ -75,3 +68,6 @@ modules_custom/__pycache__/
 modules_custom/**/*.bak
 modules_legacy/
 TETKO-UserBot-main/
+
+data/adder_repo/
+data/dontdothat_repo/
