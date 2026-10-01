@@ -51,9 +51,9 @@ class Module:
         except Exception:
             return {}
 
-    def _t(self, key: str, **kwargs) -> str:
+    def _t(self, _key: str, **kwargs) -> str:
         data = self.strings
-        value = data.get(key, key)
+        value = data.get(_key, _key)
         if kwargs and isinstance(value, str):
             try:
                 return value.format(**kwargs)

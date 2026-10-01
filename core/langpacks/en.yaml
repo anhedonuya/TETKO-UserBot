@@ -1508,6 +1508,38 @@ config:
   modules_config_title_short: Modules Config - {page}
 
 tek:
+  cfg_choose_section: "<tg-emoji emoji-id=\"5368808376694248152\">💬</tg-emoji> Choose section:"
+  cfg_modules_title_sys: "<tg-emoji emoji-id=\"5341715473882955310\">⚙️</tg-emoji> System modules:"
+  cfg_modules_title_user: "<tg-emoji emoji-id=\"5341715473882955310\">⚙️</tg-emoji> User modules:"
+  cfg_page: "{page}/{total}"
+  cfg_btn_user: "<tg-emoji emoji-id=\"5341715473882955310\">⚙️</tg-emoji> скачание модулэ"
+  cfg_btn_sys: "<tg-emoji emoji-id=\"5341715473882955310\">⚙️</tg-emoji> системние модулэ"
+  cfg_btn_edit: "✏️ изменить"
+  cfg_btn_reset: "🗑 сбросить"
+  cfg_inline_header: "✏️ <b>Правка:</b> <code>{module}</code> → <code>{key}</code>"
+  cfg_inline_instr: "<code>@{bot} {token} {value}</code>"
+  cfg_inline_hint: "<i>Нажми изменить — инлайн откроется прямо в поле ввода. Допиши значение и отправь.</i>"
+  cfg_edit_title: '✏️ <b>Edit:</b> <code>{module}</code> → <code>{key}</code>'
+  cfg_edit_hint: '<i>Click a value or use</i> <code>.cfg set {module} {key} &lt;value&gt;</code>'
+  cfg_edit_title: '✏️ <b>Edit:</b> <code>{module}</code> → <code>{key}</code>'
+  cfg_edit_hint: '<i>Click a value or use</i> <code>.cfg set {module} {key} &lt;value&gt;</code>'
+  cfg_modules_title: "<tg-emoji emoji-id=\"5368808376694248152\">💬</tg-emoji> Конфиги модулей:"
+  cfg_module_title: '⚙️ <b>Config:</b> <code>{name}</code>'
+  cfg_no_modules: '📭 No configs'
+  cfg_no_keys: '📭 No keys'
+  cfg_key_line: '• <code>{key}</code> = <code>{value}</code>'
+  cfg_set_usage: 'Usage: <code>.tekcfg set &lt;module&gt; &lt;key&gt; &lt;value&gt;</code>'
+  cfg_del_usage: 'Usage: <code>.tekcfg del &lt;module&gt; &lt;key&gt;</code>'
+  cfg_set_done: '✅ <code>{key}</code> = <code>{value}</code>'
+  cfg_del_done: '🗑 Removed <code>{key}</code>'
+  cfg_not_found: '❌ Module <code>{module}</code> not found'
+  cfg_key_not_found: '❌ Key <code>{key}</code> not found'
+  cfg_back: '← Back'
+  cfg_close: "<tg-emoji emoji-id=\"5370872568041471196\">🗑️</tg-emoji> не ни нада больше"
+  cfg_hint: '<i>Commands: .tekcfg set/del</i>'
+  cfg_open: 'Open'
+  cfg_new: '➕ New key'
+  cfg_new_usage: 'Usage: <code>.tekcfg set &lt;module&gt; &lt;key&gt; &lt;value&gt;</code>'
   help_title: 'Which modules do you need help with?'
   btn_sys: 'system modules'
   btn_user: 'user modules'

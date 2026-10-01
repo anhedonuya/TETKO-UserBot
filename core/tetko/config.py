@@ -26,10 +26,16 @@ class ModuleConfig:
         if self.path.exists():
             try:
                 with open(self.path, "r", encoding="utf-8") as f:
-                    self._data = json.load(f)
+                    loaded = json.load(f)
             except Exception as e:
                 log.error(f"[{self.module_name}] Ошибка чтения: {e}")
-                self._data = dict(self.defaults)
+                loaded = {}
+
+            merged = dict(self.defaults)
+            merged.update(loaded or {})
+            self._data = merged
+            if merged != loaded:
+                self._save()
         else:
             self._data = dict(self.defaults)
             self._save()

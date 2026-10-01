@@ -535,3 +535,428 @@ class Tek(Module):
             + self._t("cfg_authors")
         )
         await event.edit(text, parse_mode="html")
+
+
+    def _cfg_dir(self):
+        from pathlib import Path
+        return Path("data/tetko_config")
+
+    def _cfg_list(self):
+        d = self._cfg_dir()
+        if not d.exists():
+            return []
+        return sorted(p.stem for p in d.glob("*.json"))
+
+    def _cfg_read(self, module: str):
+        import json
+        from pathlib import Path
+        p = self._cfg_dir() / f"{module}.json"
+        if not p.exists():
+            return None
+        try:
+            return json.loads(p.read_text(encoding="utf-8"))
+        except Exception:
+            return None
+
+    def _cfg_write(self, module: str, data: dict):
+        import json
+        from pathlib import Path
+        d = self._cfg_dir()
+        d.mkdir(parents=True, exist_ok=True)
+        p = d / f"{module}.json"
+        p.write_text(json.dumps(data, ensure_ascii=False, indent=4), encoding="utf-8")
+
+    @command(name="cfg", aliases=["mcfg", "moduleconfig"], description="Конфиги модулей")
+    async def cmd_cfg(self, event, args):
+        self.log.info(f"[cfg] вызвана, args={args!r}")
+        if not args:
+            await self._cfg_show_list(event)
+            return
+
+        sub = args[0].lower()
+
+        if sub in ("system", "sys", "системные"):
+            await self._cfg_show_list(event, kind="system", page=0)
+            return
+        if sub in ("user", "custom", "пользовательские"):
+            await self._cfg_show_list(event, kind="user", page=0)
+            return
+
+        if sub == "set":
+            if len(args) < 4:
+                await event.edit(self._t("cfg_set_usage"), parse_mode="html")
+                return
+            mod, key = args[1], args[2]
+            value = " ".join(args[3:])
+            data = self._cfg_read(mod)
+            if data is None:
+                await event.edit(self._t("cfg_not_found", module=self._esc(mod)), parse_mode="html")
+                return
+            parsed = self._parse_cfg_value(value)
+            data[key] = parsed
+            self._cfg_write(mod, data)
+            await event.edit(self._t("cfg_set_done", key=self._esc(key), value=self._esc(str(parsed))), parse_mode="html")
+            return
+
+        if sub == "del":
+            if len(args) < 3:
+                await event.edit(self._t("cfg_del_usage"), parse_mode="html")
+                return
+            mod, key = args[1], args[2]
+            data = self._cfg_read(mod)
+            if data is None:
+                await event.edit(self._t("cfg_not_found", module=self._esc(mod)), parse_mode="html")
+                return
+            if key not in data:
+                await event.edit(self._t("cfg_key_not_found", key=self._esc(key)), parse_mode="html")
+                return
+            data.pop(key, None)
+            self._cfg_write(mod, data)
+            await event.edit(self._t("cfg_del_done", key=self._esc(key)), parse_mode="html")
+            return
+
+        await self._cfg_show_module(event, args[0])
+
+    @staticmethod
+    def _parse_cfg_value(s: str):
+        low = s.lower()
+        if low in ("true", "yes", "on"):
+            return True
+        if low in ("false", "no", "off"):
+            return False
+        if low == "null" or low == "none":
+            return None
+        try:
+            return int(s)
+        except ValueError:
+            pass
+        try:
+            return float(s)
+        except ValueError:
+            pass
+        if (s.startswith("[") and s.endswith("]")) or (s.startswith("{") and s.endswith("}")):
+            try:
+                import json
+                return json.loads(s)
+            except Exception:
+                pass
+        return s
+
+    def _cfg_kind(self, name: str) -> str:
+        reg = getattr(self.kernel, "registry", None)
+        if reg is not None:
+            for mod_name, mod in reg._modules.items():
+                if mod_name.lower() == name.lower():
+                    return "system" if self._is_system(mod) else "user"
+        from pathlib import Path as _P
+        for p_name, kind in (("modules", "system"), ("modules_custom", "user")):
+            d = _P(p_name)
+            if d.exists():
+                for f in d.glob("*.py"):
+                    if f.stem.lower() == name.lower():
+                        return kind
+        return "system"
+
+    async def _cfg_show_menu(self, event_or_cb, is_cb: bool = False):
+        text = self._t("cfg_choose_section")
+        rows = []
+
+        async def on_sys(cb):
+            await self._cfg_show_list(cb, is_cb=True, kind="system", page=0)
+
+        async def on_user(cb):
+            await self._cfg_show_list(cb, is_cb=True, kind="user", page=0)
+
+        async def on_close(cb):
+            await self._close_cfg(cb)
+
+        rows.append([
+            self.kernel.inline.make_button(self._t("cfg_btn_sys"), on_sys, ttl=600),
+            self.kernel.inline.make_button(self._t("cfg_btn_user"), on_user, ttl=600),
+        ])
+        rows.append([
+            self.kernel.inline.make_button(self._t("cfg_close"), on_close, ttl=600),
+        ])
+
+        await self._reply_cfg(event_or_cb, is_cb, text, rows)
+
+    async def _cfg_show_list(self, event_or_cb, is_cb: bool = False, kind: str = "system", page: int = 0):
+        all_mods = self._cfg_list()
+        filtered = [
+            m for m in all_mods
+            if self._cfg_kind(m) == kind and self._cfg_read(m)
+        ]
+
+        per_page = 6
+        total_pages = max(1, (len(filtered) + per_page - 1) // per_page)
+        page = max(0, min(page, total_pages - 1))
+        page_mods = filtered[page * per_page:(page + 1) * per_page]
+
+        title_key = "cfg_modules_title_sys" if kind == "system" else "cfg_modules_title_user"
+        text = self._t(title_key) + "\n\n"
+        if not page_mods:
+            text += self._t("cfg_no_modules")
+        else:
+            text += "<blockquote expandable>"
+            for m in page_mods:
+                text += f"• <code>{self._esc(m)}</code>\n"
+            text += "</blockquote>"
+
+        rows = []
+
+        chunk = []
+        for m in page_mods:
+            async def on_mod(cb, name=m):
+                await self._cfg_show_module(cb, name, is_cb=True)
+            chunk.append(self.kernel.inline.make_button(m, on_mod, ttl=600))
+            if len(chunk) == 3:
+                rows.append(chunk)
+                chunk = []
+        if chunk:
+            rows.append(chunk)
+
+        nav = []
+        if page > 0:
+            async def on_prev(cb, k=kind, pg=page - 1):
+                await self._cfg_show_list(cb, is_cb=True, kind=k, page=pg)
+            nav.append(self.kernel.inline.make_button("<", on_prev, ttl=600))
+
+        if total_pages > 1:
+            async def on_noop(cb):
+                try:
+                    await cb.answer()
+                except Exception:
+                    pass
+            nav.append(self.kernel.inline.make_button(
+                self._t("cfg_page", page=page + 1, total=total_pages),
+                on_noop, ttl=600,
+            ))
+
+        if page < total_pages - 1:
+            async def on_next(cb, k=kind, pg=page + 1):
+                await self._cfg_show_list(cb, is_cb=True, kind=k, page=pg)
+            nav.append(self.kernel.inline.make_button(">", on_next, ttl=600))
+
+        if nav:
+            rows.append(nav)
+
+        async def on_back(cb):
+            await self._cfg_show_menu(cb, is_cb=True)
+
+        async def on_close(cb):
+            await self._close_cfg(cb)
+
+        rows.append([
+            self.kernel.inline.make_button(self._t("cfg_back"), on_back, ttl=600),
+            self.kernel.inline.make_button(self._t("cfg_close"), on_close, ttl=600),
+        ])
+
+        await self._reply_cfg(event_or_cb, is_cb, text, rows)
+
+    async def _cfg_show_module(self, event_or_cb, module: str, is_cb: bool = False):
+        data = self._cfg_read(module)
+        if data is None:
+            await event_or_cb.edit(self._t("cfg_not_found", module=self._esc(module)), parse_mode="html")
+            return
+
+        if not data:
+            lines = self._t("cfg_no_keys")
+        else:
+            lines = "\n".join(
+                self._t("cfg_key_line", key=self._esc(k), value=self._esc(repr(v)))
+                for k, v in data.items()
+            )
+
+        text = self._t("cfg_module_title", name=self._esc(module)) + "\n\n<blockquote expandable>" + lines + "</blockquote>\n" + self._t("cfg_hint")
+
+        rows = []
+        chunk = []
+        for k, v in list(data.items())[:20]:
+            async def on_edit(cb, m=module, key=k):
+                await self._cfg_edit_key(cb, m, key)
+            chunk.append(self.kernel.inline.make_button(f"✏️ {k}", on_edit, ttl=600))
+            if len(chunk) == 3:
+                rows.append(chunk)
+                chunk = []
+        if chunk:
+            rows.append(chunk)
+
+        async def on_back(cb):
+            await self._cfg_show_list(cb, is_cb=True)
+
+        async def on_close(cb):
+            await self._close_cfg(cb)
+
+        rows.append([
+            self.kernel.inline.make_button(self._t("cfg_back"), on_back, ttl=600),
+            self.kernel.inline.make_button(self._t("cfg_close"), on_close, ttl=600),
+        ])
+
+        await self._reply_cfg(event_or_cb, is_cb, text, rows)
+
+    def _defaults_for(self, module: str, key: str):
+        try:
+            from pathlib import Path as _P
+            import importlib.util
+            mod_path = _P("modules") / f"{module}.py"
+            if not mod_path.exists():
+                mod_path = _P("modules_custom") / f"{module}.py"
+            if not mod_path.exists():
+                return None
+            spec = importlib.util.spec_from_file_location(f"_cfg_def_{module}", mod_path)
+            if spec is None or spec.loader is None:
+                return None
+            m = importlib.util.module_from_spec(spec)
+            try:
+                spec.loader.exec_module(m)
+            except Exception:
+                return None
+            for name in dir(m):
+                cls = getattr(m, name)
+                if isinstance(cls, type) and isinstance(getattr(cls, "config", None), dict):
+                    return cls.config.get(key, None)
+        except Exception:
+            return None
+        return None
+
+    async def _cfg_edit_key(self, cb, module: str, key: str):
+        data = self._cfg_read(module)
+        if data is None or key not in data:
+            await cb.answer(self._t("cfg_key_not_found", key=key))
+            return
+
+        value = data[key]
+        try:
+            await cb.answer()
+        except Exception:
+            pass
+
+        header = self._t("cfg_edit_title", module=self._esc(module), key=self._esc(key))
+        cur = self._t("cfg_key_line", key=self._esc(key), value=self._esc(repr(value)))
+        hint = self._t("cfg_inline_hint")
+        text = f"{header}\n\n<blockquote>{cur}</blockquote>\n{hint}"
+
+        import secrets as _sec
+        token = _sec.token_hex(3)
+        if not hasattr(self.kernel, "_cfg_pending"):
+            self.kernel._cfg_pending = {}
+        self.kernel._cfg_pending[token] = {
+            "module": module,
+            "key": key,
+            "ts": time.time(),
+        }
+
+        rows = [
+            [{
+                "label": self._t("cfg_btn_edit"),
+                "kind": "switch_current",
+                "query": f"cfg_{token} ",
+            }],
+        ]
+
+        async def on_reset(c, m=module, k=key, v=value):
+            d = self._cfg_read(m) or {}
+            default = self._defaults_for(m, k)
+            if default is not None:
+                d[k] = default
+            else:
+                if isinstance(v, str):
+                    d[k] = ""
+                elif isinstance(v, list):
+                    d[k] = []
+                elif isinstance(v, dict):
+                    d[k] = {}
+                elif isinstance(v, bool):
+                    d[k] = False
+                elif isinstance(v, int):
+                    d[k] = 0
+                elif isinstance(v, float):
+                    d[k] = 0.0
+            self._cfg_write(m, d)
+            await self._cfg_edit_key(c, m, k)
+
+        async def on_back(c, m=module):
+            await self._cfg_show_module(c, m, is_cb=True)
+
+        async def on_close(c):
+            await self._close_cfg(c)
+
+        rows.append([
+            self.kernel.inline.make_button(self._t("cfg_btn_reset"), on_reset, ttl=600),
+        ])
+        rows.append([
+            self.kernel.inline.make_button(self._t("cfg_back"), on_back, ttl=600),
+            self.kernel.inline.make_button(self._t("cfg_close"), on_close, ttl=600),
+        ])
+
+        await self.kernel.inline.edit(cb, text, rows)
+
+    async def _cfg_set_key(self, cb, module: str, key: str, value):
+        data = self._cfg_read(module) or {}
+        data[key] = value
+        self._cfg_write(module, data)
+        await self._cfg_edit_key(cb, module, key)
+
+    async def _cfg_bump(self, cb, module: str, key: str, delta):
+        data = self._cfg_read(module) or {}
+        if key not in data:
+            return
+        cur = data[key]
+        try:
+            if isinstance(cur, bool):
+                new = not cur
+            elif isinstance(cur, int):
+                new = int(cur) + int(delta)
+            elif isinstance(cur, float):
+                new = round(float(cur) + float(delta), 4)
+            else:
+                return
+        except Exception:
+            return
+        data[key] = new
+        self._cfg_write(module, data)
+        await self._cfg_edit_key(cb, module, key)
+
+    async def _close_cfg(self, cb):
+        try:
+            await cb.answer()
+        except Exception:
+            pass
+        bot = getattr(self.kernel, "bot_client", None)
+        if bot is None:
+            return
+        data = getattr(cb, "data", b"")
+        if isinstance(data, bytes):
+            data = data.decode("utf-8", errors="replace")
+        imid = getattr(cb, "inline_message_id", None) or bot.get_inline_message_id(data)
+        if not imid:
+            return
+        try:
+            from telethon.tl.functions.messages import EditInlineBotMessageRequest
+            await bot.client(EditInlineBotMessageRequest(
+                id=imid,
+                message=self._t("menu_closed"),
+                reply_markup=None,
+            ))
+        except Exception as e:
+            log.warning(f"[TEK] close cfg failed: {e}")
+
+    async def _reply_cfg(self, event_or_cb, is_cb: bool, text: str, rows: list):
+        if is_cb:
+            await self.kernel.inline.edit(event_or_cb, text, rows)
+            return
+        bot = getattr(self.kernel, "bot_client", None)
+        if bot is None:
+            await event_or_cb.edit(text, parse_mode="html")
+            return
+        chat_id = event_or_cb.chat_id
+        try:
+            await event_or_cb.delete()
+        except Exception:
+            pass
+        await bot.send_inline_menu(
+            chat_id=chat_id,
+            key=f"cfgmenu_{int(time.time())}",
+            text=text,
+            buttons=rows,
+        )

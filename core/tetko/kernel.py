@@ -152,7 +152,7 @@ class Kernel:
     async def start(self) -> None:
         """Запуск ядра, загрузка модулей и старт событий."""
         log.info("🚀 Запуск ядра TETKO...")
-        await self.setup_mcub_inline()
+        # await self.setup_mcub_inline()
 
         try:
             me = await self.client.get_me()

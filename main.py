@@ -20,6 +20,13 @@ logging.basicConfig(
     format="%(asctime)s - [%(levelname)s] - %(name)s: %(message)s",
     datefmt="%H:%M:%S",
 )
+_fh = logging.FileHandler("main.log", encoding="utf-8", mode="a")
+_fh.setLevel(logging.INFO)
+_fh.setFormatter(logging.Formatter(
+    "%(asctime)s - [%(levelname)s] - %(name)s: %(message)s",
+    datefmt="%H:%M:%S",
+))
+logging.getLogger().addHandler(_fh)
 log = logging.getLogger("TETKO")
 
 CONFIG_PATH = Path("config.json")
@@ -245,7 +252,7 @@ async def main():
     session_name = "tetko"
 
     import logging as _l
-    _l.getLogger().setLevel(_l.CRITICAL)
+    _l.getLogger().setLevel(_l.INFO)
 
     print("🔥 Инициализация TETKO UserBot...")
     print("📡 Подключение к Telegram...")
@@ -294,7 +301,7 @@ async def main():
 
     await kernel.start()
 
-    _l.getLogger().setLevel(_l.CRITICAL)
+    _l.getLogger().setLevel(_l.INFO)
 
     os.system("clear")
 

@@ -1338,6 +1338,38 @@ zen:
   errors: 'Ваш <b>{tetko}</b> <b>завантажився з помилками</b> :('
 
 tek:
+  cfg_choose_section: "<tg-emoji emoji-id=\"5368808376694248152\">💬</tg-emoji> Обери розділ:"
+  cfg_modules_title_sys: "<tg-emoji emoji-id=\"5341715473882955310\">⚙️</tg-emoji> Системні модулі:"
+  cfg_modules_title_user: "<tg-emoji emoji-id=\"5341715473882955310\">⚙️</tg-emoji> Користувацькі модулі:"
+  cfg_page: "{page}/{total}"
+  cfg_btn_user: "<tg-emoji emoji-id=\"5341715473882955310\">⚙️</tg-emoji> скачание модулэ"
+  cfg_btn_sys: "<tg-emoji emoji-id=\"5341715473882955310\">⚙️</tg-emoji> системние модулэ"
+  cfg_btn_edit: "✏️ изменить"
+  cfg_btn_reset: "🗑 сбросить"
+  cfg_inline_header: "✏️ <b>Правка:</b> <code>{module}</code> → <code>{key}</code>"
+  cfg_inline_instr: "<code>@{bot} {token} {value}</code>"
+  cfg_inline_hint: "<i>Нажми изменить — инлайн откроется прямо в поле ввода. Допиши значение и отправь.</i>"
+  cfg_edit_title: '✏️ <b>Правка:</b> <code>{module}</code> → <code>{key}</code>'
+  cfg_edit_hint: '<i>Натисни значення або введи через</i> <code>.cfg set {module} {key} &lt;знач&gt;</code>'
+  cfg_edit_title: '✏️ <b>Правка:</b> <code>{module}</code> → <code>{key}</code>'
+  cfg_edit_hint: '<i>Натисни значення або введи через</i> <code>.cfg set {module} {key} &lt;знач&gt;</code>'
+  cfg_modules_title: "<tg-emoji emoji-id=\"5368808376694248152\">💬</tg-emoji> Конфиги модулей:"
+  cfg_module_title: '⚙️ <b>Конфіг:</b> <code>{name}</code>'
+  cfg_no_modules: '📭 Конфігів немає'
+  cfg_no_keys: '📭 Ключів немає'
+  cfg_key_line: '• <code>{key}</code> = <code>{value}</code>'
+  cfg_set_usage: 'Використання: <code>.tekcfg set &lt;модуль&gt; &lt;ключ&gt; &lt;значення&gt;</code>'
+  cfg_del_usage: 'Використання: <code>.tekcfg del &lt;модуль&gt; &lt;ключ&gt;</code>'
+  cfg_set_done: '✅ <code>{key}</code> = <code>{value}</code>'
+  cfg_del_done: '🗑 Видалено <code>{key}</code>'
+  cfg_not_found: '❌ Модуль <code>{module}</code> не знайдено'
+  cfg_key_not_found: '❌ Ключ <code>{key}</code> не знайдено'
+  cfg_back: '← Назад'
+  cfg_close: "<tg-emoji emoji-id=\"5370872568041471196\">🗑️</tg-emoji> не ни нада больше"
+  cfg_hint: '<i>Команди: .tekcfg set/del</i>'
+  cfg_open: 'Відкрити'
+  cfg_new: '➕ Новий ключ'
+  cfg_new_usage: 'Використання: <code>.tekcfg set &lt;модуль&gt; &lt;ключ&gt; &lt;значення&gt;</code>'
   help_title: 'З якими модулями тобі потрібна допомога?'
   btn_sys: 'системні модулі'
   btn_user: 'юзер модулі'

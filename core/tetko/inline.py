@@ -6,8 +6,30 @@ import secrets
 import time
 from typing import Any, Callable, Optional
 
+from telethon.tl.types import (
+    KeyboardButtonCallback,
+    KeyboardButtonSwitchInline,
+    KeyboardButtonStyle,
+)
+
 log = logging.getLogger("TETKO.tetko.inline")
 
+
+
+import re as _re
+
+_TG_EMOJI_RE = _re.compile(r'<tg-emoji emoji-id="(\d+)">(.*?)</tg-emoji>')
+
+
+def _split_label(label: str) -> tuple[str, int | None]:
+    if not isinstance(label, str):
+        return str(label), None
+    m = _TG_EMOJI_RE.search(label)
+    if not m:
+        return label, None
+    emoji_id = int(m.group(1))
+    plain = _TG_EMOJI_RE.sub(lambda x: x.group(2), label)
+    return plain, emoji_id
 
 class Inline:
     """Менеджер inline-кнопок и временных callback-хендлеров."""
@@ -69,19 +91,39 @@ class Inline:
 
     def _build_markup(self, buttons: list[list[dict]]):
         """Собрать ReplyInlineMarkup через ButtonMethods.build_reply_markup."""
-        from telethon.tl.custom import Button
         from telethon.client.buttons import ButtonMethods
 
         rows = []
         for row in buttons:
             btn_row = []
             for btn in row:
+                kind = btn.get("kind", "callback") if isinstance(btn, dict) else "callback"
+                label, emoji_id = _split_label(btn["label"])
+                style = None
+                if emoji_id is not None:
+                    from telethon.tl.types import KeyboardButtonStyle
+                    style = KeyboardButtonStyle(icon=emoji_id)
+                if kind == "switch_current":
+                    kw = {"same_peer": True}
+                    if style is not None:
+                        kw["style"] = style
+                    btn_row.append(KeyboardButtonSwitchInline(text=label, query=btn.get("query", ""), **kw))
+                    continue
+                if kind == "switch":
+                    kw = {"same_peer": False}
+                    if style is not None:
+                        kw["style"] = style
+                    btn_row.append(KeyboardButtonSwitchInline(text=label, query=btn.get("query", ""), **kw))
+                    continue
                 data = btn["token"]
                 if isinstance(data, str):
                     data = data.encode("utf-8")
                 if len(data) > 64:
                     data = data[:64]
-                btn_row.append(Button.inline(btn["label"], data=data))
+                if style is not None:
+                    btn_row.append(KeyboardButtonCallback(text=label, data=data, style=style))
+                else:
+                    btn_row.append(KeyboardButtonCallback(text=label, data=data))
             rows.append(btn_row)
 
         client = self.kernel.client
@@ -92,17 +134,47 @@ class Inline:
 
         from telethon.tl.types import (
             ReplyInlineMarkup, KeyboardButtonRow, KeyboardButtonCallback,
+            KeyboardButtonSwitchInline,
         )
         kb_rows = []
         for row in buttons:
             kb_row = []
             for btn in row:
+                kind = btn.get("kind", "callback") if isinstance(btn, dict) else "callback"
+                label, emoji_id = _split_label(btn["label"])
+                style = None
+                if emoji_id is not None:
+                    from telethon.tl.types import KeyboardButtonStyle
+                    style = KeyboardButtonStyle(icon=emoji_id)
+                if kind == "switch_current":
+                    kw = {"same_peer": True}
+                    if style is not None:
+                        kw["style"] = style
+                    kb_row.append(KeyboardButtonSwitchInline(
+                        text=label,
+                        query=btn.get("query", ""),
+                        **kw,
+                    ))
+                    continue
+                if kind == "switch":
+                    kw = {"same_peer": False}
+                    if style is not None:
+                        kw["style"] = style
+                    kb_row.append(KeyboardButtonSwitchInline(
+                        text=label,
+                        query=btn.get("query", ""),
+                        **kw,
+                    ))
+                    continue
                 data = btn["token"]
                 if isinstance(data, str):
                     data = data.encode("utf-8")
                 if len(data) > 64:
                     data = data[:64]
-                kb_row.append(KeyboardButtonCallback(text=btn["label"], data=data))
+                if style is not None:
+                    kb_row.append(KeyboardButtonCallback(text=label, data=data, style=style))
+                else:
+                    kb_row.append(KeyboardButtonCallback(text=label, data=data))
             kb_rows.append(KeyboardButtonRow(buttons=kb_row))
         return ReplyInlineMarkup(rows=kb_rows)
 
@@ -156,21 +228,40 @@ class Inline:
             except Exception:
                 return None
 
-        from telethon.tl.custom import Button
         rows = []
         for row in buttons:
             btn_row = []
             for b in row:
+                kind = b.get("kind", "callback") if isinstance(b, dict) else "callback"
+                label, emoji_id = _split_label(b["label"])
+                style = None
+                if emoji_id is not None:
+                    from telethon.tl.types import KeyboardButtonStyle
+                    style = KeyboardButtonStyle(icon=emoji_id)
+                if kind == "switch_current":
+                    kw = {"same_peer": True}
+                    if style is not None:
+                        kw["style"] = style
+                    btn_row.append(KeyboardButtonSwitchInline(text=label, query=b.get("query", ""), **kw))
+                    continue
+                if kind == "switch":
+                    kw = {"same_peer": False}
+                    if style is not None:
+                        kw["style"] = style
+                    btn_row.append(KeyboardButtonSwitchInline(text=label, query=b.get("query", ""), **kw))
+                    continue
                 data = b["token"]
                 if isinstance(data, str):
                     data = data.encode("utf-8")
                 if len(data) > 64:
                     data = data[:64]
-                btn_row.append(Button.inline(b["label"], data=data))
+                if style is not None:
+                    btn_row.append(KeyboardButtonCallback(text=label, data=data, style=style))
+                else:
+                    btn_row.append(KeyboardButtonCallback(text=label, data=data))
             rows.append(btn_row)
 
         bot = getattr(self.kernel, "bot_client", None)
-        imid = None
         imid = getattr(event, "inline_message_id", None)
         if not imid:
             data = getattr(event, "data", b"")
@@ -190,7 +281,8 @@ class Inline:
                     bot._inlines = {}
                 for row in buttons:
                     for b in row:
-                        bot._inlines[b["token"]] = imid
+                        if isinstance(b, dict) and "token" in b:
+                            bot._inlines[b["token"]] = imid
                 return
             except Exception as e:
                 log.warning(f"inline.edit через bot не сработал: {e}")

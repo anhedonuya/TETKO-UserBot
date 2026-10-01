@@ -20,6 +20,7 @@ from telethon.tl.functions.messages import (
     SendInlineBotResultRequest,
 )
 from telethon.tl.types import (
+    KeyboardButtonSwitchInline,
     UpdateBotInlineSend,
     InputBotInlineResult,
     InputBotInlineMessageText,
@@ -34,6 +35,22 @@ from telethon.tl.types import (
 
 log = logging.getLogger("TETKO.tetko.bot")
 
+
+
+import re as _re
+
+_TG_EMOJI_RE = _re.compile(r'<tg-emoji emoji-id="(\d+)">(.*?)</tg-emoji>')
+
+
+def _split_label(label: str):
+    if not isinstance(label, str):
+        return str(label), None
+    m = _TG_EMOJI_RE.search(label)
+    if not m:
+        return label, None
+    emoji_id = int(m.group(1))
+    plain = _TG_EMOJI_RE.sub(lambda x: x.group(2), label)
+    return plain, emoji_id
 
 class BotClient:
     """Inline-бот: регистрация меню + отправка через inline в любой чат."""
@@ -111,6 +128,7 @@ class BotClient:
         from telethon.tl.functions.messages import EditInlineBotMessageRequest
         from telethon.tl.types import (
             ReplyInlineMarkup, KeyboardButtonRow, KeyboardButtonCallback,
+            KeyboardButtonSwitchInline,
         )
 
         msg_text = text
@@ -125,12 +143,41 @@ class BotClient:
         for row in buttons:
             kb_row = []
             for b in row:
+                kind = b.get("kind", "callback") if isinstance(b, dict) else "callback"
+                label, emoji_id = _split_label(b["label"])
+                style = None
+                if emoji_id is not None:
+                    from telethon.tl.types import KeyboardButtonStyle
+                    style = KeyboardButtonStyle(icon=emoji_id)
+                if kind == "switch_current":
+                    kw = {"same_peer": True}
+                    if style is not None:
+                        kw["style"] = style
+                    kb_row.append(KeyboardButtonSwitchInline(
+                        text=label,
+                        query=b.get("query", ""),
+                        **kw,
+                    ))
+                    continue
+                if kind == "switch":
+                    kw = {"same_peer": False}
+                    if style is not None:
+                        kw["style"] = style
+                    kb_row.append(KeyboardButtonSwitchInline(
+                        text=label,
+                        query=b.get("query", ""),
+                        **kw,
+                    ))
+                    continue
                 data = b["token"]
                 if isinstance(data, str):
                     data = data.encode("utf-8")
                 if len(data) > 64:
                     data = data[:64]
-                kb_row.append(KeyboardButtonCallback(text=b["label"], data=data))
+                if style is not None:
+                    kb_row.append(KeyboardButtonCallback(text=label, data=data, style=style))
+                else:
+                    kb_row.append(KeyboardButtonCallback(text=label, data=data))
             rows.append(KeyboardButtonRow(buttons=kb_row))
         markup = ReplyInlineMarkup(rows=rows) if rows else None
 
@@ -164,6 +211,17 @@ class BotClient:
         for row in buttons:
             btn_row = []
             for b in row:
+                kind = b.get("kind", "callback") if isinstance(b, dict) else "callback"
+                if kind == "switch_current":
+                    btn_row.append(Button.switch_inline(
+                        b["label"], query=b.get("query", ""), same_peer=True
+                    ))
+                    continue
+                if kind == "switch":
+                    btn_row.append(Button.switch_inline(
+                        b["label"], query=b.get("query", ""), same_peer=False
+                    ))
+                    continue
                 data = b["token"]
                 if isinstance(data, str):
                     data = data.encode("utf-8")
@@ -255,6 +313,8 @@ class BotClient:
                 self._inlines: dict = {}
             for row in buttons:
                 for btn in row:
+                    if not isinstance(btn, dict) or "token" not in btn:
+                        continue
                     token = btn["token"]
                     self._inlines[token] = imid
 
@@ -268,6 +328,14 @@ class BotClient:
     async def _handle_inline(self, event) -> None:
         """Обработка inline-запросов от юзербота."""
         query = (event.text or "").strip()
+
+        if query.startswith("cfg_"):
+            try:
+                await self._handle_cfg_inline(event, query)
+            except Exception as e:
+                log.exception(f"cfg inline: {e}")
+            return
+
 
         if query.startswith("rich:"):
             key = query[len("rich:"):]
@@ -295,10 +363,25 @@ class BotClient:
                                 if not isinstance(b, dict):
                                     kb_row.append(b)
                                     continue
+                                kind = b.get("kind", "callback")
+                                text_btn = b.get("text", "·")
+                                if kind == "switch_current":
+                                    kb_row.append(KeyboardButtonSwitchInline(
+                                        text=text_btn,
+                                        query=b.get("query", ""),
+                                        same_peer=True,
+                                    ))
+                                    continue
+                                if kind == "switch":
+                                    kb_row.append(KeyboardButtonSwitchInline(
+                                        text=text_btn,
+                                        query=b.get("query", ""),
+                                        same_peer=False,
+                                    ))
+                                    continue
                                 data = b.get("token", b.get("data", ""))
                                 if isinstance(data, str):
                                     data = data.encode("utf-8")
-                                text_btn = b.get("text", "·")
                                 kb_row.append(KeyboardButtonCallback(text=text_btn, data=data))
                             if kb_row:
                                 kb_rows.append(KeyboardButtonRow(buttons=kb_row))
@@ -382,12 +465,41 @@ class BotClient:
         for row in menu["buttons"]:
             kb_row = []
             for b in row:
+                kind = b.get("kind", "callback") if isinstance(b, dict) else "callback"
+                label, emoji_id = _split_label(b["label"])
+                style = None
+                if emoji_id is not None:
+                    from telethon.tl.types import KeyboardButtonStyle
+                    style = KeyboardButtonStyle(icon=emoji_id)
+                if kind == "switch_current":
+                    kw = {"same_peer": True}
+                    if style is not None:
+                        kw["style"] = style
+                    kb_row.append(KeyboardButtonSwitchInline(
+                        text=label,
+                        query=b.get("query", ""),
+                        **kw,
+                    ))
+                    continue
+                if kind == "switch":
+                    kw = {"same_peer": False}
+                    if style is not None:
+                        kw["style"] = style
+                    kb_row.append(KeyboardButtonSwitchInline(
+                        text=label,
+                        query=b.get("query", ""),
+                        **kw,
+                    ))
+                    continue
                 data = b["token"]
                 if isinstance(data, str):
                     data = data.encode("utf-8")
                 if len(data) > 64:
                     data = data[:64]
-                kb_row.append(KeyboardButtonCallback(text=b["label"], data=data))
+                if style is not None:
+                    kb_row.append(KeyboardButtonCallback(text=label, data=data, style=style))
+                else:
+                    kb_row.append(KeyboardButtonCallback(text=label, data=data))
             rows.append(KeyboardButtonRow(buttons=kb_row))
 
         markup = ReplyInlineMarkup(rows=rows) if rows else None
@@ -419,6 +531,109 @@ class BotClient:
         )]
 
         await event.answer(results, cache_time=0, gallery=False)
+
+    async def _handle_cfg_inline(self, event, query: str) -> None:
+        import json as _json
+        from pathlib import Path as _P
+
+        parts = query.split(maxsplit=1)
+        if len(parts) < 2:
+            await event.answer([
+                InputBotInlineResult(
+                    id=f"cfgerr_{secrets.token_hex(4)}",
+                    type="article",
+                    title="cfg",
+                    description="формат: cfg_<token> <значение>",
+                    send_message=InputBotInlineMessageText(
+                        message="🫥 формат: cfg_<token> <значение>"
+                    ),
+                )
+            ], cache_time=0, gallery=False)
+            return
+
+        head = parts[0]
+        raw_value = parts[1].strip()
+        token = head[len("cfg_"):]
+
+        pending = getattr(self.kernel, "_cfg_pending", {}) or {}
+        now = __import__("time").time()
+        for _t in [t for t, v in list(pending.items()) if now - v.get("ts", 0) > 900]:
+            pending.pop(_t, None)
+        info = pending.get(token)
+        if info is None:
+            await event.answer([
+                InputBotInlineResult(
+                    id=f"cfgexp_{secrets.token_hex(4)}",
+                    type="article",
+                    title="cfg",
+                    description="токен истёк",
+                    send_message=InputBotInlineMessageText(
+                        message="🫥 токен истёк — открой .cfg заново"
+                    ),
+                )
+            ], cache_time=0, gallery=False)
+            return
+
+        module = info.get("module")
+        key = info.get("key")
+
+        parsed = self._parse_cfg_value(raw_value)
+
+        cfg_path = _P("data/tetko_config") / f"{module}.json"
+        data = {}
+        if cfg_path.exists():
+            try:
+                data = _json.loads(cfg_path.read_text(encoding="utf-8"))
+            except Exception:
+                data = {}
+        data[key] = parsed
+        cfg_path.parent.mkdir(parents=True, exist_ok=True)
+        cfg_path.write_text(_json.dumps(data, ensure_ascii=False, indent=4), encoding="utf-8")
+
+        result_text = f"✅ <b>{module}</b> → <code>{key}</code> = <code>{parsed!r}</code>"
+        try:
+            parsed_text, entities = await self.client._parse_message_text(result_text, "html")
+        except Exception:
+            parsed_text, entities = result_text, None
+
+        kwargs = {"message": parsed_text}
+        if entities:
+            kwargs["entities"] = entities
+
+        await event.answer([
+            InputBotInlineResult(
+                id=f"cfgok_{secrets.token_hex(4)}",
+                type="article",
+                title="✅ сохранено",
+                description=f"{module}.{key} = {parsed!r}",
+                send_message=InputBotInlineMessageText(**kwargs),
+            )
+        ], cache_time=0, gallery=False)
+
+    @staticmethod
+    def _parse_cfg_value(s: str):
+        low = s.lower()
+        if low in ("true", "yes", "on"):
+            return True
+        if low in ("false", "no", "off"):
+            return False
+        if low in ("null", "none"):
+            return None
+        try:
+            return int(s)
+        except ValueError:
+            pass
+        try:
+            return float(s)
+        except ValueError:
+            pass
+        if (s.startswith("[") and s.endswith("]")) or (s.startswith("{") and s.endswith("}")):
+            try:
+                import json as _j
+                return _j.loads(s)
+            except Exception:
+                pass
+        return s
 
     async def _handle_callback(self, event) -> None:
         """Callback от inline-меню или owner-кнопок."""
