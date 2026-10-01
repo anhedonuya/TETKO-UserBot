@@ -1,3 +1,13 @@
+*.bak.*
+*.db-shm
+*.db-wal
+
+data/adder_repo/
+data/dontdothat_repo/
+
+EOF
+PYEOF
+
 __pycache__/
 *.py[cod]
 *$py.class
