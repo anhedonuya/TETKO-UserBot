@@ -30,6 +30,7 @@ class Context:
         self.language = language
         self.config = dict(config or {})
         self.user_premium: bool = False
+        self.user_username: str | None = None
 
         self._error_handler = None
 

@@ -1,68 +1,77 @@
-import os
-import sys
-import re
+from __future__ import annotations
+
 import asyncio
-import aiohttp
-from core.tetko import Module, command
+import os
+import re
+import sys
+from pathlib import Path
+
+from core.tetko import Module, command, shell
+
+try:
+    import aiohttp
+    _HAS_AIOHTTP = True
+except Exception:
+    aiohttp = None
+    _HAS_AIOHTTP = False
 
 
 MODULES_DIR = "modules_custom"
 
 
+def _esc(text):
+    if text is None:
+        return "-"
+    return str(text).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
 class Loader(Module):
     name = "Loader"
     __compat__ = "0.0.9.0"
-    version = "1.2.0"
+    version = "1.5.0"
     author = "@anhedonuya & @flexownerAL"
-    description = {
-        "ru": "Динамическая загрузка, обновление и выгрузка модулей tetko-compat",
-        "en": "Dynamic loader for tetko-compat modules",
-    }
-    config = {
-        "auto_install_reqs": True,
-    }
+    description = "Dynamic module loader"
+    config = {"auto_install_reqs": True}
 
-    async def _install_requirements(self, code: str, event):
-        req_match = re.search(r"#\s*(?:req|requirements|pip):\s*(.+)", code, re.IGNORECASE)
-        if req_match:
-            packages = req_match.group(1).strip().split()
-            if packages:
-                await event.edit(f"📦 Установка зависимостей: <code>{', '.join(packages)}</code>", parse_mode="html")
-                proc = await asyncio.create_subprocess_exec(
-                    sys.executable, "-m", "pip", "install", *packages,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
-                )
-                await proc.communicate()
+    async def _install_requirements(self, code, event):
+        m = re.search(r"#\s*(?:req|requirements|pip):\s*(.+)", code, re.IGNORECASE)
+        if not m:
+            return
+        pkgs = m.group(1).strip().split()
+        if not pkgs:
+            return
+        await event.edit(
+            shell.wrap(["pip install " + " ".join(pkgs)],
+                       cmd="pip", running=True, trailing=False),
+            parse_mode="html",
+        )
+        proc = await asyncio.create_subprocess_exec(
+            sys.executable, "-m", "pip", "install", *pkgs,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        await proc.communicate()
 
-    def _extract_meta(self, code: str) -> dict:
+    def _extract_meta(self, code):
         meta = {}
 
-        def grab(pattern):
-            m = re.search(pattern, code, re.MULTILINE)
+        def grab(pat):
+            m = re.search(pat, code, re.MULTILINE)
             return m.group(1).strip() if m else None
 
         meta["name"] = grab(r'^\s*name\s*=\s*["\']([^"\']+)["\']')
         meta["version"] = grab(r'^\s*version\s*=\s*["\']([^"\']+)["\']')
         meta["author"] = grab(r'^\s*author\s*=\s*["\']([^"\']+)["\']')
-        meta["compat"] = grab(r'^\s*__compat__\s*=\s*["\']([^"\']+)["\']')
-
-        desc_str = grab(r'^\s*description\s*=\s*["\']([^"\']+)["\']')
-        if desc_str:
-            meta["description"] = desc_str
+        desc = grab(r'^\s*description\s*=\s*["\']([^"\']+)["\']')
+        if desc:
+            meta["description"] = desc
         else:
-            desc_ru = grab(r'^\s*description\s*=\s*\{[^}]*["\']ru["\']\s*:\s*["\']([^"\']+)["\']')
-            desc_en = grab(r'^\s*description\s*=\s*\{[^}]*["\']en["\']\s*:\s*["\']([^"\']+)["\']')
-            meta["description"] = desc_ru or desc_en or "—"
-
+            ru = grab(r'^\s*description\s*=\s*\{[^}]*["\']ru["\']\s*:\s*["\']([^"\']+)["\']')
+            en = grab(r'^\s*description\s*=\s*\{[^}]*["\']en["\']\s*:\s*["\']([^"\']+)["\']')
+            meta["description"] = ru or en or "-"
         return meta
 
-    def _esc(self, text) -> str:
-        if text is None:
-            return "—"
-        return str(text).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-
-    @command("load", aliases=["dlmod"], doc="Загрузить модуль по файлу или ссылке")
+    @command("load", aliases=["dlmod"])
     async def cmd_load(self, event, args):
         loader = getattr(self.client, "loader", None)
         reply = await event.get_reply_message()
@@ -77,147 +86,143 @@ class Loader(Module):
         if reply and reply.media and hasattr(reply.media, "document"):
             doc = reply.media.document
             file_name = next(
-                (attr.file_name for attr in doc.attributes if hasattr(attr, "file_name")),
+                (getattr(a, "file_name", None) for a in doc.attributes if hasattr(a, "file_name")),
                 None,
             )
             if file_name and file_name.endswith(".py"):
-                await event.edit("📥 Скачивание файла модуля...")
+                await event.edit(
+                    shell.wrap(["tg download " + file_name],
+                               cmd="load", running=True, trailing=False),
+                    parse_mode="html",
+                )
                 tmp_dir = os.path.join(MODULES_DIR, ".tmp")
                 os.makedirs(tmp_dir, exist_ok=True)
                 tmp_path = await self.client.download_media(reply, file=tmp_dir)
                 with open(tmp_path, "r", encoding="utf-8") as f:
                     code_content = f.read()
                 mod_name = os.path.splitext(file_name)[0]
-                file_path = os.path.join(MODULES_DIR, f"{mod_name}.py")
+                file_path = os.path.join(MODULES_DIR, mod_name + ".py")
                 if os.path.abspath(tmp_path) != os.path.abspath(file_path):
                     os.replace(tmp_path, file_path)
             else:
-                await event.edit("❌ Файл должен иметь расширение <code>.py</code>.", parse_mode="html")
+                await event.edit(shell.wrap(["file must be .py"], cmd="load", trailing=True), parse_mode="html")
                 return
-
         elif url_arg and url_arg.strip().startswith("http"):
             url = url_arg.strip()
             if "github.com" in url and "raw.githubusercontent.com" not in url:
                 url = url.replace("github.com", "raw.githubusercontent.com").replace("/blob/", "/")
-
-            await event.edit("🌐 Скачивание модуля по URL...")
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url) as resp:
-                    if resp.status == 200:
-                        code_content = await resp.text()
-                        mod_name = url.split("/")[-1].replace(".py", "").split("?")[0]
-                        file_path = os.path.join(MODULES_DIR, f"{mod_name}.py")
-                        with open(file_path, "w", encoding="utf-8") as f:
-                            f.write(code_content)
-                    else:
-                        await event.edit(f"❌ Ошибка скачивания: HTTP <code>{resp.status}</code>", parse_mode="html")
-                        return
-        else:
+            if not _HAS_AIOHTTP:
+                await event.edit(shell.wrap(["aiohttp not installed"], cmd="load", trailing=True), parse_mode="html")
+                return
             await event.edit(
-                "❌ Ответьте на <code>.py</code> файл или укажите прямую ссылку.\n"
-                "Использование: <code>.load &lt;url&gt;</code> или reply + <code>.load</code>",
+                shell.wrap(["wget " + url[:80]], cmd="load", running=True, trailing=False),
                 parse_mode="html",
             )
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(url) as resp:
+                        if resp.status != 200:
+                            await event.edit(shell.wrap(["http " + str(resp.status)], cmd="load", trailing=True), parse_mode="html")
+                            return
+                        code_content = await resp.text()
+                        mod_name = url.split("/")[-1].replace(".py", "").split("?")[0]
+                        file_path = os.path.join(MODULES_DIR, mod_name + ".py")
+                        with open(file_path, "w", encoding="utf-8") as f:
+                            f.write(code_content)
+            except Exception as e:
+                await event.edit(shell.wrap(["fetch failed: " + _esc(e)], cmd="load", trailing=True), parse_mode="html")
+                return
+        else:
+            await event.edit(shell.wrap(["reply to .py or pass url"], cmd="load", trailing=True), parse_mode="html")
             return
 
         if code_content and self.cfg.get("auto_install_reqs"):
             await self._install_requirements(code_content, event)
 
-        await event.edit(f"⚙️ Подключение модуля <code>{self._esc(mod_name)}</code>...", parse_mode="html")
+        if not (loader and hasattr(loader, "load_module_from_file")):
+            await event.edit(
+                shell.wrap(["saved " + MODULES_DIR + "/" + mod_name + ".py (restart required)"],
+                           cmd="load", trailing=True),
+                parse_mode="html",
+            )
+            return
 
-        if loader and hasattr(loader, "load_module_from_file"):
-            try:
-                from pathlib import Path
-                before_modules = set(self.kernel.registry._modules)
-                loaded_module = await loader.load_module_from_file(Path(file_path))
-
-                meta = self._extract_meta(code_content or "")
-                shown_name = meta.get("name") or mod_name
-                shown_desc = meta.get("description") or "—"
-                shown_compat = meta.get("compat") or "—"
-                shown_author = meta.get("author") or "—"
-                prefix = getattr(self.kernel, "prefix", ".") or "."
-                cmds = []
-                for cmd in self.kernel.registry._commands.values():
-                    try:
-                        if getattr(cmd.module, "name", "") == shown_name:
-                            cmds.append(f"<code>{prefix}{self._esc(cmd.name)}</code>")
-                    except Exception:
-                        pass
-                cmds_text = " ".join(sorted(set(cmds))) or "<i>нет команд</i>"
-                text = (
-                    f"<blockquote><b>{self._esc(shown_name)}</b></blockquote>\n"
-                    f"<blockquote><b>Описание:</b> {self._esc(shown_desc)}</blockquote>\n"
-                    f"<blockquote><b>Автор:</b> {self._esc(shown_author)}</blockquote>\n"
-                    f"<blockquote><b>Команды:</b> {cmds_text}</blockquote>"
-                )
-                await event.edit(text, parse_mode="html")
-            except Exception as e:
-                self.log.exception(f"load: ошибка инициализации {mod_name}")
+        try:
+            await loader.load_module_from_file(Path(file_path))
+            meta = self._extract_meta(code_content or "")
+            shown_name = meta.get("name") or mod_name
+            shown_desc = meta.get("description") or "-"
+            shown_author = meta.get("author") or "-"
+            shown_version = meta.get("version") or "-"
+            prefix = getattr(self.kernel, "prefix", ".") or "."
+            cmds = []
+            for cmd in self.kernel.registry._commands.values():
                 try:
-                    if file_path and os.path.exists(file_path):
-                        os.remove(file_path)
+                    if getattr(cmd.module, "name", "") == shown_name:
+                        cmds.append(prefix + cmd.name)
                 except Exception:
                     pass
-                await event.edit(
-                    f"❌ Ошибка при инициализации модуля <code>{self._esc(mod_name)}</code>:\n<code>{self._esc(e)}</code>",
-                    parse_mode="html",
-                )
-        else:
+            cmds_text = " ".join(sorted(set(cmds))) or "-"
+            lines = [
+                "installed: " + _esc(shown_name) + " v" + _esc(shown_version),
+                "author   : " + _esc(shown_author),
+                "info     : " + _esc(shown_desc),
+                "cmds     : " + _esc(cmds_text),
+            ]
+            await event.edit(shell.wrap(lines, cmd="load", trailing=True), parse_mode="html")
+        except Exception as e:
+            self.log.exception("load init failed " + str(mod_name))
+            try:
+                if file_path and os.path.exists(file_path):
+                    os.remove(file_path)
+            except Exception:
+                pass
             await event.edit(
-                f"✅ Файл <code>{MODULES_DIR}/{self._esc(mod_name)}.py</code> сохранён. Перезапустите бота.",
+                shell.wrap(["install failed: " + _esc(e)], cmd="load", trailing=True),
                 parse_mode="html",
             )
 
-    @command("unload", doc="Выгрузить и удалить модуль")
+    @command("unload")
     async def cmd_unload(self, event, args):
         loader = getattr(self.client, "loader", None)
-
         if not args:
-            await event.edit("❌ Укажите имя модуля.\nИспользование: <code>.unload &lt;имя&gt;</code>", parse_mode="html")
+            await event.edit(shell.wrap(["usage: .unload <name>"], cmd="unload", trailing=True), parse_mode="html")
             return
-
-        mod_name = args[0].strip().replace(".py", "")
-
+        name = args[0].strip().replace(".py", "")
         if loader and hasattr(loader, "unload_module"):
-            await loader.unload_module(mod_name)
+            await loader.unload_module(name)
+        path = os.path.join(MODULES_DIR, name + ".py")
+        if os.path.exists(path):
+            os.remove(path)
+        await event.edit(shell.wrap(["removed " + _esc(name)], cmd="unload", trailing=True), parse_mode="html")
 
-        file_path = os.path.join(MODULES_DIR, f"{mod_name}.py")
-        if os.path.exists(file_path):
-            os.remove(file_path)
-
-        await event.edit(f"🗑 Модуль <code>{self._esc(mod_name)}</code> выгружен и удалён.", parse_mode="html")
-
-    @command("unlm", aliases=["getmod", "sendmod"], doc="Отправить файл модуля в чат", only_for="owner")
+    @command("unlm", aliases=["getmod", "sendmod"], only_for="owner")
     async def cmd_unlm(self, event, args):
         if not args:
-            installed = sorted([
+            if not os.path.isdir(MODULES_DIR):
+                await event.edit(shell.wrap(["empty"], cmd="unlm", trailing=True), parse_mode="html")
+                return
+            installed = sorted(
                 f[:-3] for f in os.listdir(MODULES_DIR)
                 if f.endswith(".py") and not f.startswith("_")
-            ]) if os.path.isdir(MODULES_DIR) else []
-            if not installed:
-                await event.edit("📂 Нет установленных модулей")
-                return
-            text = (
-                "📂 <b>Установленные модули</b>\n\n"
-                + "\n".join(f"• <code>{self._esc(name)}</code>" for name in installed)
-                + "\n\n<i>Использование:</i> <code>.unlm &lt;имя&gt;</code>"
             )
-            await event.edit(text, parse_mode="html")
+            if not installed:
+                await event.edit(shell.wrap(["empty"], cmd="unlm", trailing=True), parse_mode="html")
+                return
+            lines = ["mods: " + str(len(installed)), ""] + ["  " + n for n in installed]
+            await event.edit(shell.wrap(lines, cmd="unlm", trailing=True), parse_mode="html")
             return
-
         name = args[0].strip().replace(".py", "")
-        path = os.path.join(MODULES_DIR, f"{name}.py")
+        path = os.path.join(MODULES_DIR, name + ".py")
         if not os.path.exists(path):
-            await event.edit(f"❌ Модуль <code>{self._esc(name)}</code> не найден", parse_mode="html")
+            await event.edit(shell.wrap([name + " not found"], cmd="unlm", trailing=True), parse_mode="html")
             return
-
         try:
             size = os.path.getsize(path)
             await self.client.send_file(
                 event.chat_id,
                 file=path,
-                caption=f"📄 <b>{self._esc(name)}.py</b>\n<i>Размер: {size} байт</i>",
+                caption=shell.wrap([name + ".py (" + str(size) + " b)"], cmd="unlm", trailing=False),
                 parse_mode="html",
                 reply_to=getattr(event, "reply_to_msg_id", None),
             )
@@ -226,92 +231,58 @@ class Loader(Module):
             except Exception:
                 pass
         except Exception as e:
-            self.log.exception(f"unlm: ошибка отправки {name}")
-            await event.edit(f"❌ Ошибка отправки: <code>{self._esc(e)}</code>", parse_mode="html")
+            await event.edit(shell.wrap(["send failed: " + _esc(e)], cmd="unlm", trailing=True), parse_mode="html")
 
-    @command("um", doc="Удалить пользовательский модуль", only_for="owner")
+    @command("um", only_for="owner")
     async def cmd_um(self, event, args):
-        """Удалить модуль из локальной папки modules_custom/ + выгрузить."""
         import os as _os
 
-        def _list_user_modules() -> list:
-            if not _os.path.isdir("modules_custom"):
+        def _list():
+            if not _os.path.isdir(MODULES_DIR):
                 return []
             return sorted(
-                f[:-3] for f in _os.listdir("modules_custom")
+                f[:-3] for f in _os.listdir(MODULES_DIR)
                 if f.endswith(".py") and not f.startswith("_")
             )
 
-        def _find_user_module(name: str):
-            candidate = _os.path.join("modules_custom", f"{name}.py")
-            return candidate if _os.path.exists(candidate) else None
-
         if not args:
-            installed = _list_user_modules()
+            installed = _list()
             if not installed:
-                await event.edit(
-                    "📂 <b>Нет пользовательских модулей</b>",
-                    parse_mode="html",
-                )
+                await event.edit(shell.wrap(["empty"], cmd="um", trailing=True), parse_mode="html")
                 return
-            text = (
-                "📂 <b>Пользовательские модули</b>\n\n"
-                + "\n".join(f"• <code>{name}</code>" for name in installed)
-                + "\n\n<i>Использование:</i> <code>.um &lt;имя&gt;</code>"
-            )
-            await event.edit(text, parse_mode="html")
+            lines = ["mods: " + str(len(installed)), ""] + ["  " + n for n in installed]
+            await event.edit(shell.wrap(lines, cmd="um", trailing=True), parse_mode="html")
             return
-
         name = args[0].strip()
         if name.endswith(".py"):
             name = name[:-3]
-
-        path = _find_user_module(name)
-        if not path:
-            if _os.path.exists(_os.path.join("modules", f"{name}.py")):
-                await event.edit(
-                    f"❌ <code>{name}</code> — системный модуль, нельзя удалить",
-                    parse_mode="html",
-                )
+        path = _os.path.join(MODULES_DIR, name + ".py")
+        if not _os.path.exists(path):
+            if _os.path.exists(_os.path.join("modules", name + ".py")):
+                await event.edit(shell.wrap([name + " is system module"], cmd="um", trailing=True), parse_mode="html")
                 return
-            await event.edit(
-                f"❌ Модуль <code>{name}</code> не найден",
-                parse_mode="html",
-            )
+            await event.edit(shell.wrap([name + " not found"], cmd="um", trailing=True), parse_mode="html")
             return
-
         loader = getattr(self.client, "loader", None)
         if loader is not None:
             try:
                 await loader.unload_module(name)
-            except Exception as e:
-                self.log.warning(f"um: unload {name} failed: {e}")
-
+            except Exception:
+                pass
         try:
             _os.remove(path)
         except Exception as e:
-            await event.edit(
-                f"❌ Ошибка удаления: <code>{e}</code>",
-                parse_mode="html",
-            )
+            await event.edit(shell.wrap(["remove failed: " + _esc(e)], cmd="um", trailing=True), parse_mode="html")
             return
+        await event.edit(shell.wrap(["removed " + name], cmd="um", trailing=True), parse_mode="html")
 
-        await event.edit(
-            f"✅ rm mod: Success\n<blockquote><code>{name}</code></blockquote>",
-            parse_mode="html",
-        )
-
-    @command("restart", doc="Перезапустить процесс TETKO", only_for="owner")
+    @command("restart", only_for="owner")
     async def cmd_restart(self, event):
         from core.tetko import db_set
         db_set("updates", "pending_reload", {
             "chat_id": event.chat_id,
             "message_id": event.message.id,
         })
-        await event.edit(
-            "<blockquote><b>🔄 Перезапуск TETKO UserBot...</b></blockquote>",
-            parse_mode="html",
-        )
+        await event.edit(shell.wrap(["systemctl restart tetko"], cmd="restart", running=True, trailing=False), parse_mode="html")
         await asyncio.sleep(2)
         os.execv(sys.executable, [sys.executable] + sys.argv)
-

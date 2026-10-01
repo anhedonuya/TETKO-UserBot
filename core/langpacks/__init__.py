@@ -164,9 +164,12 @@ def get_langpacks(locale: str | None = None) -> dict[str, dict[str, Any]]:
 
 
 def _merge_globals(locale_data: dict[str, Any], module_strings: Any) -> dict[str, Any]:
-    global_strings = locale_data.get(_GLOBAL_MODULE, {})
-    if not isinstance(global_strings, dict):
-        global_strings = {}
+    _raw = locale_data.get(_GLOBAL_MODULE, {})
+    global_strings = {}
+    if isinstance(_raw, dict):
+        for _sub in _raw.values():
+            if isinstance(_sub, dict):
+                global_strings.update(_sub)
 
     if isinstance(module_strings, dict):
         result = dict(global_strings)

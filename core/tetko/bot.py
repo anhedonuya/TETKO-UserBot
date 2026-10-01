@@ -202,12 +202,24 @@ class BotClient:
                 log.warning(f"send_inline_menu get_input_entity failed: {e}")
                 peer = chat_id
 
-        results = await userbot(GetInlineBotResultsRequest(
-            bot=f"@{self.username}",
-            peer=peer,
-            query=query_str,
-            offset="",
-        ))
+        try:
+            results = await userbot(GetInlineBotResultsRequest(
+                bot=f"@{self.username}",
+                peer=peer,
+                query=query_str,
+                offset="",
+            ))
+        except Exception as e:
+            from telethon.errors.rpcerrorlist import BotInlineDisabledError
+            if isinstance(e, BotInlineDisabledError):
+                log.error(
+                    "[InlineBot] у бота @%s не включён inline-режим. "
+                    "Открой @BotFather -> /setinline -> выбери бота и задай placeholder.",
+                    self.username,
+                )
+            else:
+                log.exception("[InlineBot] не удалось получить inline-результаты")
+            return None
 
         if not results or not results.results:
             log.error(f"send_inline_menu no results for {query_str}")
