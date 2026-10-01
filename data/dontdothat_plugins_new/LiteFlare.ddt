@@ -1,0 +1,1000 @@
+#!ddt 1.5.0
+PLUGIN = {
+    "name": "LiteFlare",
+    "version": "2.0.0",
+    "author": "@flexOwnerAL",
+    "description": "Adaptive bypass engine: 16 strategies, race top-N, smart picker, LRU cache, multi-detector, UA-consistent",
+    "hooks": ["on_blocked", "on_error", "on_js_required", "after_fetch"],
+    "min_core": "5.0.0",
+    "tags": ["bypass", "cloudflare", "captcha", "adaptive"],
+}
+
+import asyncio
+import json
+import random
+import re
+import sqlite3
+import threading
+import time
+from collections import OrderedDict
+from pathlib import Path
+from urllib.parse import quote_plus, urlparse
+from urllib.request import Request, urlopen
+
+try:
+    from curl_cffi.requests import AsyncSession as _CurlSession
+    _HAS_CURL = True
+except Exception:
+    _CurlSession = None
+    _HAS_CURL = False
+
+try:
+    import httpx
+    _HAS_HTTPX = True
+except Exception:
+    _HAS_HTTPX = False
+
+
+DB_PATH = Path("data/dontdothat.db")
+CACHE_TTL = 90
+CACHE_MAX = 300
+RACE_N = 4
+RACE_TIMEOUT = 6.0
+TRACE_MAX = 100
+
+PLUGIN_API = "1.5.0"
+
+# ---- Anti-bot markers ----
+_CF = (
+    "just a moment", "checking your browser", "cf-browser-verification",
+    "cf-challenge", "cf_chl_", "__cf_chl", "attention required",
+    "ddos protection", "cloudflare ray id", "cf-please-wait",
+    "challenges.cloudflare.com", "cf-turnstile",
+)
+_SUCURI = ("sucuri", "cloudproxy", "x-sucuri-id", "sucuri_cloudproxy")
+_AKAMAI = ("akamai", "reference #18.", "reference #9.", "akamai bot manager")
+_IMPERVA = ("incapsula", "visid_incap", "_incap_ses", "imperva inc")
+_DATADOME = ("datadome", "dd_", "datadome-captcha")
+_PERIMETERX = ("perimeterx", "px-captcha", "_pxhd", "_pxvid")
+_KASADA = ("kasada", "ips.js", "x-kpsdk")
+_F5 = ("tspd_", "f5 networks", "big-ip")
+_RADWARE = ("radware", "perfdrive", "radware bot manager")
+_REBLAZE = ("reblaze", "rbzid", "reblaze bot")
+
+_ANTIBOT = (
+    ("cloudflare", _CF),
+    ("sucuri", _SUCURI),
+    ("akamai", _AKAMAI),
+    ("imperva", _IMPERVA),
+    ("datadome", _DATADOME),
+    ("perimeterx", _PERIMETERX),
+    ("kasada", _KASADA),
+    ("f5", _F5),
+    ("radware", _RADWARE),
+    ("reblaze", _REBLAZE),
+)
+
+_CAPTCHA = (
+    "g-recaptcha", "recaptcha/api", "hcaptcha.com", "h-captcha",
+    "cf-turnstile", "complete the following challenge", "select all squares",
+    "confirm this search was made by a human",
+)
+
+IMPERSONATE_PROFILES = [
+    "chrome", "chrome110", "chrome116", "chrome119",
+    "chrome120", "chrome124", "chrome131",
+    "safari17_0", "safari17_2_ios", "firefox133",
+]
+
+SITE_HANDLERS = {
+    "duckduckgo.com": lambda q: f"https://lite.duckduckgo.com/lite/?q={quote_plus(q)}",
+    "html.duckduckgo.com": lambda q: f"https://lite.duckduckgo.com/lite/?q={quote_plus(q)}",
+    "google.com": lambda q: f"https://www.google.com/search?q={quote_plus(q)}&num=20&gbv=1",
+    "reddit.com": lambda q: f"https://old.reddit.com/search?q={quote_plus(q)}",
+    "twitter.com": lambda q: f"https://nitter.net/search?q={quote_plus(q)}",
+    "x.com": lambda q: f"https://nitter.net/search?q={quote_plus(q)}",
+    "youtube.com": lambda q: f"https://www.youtube.com/results?search_query={quote_plus(q)}",
+    "github.com": lambda q: f"https://github.com/search?q={quote_plus(q)}&type=repositories",
+}
+
+ARCHIVE_MIRRORS = (
+    "archive.ph", "archive.is", "archive.li", "archive.today",
+    "archive.vn", "archive.md", "archive.fo",
+)
+
+
+# ============================================================
+# SQLite store
+# ============================================================
+
+_store_lock = threading.Lock()
+_store_conn = None
+
+
+def _connect():
+    global _store_conn
+    if _store_conn is not None:
+        return _store_conn
+    try:
+        DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+        c = sqlite3.connect(str(DB_PATH), check_same_thread=False)
+        try:
+            c.execute("PRAGMA journal_mode=WAL")
+        except Exception:
+            pass
+        c.execute(
+            "CREATE TABLE IF NOT EXISTS lf_cookies ("
+            "domain TEXT PRIMARY KEY, cookie TEXT, ua TEXT, proxy TEXT, "
+            "created REAL, expires REAL)"
+        )
+        c.execute(
+            "CREATE TABLE IF NOT EXISTS lf_strategy ("
+            "domain TEXT, strategy TEXT, weight REAL DEFAULT 1.0, "
+            "ok INTEGER DEFAULT 0, fail INTEGER DEFAULT 0, total_ms REAL DEFAULT 0, "
+            "last_ok REAL, last_fail REAL, "
+            "PRIMARY KEY (domain, strategy))"
+        )
+        c.execute(
+            "CREATE TABLE IF NOT EXISTS lf_trace ("
+            "ts REAL, url TEXT, strategy TEXT, ok INTEGER, ms REAL, size INTEGER)"
+        )
+        c.execute(
+            "CREATE TABLE IF NOT EXISTS lf_ua (domain TEXT PRIMARY KEY, profile TEXT, ua TEXT)"
+        )
+        c.commit()
+        _store_conn = c
+        return c
+    except Exception:
+        return None
+
+
+def _db():
+    try:
+        return _connect()
+    except Exception:
+        return None
+
+
+def _get_cookie(domain):
+    c = _db()
+    if c is None:
+        return None
+    try:
+        row = c.execute(
+            "SELECT cookie, ua, proxy, expires FROM lf_cookies WHERE domain=?",
+            (domain,),
+        ).fetchone()
+        if row is None:
+            return None
+        cookie, ua, proxy, expires = row
+        if expires and expires < time.time():
+            c.execute("DELETE FROM lf_cookies WHERE domain=?", (domain,))
+            c.commit()
+            return None
+        return {"cookie": cookie, "ua": ua, "proxy": proxy}
+    except Exception:
+        return None
+
+
+def _save_cookie(domain, cookie, ua, proxy):
+    c = _db()
+    if c is None:
+        return
+    try:
+        c.execute(
+            "INSERT OR REPLACE INTO lf_cookies (domain, cookie, ua, proxy, created, expires) "
+            "VALUES (?,?,?,?,?,?)",
+            (domain, cookie, ua, proxy or "", time.time(), time.time() + 3600 * 6),
+        )
+        c.commit()
+    except Exception:
+        pass
+
+
+def _record_strategy(domain, strategy, ok, ms):
+    c = _db()
+    if c is None:
+        return
+    try:
+        with _store_lock:
+            row = c.execute(
+                "SELECT weight, ok, fail, total_ms FROM lf_strategy WHERE domain=? AND strategy=?",
+                (domain, strategy),
+            ).fetchone()
+            now = time.time()
+            if row is None:
+                c.execute(
+                    "INSERT INTO lf_strategy (domain, strategy, weight, ok, fail, total_ms, last_ok, last_fail) "
+                    "VALUES (?,?,?,?,?,?,?,?)",
+                    (
+                        domain, strategy,
+                        1.5 if ok else 0.5,
+                        1 if ok else 0,
+                        0 if ok else 1,
+                        ms,
+                        now if ok else None,
+                        None if ok else now,
+                    ),
+                )
+            else:
+                weight, ok_n, fail_n, total_ms = row
+                weight = float(weight or 1.0)
+                total_ms = float(total_ms or 0.0)
+                if ok:
+                    weight = min(3.0, weight * 1.15 + 0.1)
+                    ok_n += 1
+                else:
+                    weight = max(0.05, weight * 0.8)
+                    fail_n += 1
+                total_ms = total_ms + ms
+                last_ok = now if ok else None
+                last_fail = None if ok else now
+                c.execute(
+                    "UPDATE lf_strategy SET weight=?, ok=?, fail=?, total_ms=?, "
+                    "last_ok=COALESCE(?, last_ok), last_fail=COALESCE(?, last_fail) "
+                    "WHERE domain=? AND strategy=?",
+                    (weight, ok_n, fail_n, total_ms, last_ok, last_fail, domain, strategy),
+                )
+            c.commit()
+    except Exception:
+        pass
+
+
+def _get_strategy_stats(domain):
+    c = _db()
+    if c is None:
+        return {}
+    try:
+        rows = c.execute(
+            "SELECT strategy, weight, ok, fail, total_ms, last_ok, last_fail "
+            "FROM lf_strategy WHERE domain=?",
+            (domain,),
+        ).fetchall()
+        out = {}
+        for r in rows:
+            out[r[0]] = {
+                "weight": float(r[1] or 1.0),
+                "ok": int(r[2] or 0),
+                "fail": int(r[3] or 0),
+                "total_ms": float(r[4] or 0.0),
+                "last_ok": r[5],
+                "last_fail": r[6],
+            }
+        return out
+    except Exception:
+        return {}
+
+
+def _log_trace(url, strategy, ok, ms, size):
+    c = _db()
+    if c is None:
+        return
+    try:
+        with _store_lock:
+            c.execute(
+                "INSERT INTO lf_trace (ts, url, strategy, ok, ms, size) VALUES (?,?,?,?,?,?)",
+                (time.time(), url[:500], strategy, 1 if ok else 0, ms, size),
+            )
+            c.execute(
+                "DELETE FROM lf_trace WHERE ts < ?",
+                (time.time() - 86400,),
+            )
+            c.commit()
+    except Exception:
+        pass
+
+
+def _get_ua_profile(domain):
+    c = _db()
+    if c is None:
+        return None
+    try:
+        row = c.execute(
+            "SELECT profile FROM lf_ua WHERE domain=?", (domain,)
+        ).fetchone()
+        return row[0] if row else None
+    except Exception:
+        return None
+
+
+def _set_ua_profile(domain, profile, ua):
+    c = _db()
+    if c is None:
+        return
+    try:
+        c.execute(
+            "INSERT OR REPLACE INTO lf_ua (domain, profile, ua) VALUES (?,?,?)",
+            (domain, profile, ua or ""),
+        )
+        c.commit()
+    except Exception:
+        pass
+
+
+# ============================================================
+# In-memory LRU page cache + trace ring
+# ============================================================
+
+_page_cache = OrderedDict()
+_trace_ring = OrderedDict()
+_last_headers = {}
+_ua_lock = threading.Lock()
+
+
+def _cache_get(url):
+    e = _page_cache.get(url)
+    if e is None:
+        return None
+    html, ts = e
+    if time.time() - ts > CACHE_TTL:
+        _page_cache.pop(url, None)
+        return None
+    _page_cache.move_to_end(url)
+    return html
+
+
+def _cache_set(url, html):
+    if not html:
+        return
+    _page_cache[url] = (html, time.time())
+    _page_cache.move_to_end(url)
+    while len(_page_cache) > CACHE_MAX:
+        _page_cache.popitem(last=False)
+
+
+def _trace_put(url, strategy, ok, ms, size):
+    _trace_ring[url] = {
+        "ts": time.time(),
+        "strategy": strategy,
+        "ok": bool(ok),
+        "ms": round(ms, 3),
+        "size": size,
+    }
+    while len(_trace_ring) > TRACE_MAX:
+        _trace_ring.popitem(last=False)
+
+
+# ============================================================
+# Detectors
+# ============================================================
+
+def _detect_antibot(text):
+    if not text:
+        return None
+    low = text.lower()
+    for name, markers in _ANTIBOT:
+        for m in markers:
+            if m in low:
+                return name
+    if any(m in low for m in _CAPTCHA):
+        return "captcha"
+    return None
+
+
+def _is_blocked(text):
+    return _detect_antibot(text) is not None
+
+
+def _is_cf(text):
+    if not text:
+        return False
+    low = text.lower()
+    return any(m in low for m in _CF)
+
+
+def _domain(url):
+    try:
+        return urlparse(url).netloc.lower()
+    except Exception:
+        return ""
+
+
+def _site_override(url, query):
+    d = _domain(url)
+    for key, fn in SITE_HANDLERS.items():
+        if key in d:
+            try:
+                return fn(query)
+            except Exception:
+                return None
+    return None
+
+
+# ============================================================
+# UA / impersonate consistency
+# ============================================================
+
+def _ua_to_profile(ua):
+    if not ua:
+        return None
+    ua = str(ua)
+    m = re.search(r"Chrome/(\d+)", ua)
+    if m:
+        ver = m.group(1)
+        return "chrome%s" % ver
+    if "Firefox/133" in ua:
+        return "firefox133"
+    if "Firefox/132" in ua:
+        return "firefox132"
+    if "Firefox/131" in ua:
+        return "firefox131"
+    if "Safari/" in ua and "iPhone" in ua:
+        return "safari17_2_ios"
+    if "Safari/" in ua:
+        return "safari17_0"
+    return None
+
+
+def _pick_impersonate(url, ctx=None):
+    domain = _domain(url)
+    profile = _get_ua_profile(domain)
+    if profile:
+        return profile
+    if ctx is not None:
+        try:
+            ua = ctx.call_plugin("neverfake", "pick_ua", domain)
+            if asyncio.iscoroutine(ua):
+                pass
+            else:
+                p = _ua_to_profile(ua)
+                if p and p in IMPERSONATE_PROFILES:
+                    _set_ua_profile(domain, p, ua or "")
+                    return p
+        except Exception:
+            pass
+    return None
+
+
+# ============================================================
+# Fetch primitives
+# ============================================================
+
+async def _curl_fetch(url, impersonate="chrome", headers=None, cookie=None, ctx=None):
+    if not _HAS_CURL:
+        return None
+    prof = impersonate or _pick_impersonate(url, ctx) or "chrome"
+    if prof not in IMPERSONATE_PROFILES:
+        prof = "chrome"
+    h = dict(headers or {})
+    if cookie:
+        h["Cookie"] = cookie
+    try:
+        async with _CurlSession() as session:
+            r = await session.get(
+                url, headers=h, timeout=20,
+                impersonate=prof, allow_redirects=True,
+            )
+            try:
+                hd = {}
+                for k, v in (r.headers or {}).items():
+                    hd[str(k)] = str(v)
+                _last_headers[url] = (hd, int(getattr(r, "status_code", 200) or 200))
+            except Exception:
+                pass
+            return (r.text or "")[:900_000]
+    except Exception:
+        return None
+
+
+async def _httpx_fetch(url, headers=None, cookie=None):
+    if not _HAS_HTTPX:
+        return None
+    h = dict(headers or {})
+    if cookie:
+        h["Cookie"] = cookie
+    try:
+        async with httpx.AsyncClient(
+            http2=True, timeout=20,
+            follow_redirects=True, headers=h,
+        ) as client:
+            r = await client.get(url)
+            try:
+                hd = {}
+                for k, v in (r.headers or {}).items():
+                    hd[str(k)] = str(v)
+                _last_headers[url] = (hd, int(getattr(r, "status_code", 200) or 200))
+            except Exception:
+                pass
+            return (r.text or "")[:900_000]
+    except Exception:
+        return None
+
+
+def _urllib_fetch(url, headers=None, cookie=None):
+    h = dict(headers or {})
+    if cookie:
+        h["Cookie"] = cookie
+    try:
+        req = Request(url, headers=h)
+        with urlopen(req, timeout=20) as response:
+            raw = response.read(900_000)
+            charset = response.headers.get_content_charset() or "utf-8"
+            try:
+                hd = {}
+                for k, v in (response.headers or {}).items():
+                    hd[str(k)] = str(v)
+                _last_headers[url] = (hd, int(getattr(response, "status", 200) or 200))
+            except Exception:
+                pass
+            try:
+                return raw.decode(charset, errors="ignore")
+            except LookupError:
+                return raw.decode("utf-8", errors="ignore")
+    except Exception:
+        return None
+
+
+# ============================================================
+# Strategies (16)
+# ============================================================
+
+async def _strategy_cookie(url, ctx=None):
+    d = _domain(url)
+    ck = _get_cookie(d)
+    if not ck:
+        return None
+    page = await _curl_fetch(url, headers={"User-Agent": ck.get("ua") or ""}, cookie=ck.get("cookie"), ctx=ctx)
+    if page and len(page) > 500 and not _is_blocked(page):
+        return page
+    page = await _httpx_fetch(url, headers={"User-Agent": ck.get("ua") or ""}, cookie=ck.get("cookie"))
+    if page and len(page) > 500 and not _is_blocked(page):
+        return page
+    return None
+
+
+async def _strategy_curl_profiles(url, ctx=None):
+    if not _HAS_CURL:
+        return None
+    locked = _pick_impersonate(url, ctx)
+    order = [locked] if locked else []
+    for p in IMPERSONATE_PROFILES:
+        if p not in order:
+            order.append(p)
+    for p in order[:6]:
+        page = await _curl_fetch(url, impersonate=p, ctx=ctx)
+        if page and len(page) > 500 and not _is_blocked(page):
+            if p.startswith("chrome"):
+                _set_ua_profile(_domain(url), p, "")
+            return page
+    return None
+
+
+async def _strategy_curl_headers(url, ctx=None):
+    variants = [
+        {"Referer": f"https://{_domain(url)}/"},
+        {"User-Agent": "Mozilla/5.0 (Linux; Android 16; Pixel 9 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"},
+        {"Accept-Language": "ru-RU,ru;q=0.9,en;q=0.8"},
+        {"Accept-Language": "en-US,en;q=0.9"},
+    ]
+    for h in variants:
+        page = await _curl_fetch(url, headers=h, ctx=ctx)
+        if page and len(page) > 500 and not _is_blocked(page):
+            return page
+        page = await _httpx_fetch(url, headers=h)
+        if page and len(page) > 500 and not _is_blocked(page):
+            return page
+    return None
+
+
+async def _strategy_httpx_h2(url, ctx=None):
+    page = await _httpx_fetch(url)
+    if page and len(page) > 500 and not _is_blocked(page):
+        return page
+    return None
+
+
+async def _strategy_jina(url, ctx=None):
+    if _HAS_HTTPX:
+        page = await _httpx_fetch("https://r.jina.ai/" + url, headers={"X-Return-Format": "markdown"})
+    else:
+        page = await asyncio.to_thread(_urllib_fetch, "https://r.jina.ai/" + url, {"X-Return-Format": "markdown"})
+    if page and len(page) > 300 and not _is_blocked(page):
+        return page
+    if _HAS_HTTPX:
+        page = await _httpx_fetch("https://r.jina.ai/" + url, headers={"X-Return-Format": "text"})
+    else:
+        page = await asyncio.to_thread(_urllib_fetch, "https://r.jina.ai/" + url, {"X-Return-Format": "text"})
+    if page and len(page) > 300 and not _is_blocked(page):
+        return page
+    return None
+
+
+async def _strategy_wayback(url, ctx=None):
+    try:
+        api = f"https://archive.org/wayback/available?url={quote_plus(url)}"
+        text = await asyncio.to_thread(_urllib_fetch, api)
+        if not text:
+            return None
+        data = json.loads(text)
+        snap = data.get("archived_snapshots", {}).get("closest")
+        if not snap or not snap.get("available"):
+            return None
+        page = await asyncio.to_thread(_urllib_fetch, snap.get("url"))
+        if page and len(page) > 500 and not _is_blocked(page):
+            return page
+    except Exception:
+        pass
+    return None
+
+
+async def _strategy_archive_mirrors(url, ctx=None):
+    for mirror in ARCHIVE_MIRRORS:
+        try:
+            target = f"https://{mirror}/newest/{url}"
+            page = await asyncio.to_thread(_urllib_fetch, target)
+            if page and len(page) > 500 and not _is_blocked(page):
+                return page
+        except Exception:
+            continue
+    return None
+
+
+async def _strategy_google_cache(url, ctx=None):
+    try:
+        target = f"https://webcache.googleusercontent.com/search?q=cache:{url}"
+        page = await asyncio.to_thread(_urllib_fetch, target)
+        if page and len(page) > 500 and not _is_blocked(page):
+            return page
+    except Exception:
+        pass
+    return None
+
+
+async def _strategy_bing_cache(url, ctx=None):
+    try:
+        target = f"https://cc.bingj.com/cache.aspx?q={quote_plus(url)}&d=0&w=0"
+        page = await asyncio.to_thread(_urllib_fetch, target)
+        if page and len(page) > 500 and not _is_blocked(page):
+            return page
+    except Exception:
+        pass
+    return None
+
+
+async def _strategy_yandex_cache(url, ctx=None):
+    try:
+        target = f"https://yandexwebcache.net/yandbtm?fmode=inject&url={quote_plus(url)}"
+        page = await asyncio.to_thread(_urllib_fetch, target)
+        if page and len(page) > 500 and not _is_blocked(page):
+            return page
+    except Exception:
+        pass
+    return None
+
+
+async def _strategy_textise(url, ctx=None):
+    try:
+        target = f"https://www.textise.net/showText.aspx?strURL={quote_plus(url)}"
+        page = await asyncio.to_thread(_urllib_fetch, target)
+        if page and len(page) > 500 and not _is_blocked(page):
+            return page
+    except Exception:
+        pass
+    return None
+
+
+async def _strategy_12ft(url, ctx=None):
+    try:
+        target = f"https://12ft.io/proxy?q={quote_plus(url)}"
+        if _HAS_HTTPX:
+            page = await _httpx_fetch(target)
+        else:
+            page = await asyncio.to_thread(_urllib_fetch, target)
+        if page and len(page) > 500 and not _is_blocked(page):
+            return page
+    except Exception:
+        pass
+    return None
+
+
+async def _strategy_tg_iv(url, ctx=None):
+    try:
+        target = f"https://t.me/iv?url={quote_plus(url)}&rhash=0"
+        page = await asyncio.to_thread(_urllib_fetch, target)
+        if page and len(page) > 300 and not _is_blocked(page):
+            return page
+    except Exception:
+        pass
+    return None
+
+
+async def _strategy_jina_text(url, ctx=None):
+    try:
+        target = "https://r.jina.ai/" + url
+        if _HAS_HTTPX:
+            page = await _httpx_fetch(target, headers={"X-Return-Format": "text"})
+        else:
+            page = await asyncio.to_thread(_urllib_fetch, target, {"X-Return-Format": "text"})
+        if page and len(page) > 300 and not _is_blocked(page):
+            return page
+    except Exception:
+        pass
+    return None
+
+
+async def _strategy_sucuri_bypass(url, ctx=None):
+    variants = [
+        {"User-Agent": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"},
+        {"User-Agent": "Mozilla/5.0 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm)"},
+        {"User-Agent": "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 Chrome/131.0.0.0 Mobile"},
+    ]
+    for h in variants:
+        page = await _curl_fetch(url, headers=h, ctx=ctx)
+        if page and len(page) > 500 and not _is_blocked(page):
+            return page
+    return None
+
+
+STRATEGIES = [
+    ("cookie", _strategy_cookie, 1.0),
+    ("curl_profiles", _strategy_curl_profiles, 1.2),
+    ("curl_headers", _strategy_curl_headers, 1.1),
+    ("sucuri_bypass", _strategy_sucuri_bypass, 0.9),
+    ("httpx_h2", _strategy_httpx_h2, 0.9),
+    ("jina", _strategy_jina, 0.8),
+    ("jina_text", _strategy_jina_text, 0.8),
+    ("wayback", _strategy_wayback, 0.7),
+    ("archive_mirrors", _strategy_archive_mirrors, 0.7),
+    ("google_cache", _strategy_google_cache, 0.6),
+    ("bing_cache", _strategy_bing_cache, 0.6),
+    ("yandex_cache", _strategy_yandex_cache, 0.6),
+    ("textise", _strategy_textise, 0.5),
+    ("12ft", _strategy_12ft, 0.5),
+    ("tg_iv", _strategy_tg_iv, 0.4),
+]
+
+
+# ============================================================
+# Smart picker
+# ============================================================
+
+def _score(domain, name, base, stats):
+    s = stats.get(name) or {}
+    weight = float(s.get("weight", 1.0))
+    ok = int(s.get("ok", 0))
+    fail = int(s.get("fail", 0))
+    total = ok + fail
+    if total == 0:
+        cold = 0.5
+    else:
+        rate = ok / total
+        cold = rate * 2.0
+    # recent fail penalty
+    lf = s.get("last_fail")
+    recent_pen = 0.0
+    if lf and (time.time() - float(lf)) < 300:
+        recent_pen = -1.5
+    lo = s.get("last_ok")
+    recent_bonus = 0.0
+    if lo and (time.time() - float(lo)) < 300:
+        recent_bonus = 0.5
+    return base + weight * 0.4 + cold + recent_bonus + recent_pen
+
+
+def _pick_top(domain, n=RACE_N, exclude=None):
+    exclude = set(exclude or [])
+    stats = _get_strategy_stats(domain)
+    scored = []
+    for name, fn, base in STRATEGIES:
+        if name in exclude:
+            continue
+        sc = _score(domain, name, base, stats)
+        scored.append((sc, name, fn))
+    scored.sort(key=lambda x: -x[0])
+    top = scored[:n]
+    # thompson: каждый 5-й вызов — exploration
+    if random.random() < 0.2 and len(scored) > n:
+        top.append(scored[n])
+    return [(name, fn) for _, name, fn in top]
+
+
+# ============================================================
+# Executors
+# ============================================================
+
+async def _try_strategy(name, fn, url, ctx=None):
+    cached = _cache_get(url + "#" + name)
+    if cached:
+        _trace_put(url, name, True, 0.0, len(cached))
+        return cached, name
+    t0 = time.time()
+    try:
+        page = await asyncio.wait_for(fn(url, ctx=ctx), timeout=20)
+    except asyncio.TimeoutError:
+        ms = (time.time() - t0) * 1000
+        _record_strategy(_domain(url), name, False, ms)
+        _log_trace(url, name, False, ms, 0)
+        _trace_put(url, name, False, ms, 0)
+        return None, None
+    except Exception:
+        ms = (time.time() - t0) * 1000
+        _record_strategy(_domain(url), name, False, ms)
+        _log_trace(url, name, False, ms, 0)
+        _trace_put(url, name, False, ms, 0)
+        return None, None
+    ms = (time.time() - t0) * 1000
+    if page and len(page) > 500:
+        _record_strategy(_domain(url), name, True, ms)
+        _log_trace(url, name, True, ms, len(page))
+        _trace_put(url, name, True, ms, len(page))
+        _cache_set(url + "#" + name, page)
+        _cache_set(url, page)
+        return page, name
+    _record_strategy(_domain(url), name, False, ms)
+    _log_trace(url, name, False, ms, len(page) if page else 0)
+    _trace_put(url, name, False, ms, len(page) if page else 0)
+    return None, None
+
+
+async def _race(strategy_pairs, url, ctx=None):
+    if not strategy_pairs:
+        return None, None
+    tasks = [
+        asyncio.create_task(_try_strategy(n, f, url, ctx=ctx))
+        for n, f in strategy_pairs
+    ]
+    try:
+        for coro in asyncio.as_completed(tasks, timeout=RACE_TIMEOUT):
+            page, used = await coro
+            if page:
+                for t in tasks:
+                    if not t.done():
+                        t.cancel()
+                return page, used
+    except asyncio.TimeoutError:
+        for t in tasks:
+            if not t.done():
+                t.cancel()
+    return None, None
+
+
+async def _pipeline(strategy_pairs, url, ctx=None):
+    for name, fn in strategy_pairs:
+        page, used = await _try_strategy(name, fn, url, ctx=ctx)
+        if page:
+            return page, used
+    return None, None
+
+
+async def _solve(url, reason="", ctx=None):
+    if not url:
+        return None
+
+    cached = _cache_get(url)
+    if cached:
+        _trace_put(url, "cache", True, 0.0, len(cached))
+        return cached
+
+    domain = _domain(url)
+
+    top = _pick_top(domain, n=RACE_N)
+    if top:
+        page, used = await _race(top, url, ctx=ctx)
+        if page:
+            return page
+
+    tried = {n for n, _ in top}
+    rest = _pick_top(domain, n=8, exclude=tried)
+    if rest:
+        page, used = await _pipeline(rest, url, ctx=ctx)
+        if page:
+            return page
+
+    if _HAS_CURL:
+        page, used = await _pipeline([("curl_profiles", _strategy_curl_profiles)], url, ctx=ctx)
+        if page:
+            return page
+
+    return None
+
+
+# ============================================================
+# Public API for NeverFake
+# ============================================================
+
+async def solve(url, reason="", ctx=None):
+    return await _solve(url, reason=reason, ctx=ctx)
+
+
+def get_last_headers(url):
+    return _last_headers.get(url, ({}, 200))
+
+
+def list_last_headers():
+    return dict(_last_headers)
+
+
+def solve_trace(url):
+    return _trace_ring.get(url)
+
+
+def get_stats(domain):
+    return _get_strategy_stats(domain)
+
+
+def list_stats(limit=20):
+    c = _db()
+    if c is None:
+        return []
+    try:
+        rows = c.execute(
+            "SELECT domain, COUNT(*) FROM lf_strategy GROUP BY domain "
+            "ORDER BY MAX(last_ok) DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        return [(r[0], int(r[1])) for r in rows]
+    except Exception:
+        return []
+
+
+# ============================================================
+# Hooks
+# ============================================================
+
+_CTX_HINT = {"last": None}
+
+
+async def on_blocked(ctx):
+    url = ctx.get("url")
+    if not url:
+        return None
+    _CTX_HINT["last"] = ctx
+    page = await _solve(url, reason=ctx.get("reason") or "blocked", ctx=ctx)
+    if page:
+        domain = _domain(url)
+        headers, status = _last_headers.get(url, ({}, 200))
+        _save_cookie(domain, "", "", None)
+        _set_ua_profile(domain, _pick_impersonate(url, ctx) or "chrome", "")
+    return page
+
+
+async def on_js_required(ctx):
+    url = ctx.get("url")
+    if not url:
+        return None
+    _CTX_HINT["last"] = ctx
+    page = await _strategy_jina(url, ctx=ctx)
+    if page:
+        return page
+    page = await _strategy_jina_text(url, ctx=ctx)
+    if page:
+        return page
+    return await _strategy_wayback(url, ctx=ctx)
+
+
+async def on_error(ctx):
+    url = ctx.get("url")
+    err = str(ctx.get("error") or "").lower()
+    if not url:
+        return None
+    _CTX_HINT["last"] = ctx
+    if "timeout" in err or "timed out" in err:
+        page = await _strategy_wayback(url, ctx=ctx)
+        if page:
+            return page
+    if "refused" in err or "connection" in err:
+        page = await _strategy_jina_text(url, ctx=ctx)
+        if page:
+            return page
+    return await _strategy_httpx_h2(url, ctx=ctx)
+
+
+async def after_fetch(ctx):
+    url = ctx.get("url")
+    html_text = ctx.get("html") or ""
+    if not url or not html_text:
+        return None
+    _CTX_HINT["last"] = ctx
+    try:
+        m = re.search(r'cf_clearance=([^;\"\']+)', html_text)
+        if m:
+            _save_cookie(_domain(url), f"cf_clearance={m.group(1)}", "", None)
+    except Exception:
+        pass
+    try:
+        status = ctx.get("status") or 200
+        if status == 200:
+            _cache_set(url, html_text)
+    except Exception:
+        pass
+    return None

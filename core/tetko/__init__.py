@@ -25,6 +25,8 @@ from core.tetko.exceptions import (
 from core.tetko.db import db_get, db_set, db_del, db_list, db_clear
 
 from core.tetko.context import Context
+from core.tetko import shell
+from core.tetko import ui
 
 from core.tetko.inline import Inline
 from core.tetko.inline_manager import InlineManager
@@ -59,4 +61,6 @@ __all__ = [
     "Context",
     "Inline",
     "InlineManager",
+    "ui",
+    "shell",
 ]

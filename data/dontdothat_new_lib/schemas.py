@@ -1,0 +1,17 @@
+CTX_SCHEMAS = {
+    "before_fetch": {"required": ["url"], "optional": ["site", "name", "query"]},
+    "after_fetch": {"required": ["url", "html"], "optional": ["status"]},
+    "on_blocked": {"required": ["url", "reason"], "optional": ["html"]},
+    "on_js_required": {"required": ["url"], "optional": ["html"]},
+    "on_error": {"required": ["url", "error"]},
+    "on_result": {"required": ["result", "url"], "optional": ["query"]},
+    "on_search": {"required": ["query"], "optional": ["tag", "mode", "actor"]},
+    "on_command": {"required": ["event", "text", "sender", "role"]},
+    "on_event": {"required": ["event"]},
+    "on_load": {"required": []},
+    "on_unload": {"required": []},
+    "on_config": {"required": ["key", "value"]},
+    "on_trust_change": {"required": ["level"]},
+    "on_sites_change": {"required": ["action"], "optional": ["name", "site"]},
+    "on_role_change": {"required": ["uid", "actor"], "optional": ["role"]},
+}

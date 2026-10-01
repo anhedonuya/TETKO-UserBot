@@ -1,0 +1,9 @@
+{
+    "repo_url": "git@github.com:flexOwnerAL/repo-TETKO-modules.git",
+    "repo_url_http": "https://github.com/flexOwnerAL/repo-TETKO-modules.git",
+    "branch": "main",
+    "local_dir": "data/adder_repo",
+    "update_catalog": true,
+    "github_token": null,
+    "repo": "flexOwnerAL/repo-TETKO-modules"
+}

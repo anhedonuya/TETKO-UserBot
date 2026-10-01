@@ -1,4 +1,5 @@
-"""TETKO UserBot — точка входа на новом ядре core.tetko."""
+from __future__ import annotations
+
 import asyncio
 import json
 import logging
@@ -8,10 +9,12 @@ from pathlib import Path
 
 from telethon import TelegramClient
 
-from core.tetko import Kernel
-from core.tetko.bot import BotClient
-from core.tetko.banner import render_banner
-from core.version import __version__ as TETKO_VERSION
+from core.tetko import Kernel, ui
+
+try:
+    from core.version import __version__ as TETKO_VERSION
+except Exception:
+    TETKO_VERSION = "0.0.9.19"
 
 
 logging.getLogger("telethon").setLevel(logging.WARNING)
@@ -29,58 +32,50 @@ _fh.setFormatter(logging.Formatter(
 logging.getLogger().addHandler(_fh)
 log = logging.getLogger("TETKO")
 
+
 CONFIG_PATH = Path("config.json")
 
+E = "\033["
+C_RESET = E + "0m"
+C_BOLD  = E + "1m"
+C_DIM   = E + "2m"
+C_ITAL  = E + "3m"
+C_UNDER = E + "4m"
+C_RED   = E + "91m"
+C_GREEN = E + "92m"
+C_YELLOW= E + "93m"
+C_BLUE  = E + "94m"
+C_MAG   = E + "95m"
+C_CYAN  = E + "96m"
+C_GRAY  = E + "90m"
 
-C_RED = "\033[38;5;203m"
-C_WHITE = "\033[97m"
-C_GRAY = "\033[38;5;245m"
-C_DIM = "\033[2m"
-C_BOLD = "\033[1m"
-C_RESET = "\033[0m"
-
-
-def _line():
-    print(f"{C_RED}{'━' * 46}{C_RESET}")
-
-
-def _header(step: str, total: int, title: str, hint: str = ""):
-    print()
-    _line()
-    print()
-    print(f"  🔥{C_BOLD}{C_WHITE} TETKO UserBot{C_RESET} {C_GRAY}— первоначальная настройка{C_RESET}")
-    print()
-    _line()
-    print()
-    print(f"  {C_GRAY}Шаг {step}/{total} · {title}{C_RESET}")
-    print(f"  {C_DIM}─────────────────────────────{C_RESET}")
-    if hint:
-        for line in hint.split("\n"):
-            print(f"  {C_GRAY}{line}{C_RESET}")
-        print()
+if not sys.stdout.isatty():
+    C_RESET = C_BOLD = C_DIM = C_ITAL = C_UNDER = ""
+    C_RED = C_GREEN = C_YELLOW = C_BLUE = C_MAG = C_CYAN = C_GRAY = ""
 
 
-def _ask(prompt: str, default: str = "") -> str:
-    suffix = f" {C_GRAY}[{default}]{C_RESET}" if default else ""
-    try:
-        value = input(f"  {prompt}{suffix}: ").strip()
-    except (EOFError, KeyboardInterrupt):
-        print()
-        raise SystemExit(f"{C_RED}Настройка отменена.{C_RESET}")
-    return value or default
+def _arrow(msg, color=C_CYAN, bold=True):
+    b = C_BOLD if bold else ""
+    print(f"{color}{b}=>{C_RESET} {msg}")
 
 
-def _ask_secret(prompt: str, default: str = "") -> str:
-    try:
-        import getpass
-        value = getpass.getpass(f"  {prompt}: ").strip()
-    except (EOFError, KeyboardInterrupt):
-        print()
-        raise SystemExit(f"{C_RED}Настройка отменена.{C_RESET}")
-    return value or default
+def _hint(msg):
+    print(f"   {C_GRAY}{C_ITAL}{msg}{C_RESET}")
 
 
-def _save_config(cfg: dict) -> None:
+def _err(msg):
+    print(f"   {C_RED}{C_BOLD}err{C_RESET} {C_DIM}{msg}{C_RESET}")
+
+
+def _ok(msg):
+    print(f"{C_GREEN}{C_BOLD}=>{C_RESET} {msg}")
+
+
+def _rule(n=16):
+    print(f"{C_GRAY}{'=' * n}{C_RESET}")
+
+
+def _save_config(cfg):
     tmp = CONFIG_PATH.with_suffix(".json.tmp")
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(cfg, f, ensure_ascii=False, indent=2)
@@ -88,17 +83,16 @@ def _save_config(cfg: dict) -> None:
     os.replace(tmp, CONFIG_PATH)
 
 
-def _needs_first_run(cfg: dict | None) -> bool:
+def _needs_first_run(cfg):
     if not cfg:
         return True
-    placeholders = {
+    bad = {
         "api_id": {"12345678", "0", ""},
         "api_hash": {"", "0123456789abcdef0123456789abcdef"},
         "phone": {"", "+10000000000"},
     }
-    for key, bad_values in placeholders.items():
-        value = str(cfg.get(key, ""))
-        if value in bad_values:
+    for k, bads in bad.items():
+        if str(cfg.get(k, "")) in bads:
             return True
     try:
         return int(cfg.get("api_id")) <= 0 or not str(cfg.get("api_hash", "")).strip()
@@ -106,79 +100,64 @@ def _needs_first_run(cfg: dict | None) -> bool:
         return True
 
 
-def first_run_setup(existing: dict | None = None) -> dict:
+def first_run_setup(existing=None):
     cfg = dict(existing or {})
-    total = 3
-
-    _header(
-        1, total, "API",
-        "api_id и api_hash — с https://my.telegram.org\n"
-        "→ API development tools → создать app",
-    )
+    print()
+    _arrow("hello tetko user, i see u are new here", color=C_MAG)
+    print()
 
     while True:
-        raw_id = _ask("🔑 API ID", str(cfg.get("api_id", "")))
         try:
-            api_id = int(raw_id)
+            raw = input(f"{C_BOLD}so basically give me ur api id{C_RESET}: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            _err("setup cancelled")
+            raise SystemExit(1)
+        try:
+            api_id = int(raw)
             if api_id <= 0:
                 raise ValueError
+            cfg["api_id"] = api_id
             break
         except ValueError:
-            print(f"  {C_RED}❌ API ID должен быть положительным числом.{C_RESET}")
+            _err("positive integer required")
 
     while True:
-        api_hash = _ask_secret("🔒 API HASH", str(cfg.get("api_hash", "")))
+        try:
+            api_hash = input(f"{C_BOLD}next will be api hash{C_RESET}: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            _err("setup cancelled")
+            raise SystemExit(1)
         if len(api_hash) >= 20:
+            cfg["api_hash"] = api_hash
             break
-        print(f"  {C_RED}❌ API HASH слишком короткий — проверь с my.telegram.org.{C_RESET}")
+        _err("api_hash looks too short - check my.telegram.org")
 
-    _header(
-        2, total, "Аккаунт",
-        "Юзербот работает от твоего личного аккаунта.\n"
-        "Используй отдельный, если не хочешь рисковать.",
-    )
-
-    phone = _ask("📱 Номер Telegram", str(cfg.get("phone", "")))
+    try:
+        phone = input(f"{C_BOLD}and the last one phone num{C_RESET}: ").strip()
+    except (EOFError, KeyboardInterrupt):
+        print()
+        _err("setup cancelled")
+        raise SystemExit(1)
     if phone and not phone.startswith("+"):
         phone = "+" + phone
+    cfg["phone"] = phone
 
-    _header(
-        3, total, "Inline-бот",
-        "Создай бота через @BotFather и вставь токен ниже.\n"
-        "Enter — пропустить (можно добавить позже в config.json).",
-    )
+    cfg.setdefault("command_prefix", ".")
+    cfg.setdefault("language", "en")
+    cfg.setdefault("db_version", 2)
 
-    bot_token = _ask_secret("🤖 Токен бота", str(cfg.get("inline_bot_token") or ""))
-    bot_username = ""
-    if bot_token:
-        bot_username = _ask("👤 Username без @", str(cfg.get("inline_bot_username") or ""))
-        if bot_username.startswith("@"):
-            bot_username = bot_username[1:]
-
-    cfg.update({
-        "api_id": api_id,
-        "api_hash": api_hash,
-        "phone": phone,
-        "command_prefix": cfg.get("command_prefix", ".") or ".",
-        "inline_bot_token": bot_token or None,
-        "inline_bot_username": bot_username or None,
-        "language": cfg.get("language", "ru") or "ru",
-        "db_version": int(cfg.get("db_version", 2) or 2),
-    })
     _save_config(cfg)
 
     print()
-    _line()
-    print()
-    print(f"  {C_WHITE}✅ Настройка сохранена{C_RESET} {C_GRAY}→ {CONFIG_PATH}{C_RESET}")
-    print(f"  {C_GRAY}🔐 Код входа и 2FA запросит Telethon при авторизации{C_RESET}")
-    print()
-    _line()
+    _ok(f"config saved -> {C_UNDER}{CONFIG_PATH}{C_RESET}")
+    _hint("login code and 2FA will be requested by Telethon on first connect")
     print()
     return cfg
 
 
-def load_config() -> dict:
+def load_config():
     cfg = None
     if CONFIG_PATH.exists():
         try:
@@ -187,24 +166,53 @@ def load_config() -> dict:
             if not isinstance(cfg, dict):
                 cfg = None
         except Exception as e:
-            log.warning(f"⚠️ Ошибка чтения {CONFIG_PATH}: {e}. Запускаю первоначальную настройку.")
+            log.warning(f"config read error: {e}")
 
     if _needs_first_run(cfg):
-        return first_run_setup(cfg)
+        return first_run_setup(cfg), True
 
     cfg.pop("power_save_mode", None)
-    required = ["api_id", "api_hash"]
-    missing = [k for k in required if not cfg.get(k)]
+    missing = [k for k in ("api_id", "api_hash") if not cfg.get(k)]
     if missing:
-        return first_run_setup(cfg)
-    return cfg
+        return first_run_setup(cfg), True
+    return cfg, False
 
 
-async def console_reader() -> None:
-    """Читает команды из консоли Termux (только после авторизации)."""
-    loop = asyncio.get_event_loop()
+def loading_banner(first_run=False):
+    line = ""
+    try:
+        from core.langpacks import get_kernel_strings
+        locale = "ru"
+        if CONFIG_PATH.exists():
+            try:
+                import json as _json
+                _c = _json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+                locale = _c.get("language", "ru") or "ru"
+            except Exception:
+                locale = "ru"
+        k = get_kernel_strings(locale)
+        if first_run:
+            line = k.get("loading_first", "tetko loading in first time.., bugs? t.me/tetkosupport")
+        else:
+            line = k.get("loading_normal", "loading ur tetko // t.me/tetkosupport")
+    except Exception:
+        line = "loading ur tetko // t.me/tetkosupport"
+
     print()
-    print("\033[1;92m[console] Команды: restart | stop | help\033[0m")
+    print(f"{C_BOLD}=>{C_RESET} {C_ITAL}{line}{C_RESET}")
+    print()
+    _rule(16)
+    print(f"{C_GREEN}{C_BOLD}=> Kernel loaded <={C_RESET}")
+    _rule(16)
+    print()
+
+
+async def console_reader():
+    loop = asyncio.get_event_loop()
+    print(f"{C_GRAY}[console] commands: {C_RESET}"
+          f"{C_BOLD}restart{C_RESET} {C_GRAY}|{C_RESET} "
+          f"{C_BOLD}stop{C_RESET} {C_GRAY}|{C_RESET} "
+          f"{C_BOLD}help{C_RESET}")
     print()
     sys.stdout.flush()
 
@@ -218,32 +226,34 @@ async def console_reader() -> None:
                 continue
 
             if cmd == "restart":
-                print("\033[1;93m[console] 🔄 Перезапуск TETKO...\033[0m")
+                print(f"{C_YELLOW}=>{C_RESET} restarting tetko...")
                 sys.stdout.flush()
                 await asyncio.sleep(0.5)
                 os.execv(sys.executable, [sys.executable] + sys.argv)
                 return
             elif cmd == "stop":
-                print("\033[1;91m[console] 🛑 Остановка TETKO...\033[0m")
+                print(f"{C_RED}=>{C_RESET} stopping tetko...")
                 sys.stdout.flush()
                 os._exit(0)
             elif cmd == "help":
-                print("\033[1;92m[console] Команды: restart | stop | help\033[0m")
+                print(f"{C_GRAY}[console] commands: {C_RESET}"
+                      f"{C_BOLD}restart{C_RESET} {C_GRAY}|{C_RESET} "
+                      f"{C_BOLD}stop{C_RESET} {C_GRAY}|{C_RESET} "
+                      f"{C_BOLD}help{C_RESET}")
                 sys.stdout.flush()
             else:
-                print(f"\033[1;91m[console] Неизвестная команда: {cmd!r}. Введи help\033[0m")
+                print(f"{C_RED}=>{C_RESET} unknown: {cmd!r} (try help)")
                 sys.stdout.flush()
 
         except asyncio.CancelledError:
             break
         except Exception as e:
-            print(f"\033[1;91m[console] Ошибка: {e}\033[0m")
+            print(f"{C_RED}=>{C_RESET} console error: {e}")
             sys.stdout.flush()
 
 
 async def main():
-    import logging as _l
-    cfg = load_config()
+    cfg, first_run = load_config()
 
     api_id = int(cfg["api_id"])
     api_hash = cfg["api_hash"]
@@ -251,16 +261,13 @@ async def main():
     prefix = cfg.get("command_prefix", ".")
     session_name = "tetko"
 
-    import logging as _l
-    _l.getLogger().setLevel(_l.INFO)
-
-    print("🔥 Инициализация TETKO UserBot...")
-    print("📡 Подключение к Telegram...")
+    print()
+    _arrow("connecting to telegram", color=C_CYAN)
     sys.stdout.flush()
 
     client = TelegramClient(
         session_name, api_id, api_hash,
-        device_model="TETKO UserBot",
+        device_model="TETKO",
         system_version="TETKO",
         app_version=TETKO_VERSION,
     )
@@ -272,52 +279,34 @@ async def main():
     if not cfg.get("admin_id"):
         cfg["admin_id"] = me.id
         try:
-            with open(CONFIG_PATH, "w", encoding="utf-8") as f:
-                json.dump(cfg, f, ensure_ascii=False, indent=2)
-            log.info(f"👑 admin_id определён автоматически: {me.id} (@{me.username}) и записан в config.json")
+            _save_config(cfg)
+            log.info(f"admin_id set to {me.id}")
         except Exception as e:
-            log.error(f"❌ Не удалось записать admin_id в config.json: {e}")
+            log.error(f"admin_id save failed: {e}")
 
     kernel = Kernel(client=client, prefix=prefix, config=cfg)
 
-    # Создаём ДО kernel.start(), чтобы MCUB inline (setup_mcub_inline)
-    # не перезаписал kernel.bot_client на сырой TelegramClient.
     bot_token = cfg.get("inline_bot_token")
-    bot_client = getattr(kernel, "bot_client", None)
-    if bot_token and not isinstance(bot_client, BotClient):
+    if bot_token:
         try:
-            bot_client = BotClient(
-                api_id=api_id,
-                api_hash=api_hash,
-                bot_token=bot_token,
-                kernel=kernel,
-            )
-            await bot_client.start()
-            kernel.bot_client = bot_client
-            log.info(f"🤖 Inline-бот подключён: @{bot_client.username}")
+            from core.tetko.bot import BotClient
+            existing = getattr(kernel, "bot_client", None)
+            if not isinstance(existing, BotClient):
+                bc = BotClient(
+                    api_id=api_id,
+                    api_hash=api_hash,
+                    bot_token=bot_token,
+                    kernel=kernel,
+                )
+                await bc.start()
+                kernel.bot_client = bc
+                log.info(f"inline bot connected: @{bc.username}")
         except Exception as e:
-            log.error(f"❌ Не удалось запустить inline-бота: {e}")
-            bot_client = None
+            log.error(f"inline bot start failed: {e}")
 
     await kernel.start()
 
-    _l.getLogger().setLevel(_l.INFO)
-
-    os.system("clear")
-
-    print(render_banner(version=TETKO_VERSION, codename="native"))
-    print()
-    print("  \033[1;92m[>]\033[0m Kernel:  loaded successfully")
-    modules = list(kernel.registry.list_modules().keys()) or []
-    print(f"  \033[1;92m[>]\033[0m Modules: {len(modules)}")
-    from core.tetko import __compat__ as _tetko_compat
-    print(f"  \033[1;92m[>]\033[0m Compat:  tetko-compat {_tetko_compat}")
-    _owner_name = getattr(me, "first_name", None) or getattr(me, "username", None) or str(kernel.context.admin_id)
-    _owner_tag = f" (@{me.username})" if getattr(me, "username", None) else ""
-    print(f"  \033[1;92m[>]\033[0m Owner:   {_owner_name}{_owner_tag}")
-    print()
-    print("\033[1;92mTETKO loaded\033[0m")
-    sys.stdout.flush()
+    loading_banner(first_run=first_run)
 
     console_task = asyncio.create_task(console_reader())
 
@@ -337,4 +326,4 @@ if __name__ == "__main__":
     try:
         asyncio.run(main())
     except (KeyboardInterrupt, SystemExit):
-        print("\n👋 Юзербот остановлен пользователем.")
+        print(f"\n{C_GRAY}=>{C_RESET} tetko stopped")

@@ -1,0 +1,8 @@
+{
+    "CACHE_LIMIT": 300,
+    "FETCH_GIF": true,
+    "FETCH_VIDEO": true,
+    "FETCH_PHOTO_VIDEO": true,
+    "BACKGROUND_UPDATE_HOURS": 4,
+    "SILENT": true
+}

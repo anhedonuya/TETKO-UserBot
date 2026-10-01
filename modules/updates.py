@@ -1,4 +1,4 @@
-"""Updates — авто-обновление ядра TETKO из git."""
+"""Updates — pull TETKO from git and restart."""
 from __future__ import annotations
 
 import asyncio
@@ -7,19 +7,41 @@ import os
 import sys
 from pathlib import Path
 
-from core.tetko import Module, command, db_get, db_set, db_del
+from core.tetko import Module, command, db_get, db_set, db_del, shell
 
 log = logging.getLogger("TETKO.module.updates")
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
+def _esc(text):
+    if text is None:
+        return "-"
+    return str(text).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def _bq(msg):
+    return "<blockquote><b>" + msg + "</b></blockquote>"
+
+
+def _bq_i(msg):
+    return "<blockquote>" + msg + "</blockquote>"
+
+
+def _shell(cmd, running=True):
+    return shell.wrap([], cmd=cmd, running=running, trailing=True)
+
+
+def _shell_out(cmd, out):
+    return "<pre>$ " + _esc(cmd) + "\n" + _esc(out) + "</pre>"
+
+
 class UpdatesModule(Module):
     name = "Updates"
     __compat__ = "0.0.9.0"
-    version = "1.1.0"
+    version = "1.4.0"
     author = "@anhedonuya"
-    description = "Авто-обновление и перезапуск TETKO"
+    description = "Auto-update and restart of TETKO"
 
     async def on_load(self):
         pending = db_get("updates", "pending_reload")
@@ -32,39 +54,15 @@ class UpdatesModule(Module):
             return
         try:
             await self.client.edit_message(
-                chat_id,
-                message_id,
-                "<blockquote><b>✅ Ваша тетенька успешно перезагрузилась!!</b></blockquote>",
+                chat_id, message_id,
+                _bq("Successfully reloaded TETKO"),
                 parse_mode="html",
             )
-            log.info(f"updates: pending reload message edited ({chat_id}/{message_id})")
         except Exception as e:
-            log.warning(f"updates: pending reload edit failed: {e}")
+            log.warning("updates: pending edit failed: " + str(e))
         db_del("updates", "pending_reload")
 
-    def _emoji(self) -> dict:
-        premium = bool(getattr(self.kernel.context, "user_premium", False))
-        if premium:
-            return {
-                "think": '<tg-emoji emoji-id="5346022209389372742">🤔</tg-emoji>',
-                "hourglass": '<tg-emoji emoji-id="5332688668102525212">⌛</tg-emoji>',
-                "tetko": (
-                    '<tg-emoji emoji-id="5285530631567095762">🙏</tg-emoji>'
-                    '<tg-emoji emoji-id="5285030066013648645">📧</tg-emoji>'
-                    '<tg-emoji emoji-id="5285504668489785087">🅾️</tg-emoji>'
-                ),
-                "ok": '<tg-emoji emoji-id="5339256974473199519">👍</tg-emoji>',
-                "err": '<tg-emoji emoji-id="5258196742435787040">👾</tg-emoji>',
-            }
-        return {
-            "think": "🤔",
-            "hourglass": "⌛",
-            "tetko": "TETKO",
-            "ok": "👍",
-            "err": "👾",
-        }
-
-    def _branch(self) -> str:
+    def _branch(self):
         try:
             return self.kernel.config.get("branch", "main")
         except Exception:
@@ -74,28 +72,15 @@ class UpdatesModule(Module):
         try:
             os.execv(sys.executable, [sys.executable, str(REPO_ROOT / "main.py")])
         except Exception as e:
-            log.exception(f"restart failed: {e}")
+            log.exception("restart failed: " + str(e))
 
-    @staticmethod
-    def _esc(text: str) -> str:
-        return (
-            str(text).replace("&", "&amp;")
-            .replace("<", "&lt;")
-            .replace(">", "&gt;")
-        )
-
-    @command(
-        name="update",
-        aliases=["upd"],
-        description="Обновить TETKO из git",
-        only_for="owner",
-    )
+    @command(name="update", aliases=["upd"], description="Pull TETKO from git", only_for="owner")
     async def cmd_update(self, event, args):
-        e = self._emoji()
         branch = self._branch()
+        cmd = "git pull origin " + branch
 
         await event.edit(
-            f"<blockquote>{e['think']} <b>Щаща погоди я обновы сматрю!!</b> {e['hourglass']}</blockquote>",
+            _shell(cmd),
             parse_mode="html",
         )
 
@@ -107,26 +92,24 @@ class UpdatesModule(Module):
                 cwd=str(REPO_ROOT),
             )
             try:
-                stdout_b, stderr_b = await asyncio.wait_for(
-                    proc.communicate(), timeout=60,
-                )
+                out_b, err_b = await asyncio.wait_for(proc.communicate(), timeout=60)
             except asyncio.TimeoutError:
                 proc.kill()
                 await proc.communicate()
                 await event.edit(
-                    f"<blockquote>{e['err']} <b>Ошибка:</b> <code>git pull timeout (60s)</code></blockquote>",
+                    _bq("git pull timeout after 60s") + "\n"
+                    + _shell(cmd, running=False),
                     parse_mode="html",
                 )
                 return
-
-            stdout = stdout_b.decode(errors="replace")
-            stderr = stderr_b.decode(errors="replace")
+            stdout = out_b.decode(errors="replace")
+            stderr = err_b.decode(errors="replace")
             rc = proc.returncode
-
         except Exception as ex:
             log.exception("update: git pull failed")
             await event.edit(
-                f"<blockquote>{e['err']} <b>Ошибка:</b> <code>{self._esc(str(ex))}</code></blockquote>",
+                _bq("git pull failed") + "\n"
+                + _shell_out(cmd, str(ex)),
                 parse_mode="html",
             )
             return
@@ -134,8 +117,8 @@ class UpdatesModule(Module):
         if rc != 0:
             err_text = (stderr or stdout).strip()[:300]
             await event.edit(
-                f"<blockquote>{e['err']} <b>git pull failed:</b>\n"
-                f"<code>{self._esc(err_text)}</code></blockquote>",
+                _bq("git pull exit code " + str(rc)) + "\n"
+                + _shell_out(cmd, err_text),
                 parse_mode="html",
             )
             return
@@ -143,7 +126,8 @@ class UpdatesModule(Module):
         combined = (stdout + stderr).lower()
         if "already up to date" in combined or "already up-to-date" in combined:
             await event.edit(
-                f"<blockquote>{e['ok']} <b>Зачем???? У тя последняя версия TETKO!!!</b></blockquote>",
+                _bq("Already up to date") + "\n"
+                + _shell_out(cmd, "Already up to date."),
                 parse_mode="html",
             )
             return
@@ -154,8 +138,8 @@ class UpdatesModule(Module):
         })
 
         await event.edit(
-            f"<blockquote>{e['ok']} <b>Обновление успешно!</b>\n"
-            f"{e['tetko']} <b>Перезапуск...</b></blockquote>",
+            _bq("Successfully pulled TETKO") + "\n"
+            + _shell("systemctl restart tetko"),
             parse_mode="html",
         )
 

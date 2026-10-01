@@ -182,8 +182,15 @@ def _build_fake_modules() -> dict[str, types.ModuleType]:
 
 
     fake["core_inline"] = _make_module("core_inline", {})
-    fake["core_inline.bot"] = _make_module("core_inline.bot", {"InlineBot": _Unavailable("InlineBot")})
-    fake["core_inline.handlers"] = _make_module("core_inline.handlers", {"InlineHandlers": _Unavailable("InlineHandlers")})
+    try:
+        import importlib as _importlib
+        _real_bot = _importlib.import_module("core_inline.bot")
+        _real_handlers = _importlib.import_module("core_inline.handlers")
+        fake["core_inline.bot"] = _real_bot
+        fake["core_inline.handlers"] = _real_handlers
+    except Exception:
+        fake["core_inline.bot"] = _make_module("core_inline.bot", {"InlineBot": _Unavailable("InlineBot")})
+        fake["core_inline.handlers"] = _make_module("core_inline.handlers", {"InlineHandlers": _Unavailable("InlineHandlers")})
 
     fake["utils.arg_parser"] = _make_module("utils.arg_parser", {
         "ArgumentParser": _Unavailable("ArgumentParser"),

@@ -8,6 +8,7 @@ from typing import Any, Optional
 
 from telethon import TelegramClient, events
 
+from core.tetko import ui
 from core.tetko.context import Context
 from core.tetko.dispatcher import EventDispatcher
 try:
@@ -151,18 +152,27 @@ class Kernel:
 
     async def start(self) -> None:
         """Запуск ядра, загрузка модулей и старт событий."""
-        log.info("🚀 Запуск ядра TETKO...")
-        # await self.setup_mcub_inline()
-
+        t0 = time.time()
+        ui.collect("Preparing kernel")
         try:
             me = await self.client.get_me()
+            from core.tetko import shell
+            shell.set_username(getattr(me, "username", None) or getattr(me, "first_name", None) or "user")
             self.context.user_premium = bool(getattr(me, "premium", False))
-            log.info(f"👑 Premium: {self.context.user_premium}")
+            ui.item("owner: " + str(getattr(me, "id", "?")))
+            ui.item("premium: " + str(self.context.user_premium).lower())
         except Exception as e:
-            log.warning(f"Не удалось проверить premium: {e}")
+            ui.item("get_me failed: " + str(e), "warn")
 
-        count = await self.loader.load_all()
-        log.info(f"📦 Успешно загружено модулей: {count}")
+        await self.loader.load_all()
+
+        ui.collect("Installing")
+        ui.item(
+            str(self.registry.modules_count) + " modules, "
+            + str(self.registry.commands_count) + " commands, "
+            + str(len(self.registry.list_watchers())) + " watchers, "
+            + str(len(self.registry.list_loops())) + " loops"
+        )
 
         @self.client.on(events.NewMessage(outgoing=True))
         async def message_handler(event):
@@ -178,7 +188,7 @@ class Kernel:
 
         self._start_loops()
 
-        log.info("✅ Ядро TETKO полностью инициализировано и готово!")
+        ui.done("Successfully loaded in " + ("%.2f" % (time.time() - t0)) + "s.")
 
     def _start_loops(self) -> None:
         """Запуск фоновых периодических функций модулей."""

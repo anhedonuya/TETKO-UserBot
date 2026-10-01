@@ -1,0 +1,6 @@
+{
+    "auto_update": false,
+    "auto_install_new": false,
+    "update_interval": 2200,
+    "notify_updates": true
+}

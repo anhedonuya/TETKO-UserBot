@@ -1,0 +1,150 @@
+#!ddt 1.5.0
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Any, Dict, List
+import importlib.util
+import re
+import sys
+from pathlib import Path
+
+
+NF_VERSION = "2.0.0"
+NF_SCHEMA = 20
+NF_DIR = Path("data/neverfake")
+NF_LIB = NF_DIR / "lib"
+NF_DB = NF_DIR / "neverfake.db"
+
+
+@dataclass
+class Manifest:
+    name: str = "NeverFake"
+    version: str = NF_VERSION
+    author: str = "@flexOwnerAL"
+    description: str = "coherent cookie jar: seed + harvest + policy + learning + fingerprint"
+    api: str = "1.5.0"
+    min_core: str = ">=0.0.0"
+    access: List[str] = field(default_factory=lambda: ["module", "kernel"])
+    tags: List[str] = field(default_factory=lambda: ["bypass", "cookies", "anti-detect"])
+    categories: List[str] = field(default_factory=lambda: ["security", "util"])
+    events: List[str] = field(default_factory=lambda: ["fetch.completed", "fetch.blocked"])
+    priority: Dict[str, int] = field(default_factory=lambda: {"before_fetch": 90, "after_fetch": 900, "on_blocked": 500, "on_result": 100})
+    timeout: int = 25
+    retry_on_error: bool = False
+    cfg_defaults: Dict[str, Any] = field(default_factory=lambda: {
+        "enabled": True, "never_fake_signed": True, "preserve_sacred": True,
+        "progressive_aging": True, "throttle_per_domain_sec": 1.5,
+        "lock_identity_after_success": True, "harvest_js_cookies": True,
+        "cooldown_hours_default": 24, "ua_consistency": True,
+        "rotate_ua_on_block": True, "call_liteflare_on_block": True,
+        "warmup_on_first_visit": True, "max_cookies_per_request": 20,
+        "seed_analytics": True, "seed_yandex": True, "seed_ads": True,
+        "seed_consent": True, "seed_session": False, "seed_cms": True,
+        "seed_microsoft": True, "seed_social": True, "seed_tcf": True,
+        "seed_ru_specific": True, "seed_cms_advanced": True, "seed_session_advanced": False,
+    })
+    cfg_schema: Dict[str, Any] = field(default_factory=dict)
+
+
+MANIFEST = Manifest()
+
+
+class Plugin:
+    manifest = MANIFEST
+
+    def __init__(self):
+        self._ready = False
+        self._main = None
+
+    def _scan_lib_schema(self):
+        v = NF_LIB / "version.py"
+        if not v.exists():
+            return None
+        try:
+            t = v.read_text(encoding="utf-8")
+            m = re.search(r"LIB_SCHEMA\s*=\s*(\d+)", t)
+            return int(m.group(1)) if m else None
+        except Exception:
+            return None
+
+    def _import_lib(self):
+        if str(NF_DIR) not in sys.path:
+            sys.path.insert(0, str(NF_DIR))
+        mod_name = "neverfake_lib"
+        for k in list(sys.modules.keys()):
+            if k == mod_name or k.startswith(mod_name + "."):
+                sys.modules.pop(k, None)
+        spec = importlib.util.spec_from_file_location(mod_name, NF_LIB / "__init__.py", submodule_search_locations=[str(NF_LIB)])
+        if spec is None or spec.loader is None:
+            return None
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules[mod_name] = mod
+        spec.loader.exec_module(mod)
+        return mod
+
+    async def on_load(self, ctx):
+        NF_DIR.mkdir(parents=True, exist_ok=True)
+        (NF_DIR / "logs").mkdir(parents=True, exist_ok=True)
+        cur = self._scan_lib_schema()
+        if cur != NF_SCHEMA:
+            ctx.logger.error("NeverFake lib schema mismatch: %s != %s" % (cur, NF_SCHEMA))
+            return
+        try:
+            self._import_lib()
+        except Exception as e:
+            ctx.logger.error("lib import failed: %s" % e)
+            return
+        try:
+            from neverfake_lib import main as lib_main
+        except Exception as e:
+            ctx.logger.error("lib main import failed: %s" % e)
+            return
+        self._main = lib_main.build()
+        self._main.lib_path = str(NF_LIB)
+        self._main.install_ddt_patch(ctx)
+        self._ready = True
+        ctx.logger.info("NeverFake v%s ready lib=%s patched=%s" % (NF_VERSION, NF_LIB, self._main._patched))
+
+    async def on_unload(self, ctx):
+        if self._main is not None and getattr(self._main, "store", None) is not None:
+            try:
+                self._main.store.close()
+            except Exception:
+                pass
+        self._ready = False
+
+    async def before_fetch(self, ctx):
+        if not self._ready or self._main is None:
+            return None
+        return await self._main.before_fetch(ctx)
+
+    async def after_fetch(self, ctx):
+        if not self._ready or self._main is None:
+            return None
+        return await self._main.after_fetch(ctx)
+
+    async def on_blocked(self, ctx):
+        if not self._ready or self._main is None:
+            return None
+        return await self._main.on_blocked(ctx)
+
+    async def on_js_required(self, ctx):
+        return None
+
+    async def on_error(self, ctx):
+        if not self._ready or self._main is None:
+            return None
+        return await self._main.on_error(ctx)
+
+    async def on_result(self, ctx):
+        return None
+
+    async def on_command(self, ctx):
+        if not self._ready or self._main is None:
+            return None
+        return await self._main.on_command(ctx)
+
+    def health(self, ctx):
+        if self._main is None:
+            return {"status": "loading", "message": "main not ready"}
+        return self._main.health(ctx)

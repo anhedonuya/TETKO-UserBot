@@ -1,19 +1,3 @@
-# ─── Runtime данные TETKO ───
-data/
-*.session
-*.session-journal
-*.db
-*.db-journal
-*.log
-logs/
-
-# ─── Конфиги с секретами ───
-config.json
-config.local.json
-.env
-.env.local
-
-# ─── Python ───
 __pycache__/
 *.py[cod]
 *$py.class
@@ -22,59 +6,62 @@ __pycache__/
 build/
 dist/
 *.egg-info/
+.eggs/
 .installed.cfg
-*.egg
 
-# ─── Virtual env ───
 venv/
 env/
 .venv/
 ENV/
 
-# ─── IDE ───
+config.json
+config.local.json
+config.json.*
+.env
+.env.*
+secrets.json
+token.txt
+*.token
+*.token_marker
+
+*.session
+*.session-journal
+sessions/
+session/
+
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+*.log
+logs/
+*.logcd
+
+.cache/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
 .vscode/
 .idea/
 *.swp
 *.swo
 *.sublime-*
 
-# ─── OS ───
 .DS_Store
 Thumbs.db
 desktop.ini
 
-# ─── Прочее ───
 *.bak
 *.backup
 *.mybackup
-main.py.mybackup
 *.tmp
-.cache/
-.pytest_cache/
-
-# ─── Sessions (никогда не пушить!) ───
-sessions/
-session/
-*.session
-*.session-journal
-*.token_marker
-
-# ─── TETKO: дополнительные защиты ───
-data/tetko_db/
-token.txt
-secrets.json
-tetko.session
-bump.sh
-
-# ─── Старые модули ───
-modules_legacy/
-
-# ─── Пользовательские модули (не публикуются) ───
-modules_custom/
-modules_custom/**/*.py
-modules_custom/**/*.bak
-*.logcd
 *.old
-*.log
-config.json.*
+
+modules_custom/__pycache__/
+modules_custom/**/*.bak
+modules_legacy/
 TETKO-UserBot-main/

@@ -1,0 +1,1314 @@
+#!ddt 1.5.0
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import urlparse, quote_plus, unquote
+import asyncio
+import base64
+import hashlib
+import hmac
+import importlib.util
+import json
+import math
+import os
+import random
+import re
+import secrets
+import shutil
+import sqlite3
+import string
+import sys
+import threading
+import time
+from pathlib import Path
+
+
+NF_VERSION = "0.2.0"
+NF_SCHEMA = 3
+NF_DIR = Path("data/neverfake")
+NF_LIB = NF_DIR / "lib"
+NF_DB = NF_DIR / "neverfake.db"
+NF_LOGS = NF_DIR / "logs"
+
+
+_LIB_VERSION_PY = r'''"""NeverFake lib version."""
+NEVERFAKE_VERSION = "0.2.0"
+LIB_SCHEMA = 3
+'''
+
+_LIB_INIT_PY = r'''"""NeverFake lib facade."""
+from .version import NEVERFAKE_VERSION, LIB_SCHEMA
+from .store import Store
+from .identity import Identity
+from .templates import Templates
+from .seeder import Seeder
+from .harvester import Harvester
+from .policy import Policy
+from .learning import Learning
+from .api import Api
+from .commands import Commands
+
+__all__ = [
+    "NEVERFAKE_VERSION", "LIB_SCHEMA",
+    "Store", "Identity", "Templates", "Seeder",
+    "Harvester", "Policy", "Learning", "Api",
+]
+'''
+
+_LIB_STORE_PY = r'''"""SQLite store: identities, cookies, seed_stats, cooldowns, harvest_log."""
+from __future__ import annotations
+
+import sqlite3
+import threading
+import time
+from pathlib import Path
+
+
+_SCHEMA = [
+    """
+    CREATE TABLE IF NOT EXISTS identities (
+        domain        TEXT PRIMARY KEY,
+        device_seed   TEXT NOT NULL,
+        created_at    REAL NOT NULL,
+        last_seen     REAL NOT NULL,
+        visit_count   INTEGER DEFAULT 0,
+        ua_locked     TEXT,
+        lang_locked   TEXT,
+        tz_locked     TEXT,
+        tls_locked    TEXT
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS cookies (
+        domain        TEXT NOT NULL,
+        proxy_key     TEXT NOT NULL DEFAULT '',
+        name          TEXT NOT NULL,
+        value         TEXT NOT NULL,
+        path          TEXT DEFAULT '/',
+        expires_at    REAL,
+        secure        INTEGER DEFAULT 0,
+        http_only     INTEGER DEFAULT 0,
+        same_site     TEXT,
+        kind          TEXT NOT NULL,
+        source        TEXT,
+        created_at    REAL NOT NULL,
+        last_sent_at  REAL,
+        send_count    INTEGER DEFAULT 0,
+        PRIMARY KEY (domain, proxy_key, name, path)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS seed_stats (
+        domain        TEXT NOT NULL,
+        template      TEXT NOT NULL,
+        seeded_at     REAL NOT NULL,
+        outcome       TEXT,
+        latency_ms    REAL
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS cooldowns (
+        domain        TEXT NOT NULL,
+        strategy      TEXT NOT NULL,
+        until_ts      REAL NOT NULL,
+        reason        TEXT,
+        PRIMARY KEY (domain, strategy)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS harvest_log (
+        ts            REAL NOT NULL,
+        domain        TEXT NOT NULL,
+        proxy_key     TEXT DEFAULT '',
+        name          TEXT NOT NULL,
+        kind          TEXT NOT NULL,
+        source        TEXT,
+        status        INTEGER
+    )
+    """,
+]
+
+
+class Store:
+    def __init__(self, db_path):
+        self.db_path = Path(db_path)
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        self._conn = None
+        self._lock = threading.Lock()
+
+    def _connect(self):
+        if self._conn is not None:
+            return self._conn
+        c = sqlite3.connect(str(self.db_path), check_same_thread=False)
+        try:
+            c.execute("PRAGMA journal_mode=WAL")
+        except Exception:
+            pass
+        for stmt in _SCHEMA:
+            c.execute(stmt)
+        c.commit()
+        self._conn = c
+        return c
+
+    def close(self):
+        with self._lock:
+            if self._conn is not None:
+                try:
+                    self._conn.close()
+                except Exception:
+                    pass
+                self._conn = None
+
+    def get_identity(self, domain):
+        with self._lock:
+            c = self._connect()
+            row = c.execute(
+                "SELECT domain, device_seed, created_at, last_seen, visit_count, ua_locked, lang_locked, tz_locked, tls_locked FROM identities WHERE domain=?",
+                (domain,),
+            ).fetchone()
+            if row is None:
+                return None
+            return {
+                "domain": row[0],
+                "device_seed": row[1],
+                "created_at": row[2],
+                "last_seen": row[3],
+                "visit_count": row[4] or 0,
+                "ua_locked": row[5],
+                "lang_locked": row[6],
+                "tz_locked": row[7],
+                "tls_locked": row[8],
+            }
+
+    def upsert_identity(self, domain, data):
+        with self._lock:
+            c = self._connect()
+            c.execute(
+                "INSERT OR REPLACE INTO identities (domain, device_seed, created_at, last_seen, visit_count, ua_locked, lang_locked, tz_locked, tls_locked) VALUES (?,?,?,?,?,?,?,?,?)",
+                (
+                    domain,
+                    data["device_seed"],
+                    data.get("created_at", time.time()),
+                    time.time(),
+                    int(data.get("visit_count", 0)),
+                    data.get("ua_locked"),
+                    data.get("lang_locked"),
+                    data.get("tz_locked"),
+                    data.get("tls_locked"),
+                ),
+            )
+            c.commit()
+
+    def bump_visit(self, domain):
+        with self._lock:
+            c = self._connect()
+            c.execute(
+                "UPDATE identities SET visit_count = visit_count + 1, last_seen = ? WHERE domain = ?",
+                (time.time(), domain),
+            )
+            c.commit()
+
+    def list_cookies(self, domain, proxy_key=""):
+        with self._lock:
+            c = self._connect()
+            rows = c.execute(
+                "SELECT name, value, path, expires_at, secure, http_only, same_site, kind, source, send_count FROM cookies WHERE domain=? AND proxy_key=?",
+                (domain, proxy_key),
+            ).fetchall()
+            return [
+                {
+                    "name": r[0], "value": r[1], "path": r[2],
+                    "expires_at": r[3], "secure": bool(r[4]),
+                    "http_only": bool(r[5]), "same_site": r[6],
+                    "kind": r[7], "source": r[8], "send_count": r[9] or 0,
+                }
+                for r in rows
+            ]
+
+    def put_cookie(self, domain, proxy_key, data):
+        with self._lock:
+            c = self._connect()
+            c.execute(
+                "INSERT OR REPLACE INTO cookies (domain, proxy_key, name, value, path, expires_at, secure, http_only, same_site, kind, source, created_at, last_sent_at, send_count) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (
+                    domain, proxy_key, data["name"], data["value"],
+                    data.get("path", "/"), data.get("expires_at"),
+                    1 if data.get("secure") else 0,
+                    1 if data.get("http_only") else 0,
+                    data.get("same_site"),
+                    data.get("kind", "seed"),
+                    data.get("source"),
+                    time.time(),
+                    data.get("last_sent_at"),
+                    int(data.get("send_count", 0)),
+                ),
+            )
+            c.commit()
+
+    def delete_cookie(self, domain, proxy_key, name, path="/"):
+        with self._lock:
+            c = self._connect()
+            c.execute(
+                "DELETE FROM cookies WHERE domain=? AND proxy_key=? AND name=? AND path=?",
+                (domain, proxy_key, name, path),
+            )
+            c.commit()
+
+    def clear_domain(self, domain):
+        with self._lock:
+            c = self._connect()
+            c.execute("DELETE FROM cookies WHERE domain=?", (domain,))
+            c.execute("DELETE FROM identities WHERE domain=?", (domain,))
+            c.execute("DELETE FROM seed_stats WHERE domain=?", (domain,))
+            c.execute("DELETE FROM cooldowns WHERE domain=?", (domain,))
+            c.commit()
+
+    def log_seed(self, domain, template, outcome, latency_ms=None):
+        with self._lock:
+            c = self._connect()
+            c.execute(
+                "INSERT INTO seed_stats (domain, template, seeded_at, outcome, latency_ms) VALUES (?,?,?,?,?)",
+                (domain, template, time.time(), outcome, latency_ms),
+            )
+            c.commit()
+
+    def log_harvest(self, domain, proxy_key, name, kind, source, status):
+        with self._lock:
+            c = self._connect()
+            c.execute(
+                "INSERT INTO harvest_log (ts, domain, proxy_key, name, kind, source, status) VALUES (?,?,?,?,?,?,?)",
+                (time.time(), domain, proxy_key, name, kind, source, status),
+            )
+            c.commit()
+
+    def cooldown_active(self, domain, strategy):
+        with self._lock:
+            c = self._connect()
+            row = c.execute(
+                "SELECT until_ts FROM cooldowns WHERE domain=? AND strategy=?",
+                (domain, strategy),
+            ).fetchone()
+            if row is None:
+                return False
+            if row[0] < time.time():
+                c.execute("DELETE FROM cooldowns WHERE domain=? AND strategy=?", (domain, strategy))
+                c.commit()
+                return False
+            return True
+
+    def set_cooldown(self, domain, strategy, seconds, reason=""):
+        with self._lock:
+            c = self._connect()
+            c.execute(
+                "INSERT OR REPLACE INTO cooldowns (domain, strategy, until_ts, reason) VALUES (?,?,?,?)",
+                (domain, strategy, time.time() + seconds, reason),
+            )
+            c.commit()
+
+    def domain_summary(self, domain):
+        with self._lock:
+            c = self._connect()
+            total = c.execute("SELECT COUNT(*) FROM cookies WHERE domain=?", (domain,)).fetchone()[0]
+            kinds = dict(c.execute("SELECT kind, COUNT(*) FROM cookies WHERE domain=? GROUP BY kind", (domain,)).fetchall())
+            cooldowns = dict(c.execute("SELECT strategy, until_ts FROM cooldowns WHERE domain=?", (domain,)).fetchall())
+            return {"total": total, "kinds": kinds, "cooldowns": cooldowns}
+'''
+
+_LIB_IDENTITY_PY = r'''"""Deterministic per-domain persona."""
+from __future__ import annotations
+
+import hashlib
+import hmac
+import secrets
+import time
+
+
+class Identity:
+    def __init__(self, store):
+        self.store = store
+
+    def get_or_create(self, domain):
+        ident = self.store.get_identity(domain)
+        if ident is not None:
+            return ident
+        seed = secrets.token_hex(32)
+        ident = {
+            "domain": domain,
+            "device_seed": seed,
+            "created_at": time.time(),
+            "visit_count": 0,
+            "ua_locked": None,
+            "lang_locked": None,
+            "tz_locked": None,
+            "tls_locked": None,
+        }
+        self.store.upsert_identity(domain, ident)
+        return ident
+
+    def derive(self, ident, purpose, length):
+        msg = ("%s:%s" % (purpose, ident["domain"])).encode()
+        mac = hmac.new(ident["device_seed"].encode(), msg, hashlib.sha256).hexdigest()
+        return mac[:length]
+
+    def derive_int(self, ident, purpose, length):
+        h = self.derive(ident, purpose, length * 2)
+        return int(h, 16)
+
+    def bump_visit(self, domain):
+        self.store.bump_visit(domain)
+
+    def lock_ua(self, domain, ua):
+        ident = self.get_or_create(domain)
+        ident["ua_locked"] = ua
+        self.store.upsert_identity(domain, ident)
+
+    def lock_lang(self, domain, lang):
+        ident = self.get_or_create(domain)
+        ident["lang_locked"] = lang
+        self.store.upsert_identity(domain, ident)
+
+    def lock_tls(self, domain, profile):
+        ident = self.get_or_create(domain)
+        ident["tls_locked"] = profile
+        self.store.upsert_identity(domain, ident)
+'''
+
+_LIB_TEMPLATES_PY = r'''"""Cookie factory templates."""
+from __future__ import annotations
+
+import time
+
+
+class Templates:
+    def __init__(self, identity):
+        self.identity = identity
+
+    def _ga(self, ident):
+        cid = str(self.identity.derive_int(ident, "ga_cid", 10))[:10]
+        first = int(time.time()) - 86400 * 30
+        return "GA1.2.%s.%d" % (cid, first)
+
+    def _gid(self, ident):
+        cid = str(self.identity.derive_int(ident, "gid_cid", 10))[:10]
+        return "GA1.2.%s.%d" % (cid, int(time.time()))
+
+    def _ym_uid(self, ident):
+        ms = str(int(time.time() * 1000))[:13]
+        rnd = str(self.identity.derive_int(ident, "ym_r", 7))[:7]
+        return ms + rnd
+
+    def _ym_d(self, ident):
+        return str(int(time.time()))
+
+    def _ym_isad(self, ident):
+        return "1"
+
+    def _yandexuid(self, ident):
+        ms = str(int(time.time() * 1000))
+        rnd = str(self.identity.derive_int(ident, "yx", 6))
+        return (ms + rnd)[:20]
+
+    def _fbp(self, ident):
+        r = str(self.identity.derive_int(ident, "fbp", 10))[:10]
+        return "fb.1.%d.%s" % (int(time.time() * 1000), r)
+
+    def _gcl_au(self, ident):
+        r = str(self.identity.derive_int(ident, "gcl", 10))[:10]
+        return "1.1.%s.%d" % (r, int(time.time()))
+
+    def _cookieconsent(self, ident):
+        return "dismiss"
+
+    def _optanon(self, ident):
+        stamp = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime())
+        return "isGpcEnabled=0&datestamp=%s&version=202311.1.0&browserGpcFlag=0" % stamp
+
+    def _php_sessid(self, ident):
+        return self.identity.derive(ident, "php_sid", 26)
+
+    def _csrf(self, ident):
+        return self.identity.derive(ident, "csrf", 64)
+
+    def _xsrf(self, ident):
+        return self.identity.derive(ident, "xsrf", 40)
+
+    def _laravel(self, ident):
+        return self.identity.derive(ident, "laravel", 40)
+
+    def _wp_settings(self, ident):
+        return "libraryContent=browse&editor=html"
+
+    def _wp_time(self, ident):
+        return str(int(time.time()))
+
+    def analytics(self, ident):
+        return [
+            ("_ga", self._ga(ident), 86400 * 730, "/", None),
+            ("_gid", self._gid(ident), 86400, "/", None),
+        ]
+
+    def yandex(self, ident):
+        return [
+            ("_ym_uid", self._ym_uid(ident), 86400 * 365, "/", None),
+            ("_ym_d", self._ym_d(ident), 86400 * 365, "/", None),
+            ("_ym_isad", self._ym_isad(ident), 86400, "/", None),
+            ("yandexuid", self._yandexuid(ident), 86400 * 365, "/", None),
+        ]
+
+    def ads(self, ident):
+        return [
+            ("_fbp", self._fbp(ident), 86400 * 90, "/", None),
+            ("_gcl_au", self._gcl_au(ident), 86400 * 90, "/", None),
+        ]
+
+    def consent(self, ident):
+        return [
+            ("cookieconsent_status", self._cookieconsent(ident), 86400 * 365, "/", None),
+            ("OptanonConsent", self._optanon(ident), 86400 * 365, "/", None),
+        ]
+
+    def session(self, ident):
+        return [
+            ("PHPSESSID", self._php_sessid(ident), None, "/", None),
+            ("csrftoken", self._csrf(ident), 86400 * 30, "/", None),
+            ("XSRF-TOKEN", self._xsrf(ident), None, "/", None),
+            ("laravel_session", self._laravel(ident), None, "/", None),
+        ]
+
+    def cms(self, ident):
+        return [
+            ("wp-settings-1", self._wp_settings(ident), 86400 * 365, "/", None),
+            ("wp-settings-time-1", self._wp_time(ident), 86400 * 365, "/", None),
+        ]
+'''
+
+_LIB_SEEDER_PY = r'''"""Progressive seeding + header composition."""
+from __future__ import annotations
+
+import time
+
+
+_PROGRESSIVE = [
+    (0, []),
+    (1, ["consent"]),
+    (2, ["consent", "analytics"]),
+    (4, ["consent", "analytics", "yandex"]),
+    (6, ["consent", "analytics", "yandex", "cms"]),
+    (8, ["consent", "analytics", "yandex", "cms", "ads"]),
+]
+
+
+class Seeder:
+    def __init__(self, store, identity, templates):
+        self.store = store
+        self.identity = identity
+        self.templates = templates
+
+    def _plan(self, visit_count):
+        plan = []
+        for threshold, groups in _PROGRESSIVE:
+            if visit_count >= threshold:
+                plan = groups
+        return plan
+
+    def seed_for(self, domain, proxy_key, enabled_groups):
+        ident = self.identity.get_or_create(domain)
+        visit_count = ident.get("visit_count", 0)
+        groups = self._plan(visit_count)
+        result = []
+        for g in groups:
+            if g not in enabled_groups:
+                continue
+            fn = getattr(self.templates, g, None)
+            if fn is None:
+                continue
+            try:
+                entries = fn(ident)
+            except Exception:
+                continue
+            for name, value, ttl, path, same_site in entries:
+                expires = time.time() + ttl if ttl else None
+                result.append({
+                    "name": name, "value": value, "path": path,
+                    "expires_at": expires, "secure": False,
+                    "http_only": False, "same_site": same_site,
+                    "kind": "seed", "source": "template:%s" % g,
+                })
+        return ident, result
+
+    def compose_header(self, entries):
+        pairs = []
+        for e in entries:
+            name = e.get("name")
+            value = e.get("value")
+            if not name or value is None:
+                continue
+            pairs.append("%s=%s" % (name, value))
+        return "; ".join(pairs)
+
+    def commit_seeds(self, domain, proxy_key, entries):
+        for e in entries:
+            self.store.put_cookie(domain, proxy_key, e)
+            self.store.log_seed(domain, e.get("source") or "?", "seeded")
+'''
+
+_LIB_HARVESTER_PY = r'''"""Set-Cookie parser + JS-cookie extraction."""
+from __future__ import annotations
+
+import re
+
+
+_JS_COOKIE_RX = re.compile(
+    r"document\.cookie\s*=\s*['\"]([^=]+)=([^;'\"]+)(?:;\s*([^'\"]*))?['\"]",
+    re.IGNORECASE,
+)
+
+
+def parse_set_cookie(header_value):
+    if not header_value:
+        return None
+    parts = [p.strip() for p in header_value.split(";")]
+    if not parts or "=" not in parts[0]:
+        return None
+    name, _, value = parts[0].partition("=")
+    name = name.strip()
+    value = value.strip()
+    if not name:
+        return None
+    out = {
+        "name": name, "value": value, "path": "/",
+        "expires_at": None, "secure": False,
+        "http_only": False, "same_site": None,
+    }
+    for attr in parts[1:]:
+        low = attr.lower()
+        if low.startswith("path="):
+            out["path"] = attr.split("=", 1)[1].strip()
+        elif low.startswith("max-age="):
+            try:
+                out["expires_at"] = __import__("time").time() + int(attr.split("=", 1)[1])
+            except Exception:
+                pass
+        elif low.startswith("expires="):
+            pass
+        elif low == "secure":
+            out["secure"] = True
+        elif low == "httponly":
+            out["http_only"] = True
+        elif low.startswith("samesite="):
+            out["same_site"] = attr.split("=", 1)[1].strip()
+    return out
+
+
+def harvest_js(html_text):
+    if not html_text or "document.cookie" not in html_text:
+        return []
+    out = []
+    for m in _JS_COOKIE_RX.finditer(html_text):
+        name = m.group(1).strip()
+        value = m.group(2).strip()
+        if not name or len(name) > 64:
+            continue
+        out.append({
+            "name": name, "value": value, "path": "/",
+            "expires_at": None, "secure": False,
+            "http_only": False, "same_site": None,
+        })
+    return out
+
+
+class Harvester:
+    def __init__(self, store):
+        self.store = store
+
+    def from_response_headers(self, domain, proxy_key, headers, status):
+        found = []
+        for k, v in (headers or {}).items():
+            if k.lower() != "set-cookie":
+                continue
+            if isinstance(v, (list, tuple)):
+                for item in v:
+                    c = parse_set_cookie(item)
+                    if c:
+                        found.append(c)
+            else:
+                c = parse_set_cookie(v)
+                if c:
+                    found.append(c)
+        for c in found:
+            c["kind"] = "harvest"
+            c["source"] = "set-cookie:%d" % (status or 0)
+            self.store.put_cookie(domain, proxy_key, c)
+            self.store.log_harvest(domain, proxy_key, c["name"], "harvest", c["source"], status)
+        return found
+
+    def from_html(self, domain, proxy_key, html_text, status):
+        found = harvest_js(html_text)
+        for c in found:
+            c["kind"] = "harvest"
+            c["source"] = "js:%d" % (status or 0)
+            self.store.put_cookie(domain, proxy_key, c)
+            self.store.log_harvest(domain, proxy_key, c["name"], "harvest", c["source"], status)
+        return found
+'''
+
+_LIB_POLICY_PY = r'''"""Cookie classification: sacred / premium / tracker / seed."""
+from __future__ import annotations
+
+import re
+
+
+_NEVER_FAKE = (
+    "cf_clearance", "__cf_bm", "__cfduid",
+    "cf_chl_1", "cf_chl_2", "cf_chl_prog", "cf_chl_opt",
+    "datadome", "_abck", "ak_bmsc",
+)
+_NEVER_FAKE_RX = (
+    re.compile(r"^_px", re.IGNORECASE),
+    re.compile(r"^px_", re.IGNORECASE),
+    re.compile(r"^incap_ses_", re.IGNORECASE),
+    re.compile(r"^visid_incap_", re.IGNORECASE),
+    re.compile(r"^TSPD_", re.IGNORECASE),
+    re.compile(r"jwt$", re.IGNORECASE),
+    re.compile(r"^.*token$", re.IGNORECASE),
+)
+
+_SACRED = (
+    "session", "phpsessid", "csrftoken", "xsrf-token",
+    "laravel_session", "connect.sid", "auth", "token",
+)
+_SACRED_RX = (
+    re.compile(r"^_secure", re.IGNORECASE),
+    re.compile(r"user_?id$", re.IGNORECASE),
+)
+
+_TRACKER = (
+    "_ga", "_gid", "_gat", "_fbp", "_gcl_au", "_ym_uid", "_ym_d",
+    "yandexuid", "_hjid", "_clck", "_clsk",
+)
+_TRACKER_RX = (
+    re.compile(r"^_ga_", re.IGNORECASE),
+    re.compile(r"^_ym_", re.IGNORECASE),
+)
+
+
+def is_signed(name):
+    low = name.lower()
+    if low in _NEVER_FAKE:
+        return True
+    for rx in _NEVER_FAKE_RX:
+        if rx.search(name):
+            return True
+    return False
+
+
+def is_sacred(name):
+    low = name.lower()
+    if low in _SACRED:
+        return True
+    for rx in _SACRED_RX:
+        if rx.search(name):
+            return True
+    return False
+
+
+def is_tracker(name):
+    low = name.lower()
+    if low in _TRACKER:
+        return True
+    for rx in _TRACKER_RX:
+        if rx.search(name):
+            return True
+    return False
+
+
+class Policy:
+    def __init__(self, store):
+        self.store = store
+
+    def classify(self, cookie, status=200):
+        name = cookie.get("name") or ""
+        if is_signed(name):
+            return "sacred"
+        if is_sacred(name) and status in (200, 201, 204, 302):
+            return "premium"
+        if is_tracker(name):
+            return "tracker"
+        if is_sacred(name):
+            return "sacred"
+        return "harvest"
+
+    def can_seed(self, name):
+        if is_signed(name):
+            return False
+        if is_sacred(name):
+            return False
+        return True
+
+    def apply_harvest(self, domain, proxy_key, cookies, status):
+        for c in cookies:
+            kind = self.classify(c, status)
+            c["kind"] = kind
+            self.store.put_cookie(domain, proxy_key, c)
+'''
+
+_LIB_LEARNING_PY = r'''"""Cooldown strategies + adaptive disable."""
+from __future__ import annotations
+
+
+class Learning:
+    def __init__(self, store):
+        self.store = store
+
+    def cooldown_active(self, domain, strategy):
+        return self.store.cooldown_active(domain, strategy)
+
+    def note_outcome(self, domain, strategy, outcome, default_hours=24):
+        if outcome in ("cf", "captcha", "blocked"):
+            self.store.set_cooldown(domain, strategy, default_hours * 3600, outcome)
+            return True
+        return False
+
+    def clear(self, domain, strategy):
+        self.store.set_cooldown(domain, strategy, 0, "cleared")
+'''
+
+_LIB_PATCH_PY = r'''"""Monkey-patch helper for DDT _http_request."""
+from __future__ import annotations
+
+
+def install_hook(module, on_headers):
+    if module is None:
+        return False
+    original = getattr(module, "_http_request", None)
+    if original is None:
+        return False
+    if getattr(original, "_neverfake_patched", False):
+        return True
+
+    async def patched(url, headers=None, timeout=None):
+        result = await original(url, headers=headers, timeout=timeout)
+        try:
+            if isinstance(result, tuple) and len(result) >= 2:
+                text, status = result[0], result[1]
+                try:
+                    on_headers(url, text, status, None)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        return result
+
+    patched._neverfake_patched = True
+    patched._neverfake_original = original
+    try:
+        module._http_request = patched
+    except Exception:
+        return False
+    return True
+
+
+def uninstall_hook(module):
+    if module is None:
+        return False
+    original = getattr(module, "_http_request", None)
+    if original is None:
+        return False
+    inner = getattr(original, "_neverfake_original", None)
+    if inner is None:
+        return False
+    try:
+        module._http_request = inner
+        return True
+    except Exception:
+        return False
+'''
+
+_LIB_COMMANDS_PY = r'''"""`.dothat nf ...` command dispatcher."""
+from __future__ import annotations
+
+import html as _html
+
+
+class Commands:
+    def __init__(self, plugin):
+        self.plugin = plugin
+
+    def help_text(self):
+        return (
+            "<blockquote><b>NeverFake</b>"
+            "\n<code>.dothat nf status</code>"
+            "\n<code>.dothat nf inspect &lt;domain&gt;</code>"
+            "\n<code>.dothat nf forget &lt;domain&gt;</code>"
+            "\n<code>.dothat nf cooldowns</code>"
+            "\n<code>.dothat nf freeze-all</code>"
+            "\n<code>.dothat nf panic</code>"
+            "</blockquote>"
+        )
+
+    async def dispatch(self, ctx, sub, tail):
+        plugin = self.plugin
+        if sub == "status" or not sub:
+            return await self._status(ctx)
+        if sub == "inspect":
+            return await self._inspect(ctx, tail)
+        if sub == "forget":
+            return await self._forget(ctx, tail)
+        if sub == "cooldowns":
+            return await self._cooldowns(ctx)
+        if sub == "freeze-all":
+            return await self._freeze_all(ctx)
+        if sub == "panic":
+            return await self._panic(ctx)
+        return self.help_text()
+
+    async def _status(self, ctx):
+        store = self.plugin.store
+        if store is None:
+            return "<blockquote><b>NeverFake not ready</b></blockquote>"
+        return (
+            "<blockquote><b>NeverFake v%s</b>"
+            "\nready=%s"
+            "\ndb=%s"
+            "</blockquote>" % (
+                self.plugin.version,
+                self.plugin._ready,
+                self.plugin.db_path,
+            )
+        )
+
+    async def _inspect(self, ctx, tail):
+        domain = (tail or "").strip().lower()
+        if not domain:
+            return "<blockquote><b>usage:</b> <code>nf inspect &lt;domain&gt;</code></blockquote>"
+        if self.plugin.store is None:
+            return "<blockquote><b>store not ready</b></blockquote>"
+        summary = self.plugin.store.domain_summary(domain)
+        ident = self.plugin.store.get_identity(domain)
+        lines = ["<blockquote><b>%s</b>" % _html.escape(domain)]
+        lines.append("cookies: <code>%d</code>" % summary["total"])
+        if summary["kinds"]:
+            for k, v in summary["kinds"].items():
+                lines.append("  %s: <code>%d</code>" % (_html.escape(str(k)), v))
+        if ident:
+            lines.append("visits: <code>%d</code>" % ident.get("visit_count", 0))
+            lines.append("locked ua: <code>%s</code>" % _html.escape(str(ident.get("ua_locked") or "-")))
+        if summary["cooldowns"]:
+            lines.append("cooldowns:")
+            for s, until in summary["cooldowns"].items():
+                lines.append("  %s until <code>%s</code>" % (_html.escape(str(s)), _html.escape(str(until))))
+        lines.append("</blockquote>")
+        return "\n".join(lines)
+
+    async def _forget(self, ctx, tail):
+        domain = (tail or "").strip().lower()
+        if not domain:
+            return "<blockquote><b>usage:</b> <code>nf forget &lt;domain&gt;</code></blockquote>"
+        if self.plugin.store is None:
+            return "<blockquote><b>store not ready</b></blockquote>"
+        self.plugin.store.clear_domain(domain)
+        return "<blockquote><b>forgotten:</b> <code>%s</code></blockquote>" % _html.escape(domain)
+
+    async def _cooldowns(self, ctx):
+        return "<blockquote><b>cooldowns list</b> not implemented yet</blockquote>"
+
+    async def _freeze_all(self, ctx):
+        self.plugin._frozen = True
+        return "<blockquote><b>NeverFake frozen</b> (seeding disabled until restart)</blockquote>"
+
+    async def _panic(self, ctx):
+        if self.plugin.store is None:
+            return "<blockquote><b>store not ready</b></blockquote>"
+        return "<blockquote><b>panic</b> not implemented yet</blockquote>"
+'''
+
+_LIB_API_PY = r'''"""Public facade for other plugins via ctx.call_plugin('neverfake', ...)."""
+from __future__ import annotations
+
+
+class Api:
+    def __init__(self, plugin):
+        self.plugin = plugin
+
+    def get_cookies(self, domain, proxy_key=""):
+        if self.plugin.store is None:
+            return []
+        return self.plugin.store.list_cookies(domain, proxy_key)
+
+    def get_identity(self, domain):
+        if self.plugin.store is None:
+            return None
+        return self.plugin.store.get_identity(domain)
+
+    def compose_header(self, domain, proxy_key=""):
+        cookies = self.get_cookies(domain, proxy_key)
+        pairs = []
+        for c in cookies:
+            pairs.append("%s=%s" % (c["name"], c["value"]))
+        return "; ".join(pairs)
+
+    def forget(self, domain):
+        if self.plugin.store is None:
+            return False
+        self.plugin.store.clear_domain(domain)
+        return True
+'''
+
+
+_LIB_FILES = {
+    "version.py": _LIB_VERSION_PY,
+    "__init__.py": _LIB_INIT_PY,
+    "store.py": _LIB_STORE_PY,
+    "identity.py": _LIB_IDENTITY_PY,
+    "templates.py": _LIB_TEMPLATES_PY,
+    "seeder.py": _LIB_SEEDER_PY,
+    "harvester.py": _LIB_HARVESTER_PY,
+    "policy.py": _LIB_POLICY_PY,
+    "learning.py": _LIB_LEARNING_PY,
+    "patch.py": _LIB_PATCH_PY,
+    "commands.py": _LIB_COMMANDS_PY,
+    "api.py": _LIB_API_PY,
+}
+
+
+@dataclass
+class Manifest:
+    name: str = "NeverFake"
+    version: str = NF_VERSION
+    author: str = "@flexOwnerAL"
+    description: str = "coherent cookie jar: progressive seed + harvest + sacred protection"
+    api: str = "1.5.0"
+    min_core: str = ">=0.0.0"
+    access: List[str] = field(default_factory=lambda: ["module", "kernel"])
+    tags: List[str] = field(default_factory=lambda: ["bypass", "cookies", "anti-detect"])
+    categories: List[str] = field(default_factory=lambda: ["security", "util"])
+    events: List[str] = field(default_factory=lambda: ["fetch.completed", "fetch.blocked"])
+    priority: Dict[str, int] = field(default_factory=lambda: {
+        "before_fetch": 90,
+        "after_fetch": 900,
+        "on_blocked": 500,
+        "on_result": 100,
+    })
+    timeout: int = 20
+    retry_on_error: bool = False
+    cfg_defaults: Dict[str, Any] = field(default_factory=lambda: {
+        "enabled": True,
+        "seed_analytics": True,
+        "seed_consent": True,
+        "seed_session": False,
+        "seed_cms": True,
+        "seed_ads": True,
+        "seed_yandex": True,
+        "max_cookies_per_request": 15,
+        "never_fake_signed": True,
+        "preserve_sacred": True,
+        "progressive_aging": True,
+        "throttle_per_domain_sec": 1.5,
+        "lock_identity_after_success": True,
+        "harvest_js_cookies": True,
+        "cooldown_hours_default": 24,
+        "ua_consistency": True,
+        "force_rebuild_lib": False,
+    })
+    cfg_schema: Dict[str, Any] = field(default_factory=lambda: {
+        "enabled": {"type": "bool"},
+        "seed_analytics": {"type": "bool"},
+        "seed_consent": {"type": "bool"},
+        "seed_session": {"type": "bool"},
+        "seed_cms": {"type": "bool"},
+        "seed_ads": {"type": "bool"},
+        "seed_yandex": {"type": "bool"},
+        "max_cookies_per_request": {"type": "int"},
+        "never_fake_signed": {"type": "bool"},
+        "preserve_sacred": {"type": "bool"},
+        "progressive_aging": {"type": "bool"},
+        "throttle_per_domain_sec": {"type": "float"},
+        "lock_identity_after_success": {"type": "bool"},
+        "harvest_js_cookies": {"type": "bool"},
+        "cooldown_hours_default": {"type": "int"},
+        "ua_consistency": {"type": "bool"},
+        "force_rebuild_lib": {"type": "bool"},
+    })
+
+
+MANIFEST = Manifest()
+
+
+class Plugin:
+    manifest = MANIFEST
+
+    def __init__(self):
+        self.version = NF_VERSION
+        self.db_path = NF_DB
+        self.store = None
+        self.identity = None
+        self.templates = None
+        self.seeder = None
+        self.harvester = None
+        self.policy = None
+        self.learning = None
+        self.api = None
+        self.commands = None
+        self.lib = None
+        self._ready = False
+        self._frozen = False
+        self._module = None
+        self._lock = threading.Lock()
+
+    def _bootstrap_lib(self):
+        NF_LIB.mkdir(parents=True, exist_ok=True)
+        current_schema = None
+        ver_path = NF_LIB / "version.py"
+        if ver_path.exists():
+            try:
+                txt = ver_path.read_text(encoding="utf-8")
+                m = re.search(r"LIB_SCHEMA\s*=\s*(\d+)", txt)
+                if m:
+                    current_schema = int(m.group(1))
+            except Exception:
+                current_schema = None
+        if current_schema == NF_SCHEMA and (NF_LIB / "commands.py").exists() and (NF_LIB / "api.py").exists():
+            return False
+        for name, content in _LIB_FILES.items():
+            target = NF_LIB / name
+            try:
+                target.write_text(content, encoding="utf-8")
+            except Exception:
+                pass
+        return True
+
+    def _import_lib(self):
+        if str(NF_DIR) not in sys.path:
+            sys.path.insert(0, str(NF_DIR))
+        mod_name = "neverfake_lib"
+        for key in list(sys.modules.keys()):
+            if key == mod_name or key.startswith(mod_name + "."):
+                sys.modules.pop(key, None)
+        spec = importlib.util.spec_from_file_location(
+            mod_name,
+            NF_LIB / "__init__.py",
+            submodule_search_locations=[str(NF_LIB)],
+        )
+        if spec is None or spec.loader is None:
+            return None
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules[mod_name] = mod
+        spec.loader.exec_module(mod)
+        return mod
+
+    def _wire(self, lib):
+        self.store = lib.Store(NF_DB)
+        self.identity = lib.Identity(self.store)
+        self.templates = lib.Templates(self.identity)
+        self.seeder = lib.Seeder(self.store, self.identity, self.templates)
+        self.harvester = lib.Harvester(self.store)
+        self.policy = lib.Policy(self.store)
+        self.learning = lib.Learning(self.store)
+        self.api = lib.Api(self)
+        self.commands = lib.Commands(self)
+        self.lib = lib
+
+    async def on_load(self, ctx):
+        NF_DIR.mkdir(parents=True, exist_ok=True)
+        NF_LOGS.mkdir(parents=True, exist_ok=True)
+        rebuilt = False
+        try:
+            rebuilt = self._bootstrap_lib()
+        except Exception as e:
+            ctx.logger.error("bootstrap failed: %s" % e)
+            return
+        if rebuilt:
+            ctx.logger.info("bootstrap wrote lib (%d files, schema=%d)" % (len(_LIB_FILES), NF_SCHEMA))
+        else:
+            ctx.logger.info("bootstrap reuse lib (schema=%d)" % NF_SCHEMA)
+        try:
+            lib = self._import_lib()
+        except Exception as e:
+            ctx.logger.error("lib import failed: %s" % e)
+            return
+        if lib is None:
+            ctx.logger.error("lib import returned None")
+            return
+        self._wire(lib)
+        self._module = ctx.module
+        self._ready = True
+        ctx.logger.info("NeverFake v%s ready (lib schema=%d)" % (NF_VERSION, getattr(lib, "LIB_SCHEMA", 0)))
+
+    async def on_unload(self, ctx):
+        try:
+            if self.store is not None:
+                self.store.close()
+        except Exception:
+            pass
+        self._ready = False
+        ctx.logger.info("NeverFake unloaded")
+
+    def _enabled_groups(self, ctx):
+        out = []
+        if ctx.cfg.get("seed_consent", True):
+            out.append("consent")
+        if ctx.cfg.get("seed_analytics", True):
+            out.append("analytics")
+        if ctx.cfg.get("seed_yandex", True):
+            out.append("yandex")
+        if ctx.cfg.get("seed_cms", True):
+            out.append("cms")
+        if ctx.cfg.get("seed_ads", True):
+            out.append("ads")
+        if ctx.cfg.get("seed_session", False):
+            out.append("session")
+        return out
+
+    def _proxy_key(self, module):
+        return ""
+
+    def _domain_of(self, url):
+        try:
+            return urlparse(url).netloc.lower()
+        except Exception:
+            return ""
+
+    async def before_fetch(self, ctx):
+        if not self._ready or self._frozen:
+            return None
+        if not ctx.cfg.get("enabled", True):
+            return None
+        url = ctx.get("url") or ""
+        if not url:
+            return None
+        domain = self._domain_of(url)
+        if not domain:
+            return None
+        proxy_key = self._proxy_key(ctx.module)
+        try:
+            ident, seeds = self.seeder.seed_for(domain, proxy_key, self._enabled_groups(ctx))
+        except Exception as e:
+            ctx.logger.warning("seed failed for %s: %s" % (domain, e))
+            return None
+        existing = self.store.list_cookies(domain, proxy_key)
+        merged = {}
+        for c in existing:
+            merged[c["name"]] = c
+        for s in seeds:
+            if not self.policy.can_seed(s["name"]):
+                continue
+            if s["name"] in merged:
+                continue
+            merged[s["name"]] = s
+        entries = list(merged.values())
+        cap = int(ctx.cfg.get("max_cookies_per_request", 15) or 15)
+        if len(entries) > cap:
+            entries = entries[:cap]
+        header = self.seeder.compose_header(entries)
+        if not header:
+            return None
+        try:
+            self.store.put_cookie if False else None
+            module = ctx.module
+            if module is not None:
+                if not hasattr(module, "_cookie_jar") or module._cookie_jar is None:
+                    module._cookie_jar = {}
+                ident_ua = (ident or {}).get("ua_locked")
+                module._cookie_jar[domain] = {
+                    "cookie": header,
+                    "ua": ident_ua or "",
+                    "proxy": proxy_key,
+                    "expires": time.time() + 3600,
+                }
+        except Exception as e:
+            ctx.logger.warning("inject cookie jar failed: %s" % e)
+        try:
+            if self.seeder is not None:
+                self.seeder.commit_seeds(domain, proxy_key, seeds)
+            self.identity.bump_visit(domain)
+        except Exception:
+            pass
+        return None
+
+    async def after_fetch(self, ctx):
+        if not self._ready or self._frozen:
+            return None
+        if not ctx.cfg.get("enabled", True):
+            return None
+        url = ctx.get("url") or ""
+        html_text = ctx.get("html") or ""
+        status = ctx.get("status") or 200
+        domain = self._domain_of(url)
+        if not domain:
+            return None
+        proxy_key = self._proxy_key(ctx.module)
+        harvested = []
+        try:
+            if html_text and ctx.cfg.get("harvest_js_cookies", True):
+                harvested += self.harvester.from_html(domain, proxy_key, html_text, status)
+        except Exception:
+            pass
+        if harvested:
+            try:
+                self.policy.apply_harvest(domain, proxy_key, harvested, status)
+            except Exception:
+                pass
+        try:
+            self.store.log_seed(domain, "fetch", "ok" if status < 400 else "http_%d" % status)
+        except Exception:
+            pass
+        return None
+
+    async def on_blocked(self, ctx):
+        if not self._ready or self._frozen:
+            return None
+        url = ctx.get("url") or ""
+        reason = ctx.get("reason") or "blocked"
+        domain = self._domain_of(url)
+        if not domain:
+            return None
+        try:
+            self.learning.note_outcome(
+                domain,
+                "fetch",
+                reason,
+                default_hours=int(ctx.cfg.get("cooldown_hours_default", 24) or 24),
+            )
+        except Exception:
+            pass
+        return None
+
+    async def on_result(self, ctx):
+        if not self._ready or self._frozen:
+            return None
+        r = ctx.get("result")
+        if isinstance(r, dict):
+            r["_nf"] = True
+        return None
+
+    async def on_command(self, ctx):
+        if not self._ready:
+            return None
+        action = (ctx.get("action") or "").lower()
+        if action != "nf":
+            return None
+        parts = ctx.get("parts") or []
+        sub = parts[2].lower() if len(parts) > 2 else "status"
+        tail = parts[3] if len(parts) > 3 else ""
+        event = ctx.get("event")
+        if event is None:
+            return None
+        try:
+            text = await self.commands.dispatch(ctx, sub, tail)
+        except Exception as e:
+            text = "<blockquote><b>nf error:</b> <code>%s</code></blockquote>" % str(e)
+        try:
+            await event.respond(text, parse_mode="html")
+        except Exception:
+            pass
+        return True
+
+    def health(self, ctx):
+        status = "ok" if self._ready else "loading"
+        return {
+            "status": status,
+            "message": "v%s ready=%s frozen=%s db=%s" % (
+                NF_VERSION, self._ready, self._frozen, str(NF_DB),
+            ),
+        }

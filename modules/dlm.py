@@ -1,18 +1,12 @@
-"""DLM — Dynamic Loader of Modules.
-
-Системный модуль: тянет модули строго из официального каталога
-anhedonuya/TETKO-dlm.
-Автообновление: проверяет новые версии, скачивает и перезагружает.
-"""
+"""DLM — Dynamic Loader of Modules (shell-style)."""
 from __future__ import annotations
 
 import logging
 import re
 import time
 from pathlib import Path
-from typing import Optional
 
-from core.tetko import Module, command, loop
+from core.tetko import Module, command, loop, shell
 
 log = logging.getLogger("TETKO.module.dlm")
 
@@ -21,16 +15,29 @@ CATALOG_BRANCH = "main"
 CATALOG_API = f"https://api.github.com/repos/{CATALOG_REPO}/contents/"
 CATALOG_RAW = f"https://raw.githubusercontent.com/{CATALOG_REPO}/{CATALOG_BRANCH}"
 
-MODULES_DIR = Path("modules")            # системные модули
-CUSTOM_DIR = Path("modules_custom")       # пользовательские модули
-CACHE_TTL = 300   # 5 минут — кэш каталога
-PAGE_SIZE = 5     # модулей на странице в DLM
+MODULES_DIR = Path("modules")
+CUSTOM_DIR = Path("modules_custom")
+CACHE_TTL = 300
+PAGE_SIZE = 5
 
 VERSION_RE = re.compile(r'^\s*version\s*=\s*["\']([^"\']+)["\']', re.MULTILINE)
 
 
-def _parse_version(v: str) -> tuple:
-    """'1.0.2' → (1, 0, 2)."""
+def _esc(text):
+    if text is None:
+        return "-"
+    return str(text).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def _bq(msg):
+    return "<blockquote><b>" + msg + "</b></blockquote>"
+
+
+def _shell(lines, running=False, cmd=None):
+    return shell.wrap(lines, cmd=cmd, running=running, trailing=True)
+
+
+def _parse_version(v):
     parts = []
     for p in str(v).split("."):
         p = p.split("-")[0]
@@ -41,8 +48,7 @@ def _parse_version(v: str) -> tuple:
     return tuple(parts)
 
 
-def _compare_versions(v1: str, v2: str) -> int:
-    """-1 если v1 < v2, 0 если равны, 1 если v1 > v2."""
+def _compare_versions(v1, v2):
     t1 = _parse_version(v1)
     t2 = _parse_version(v2)
     if t1 < t2:
@@ -55,21 +61,21 @@ def _compare_versions(v1: str, v2: str) -> int:
 class DLMModule(Module):
     name = "DLM"
     __compat__ = "0.0.9.0"
-    version = "1.0.0"
+    version = "1.2.0"
     author = "@anhedonuya"
-    description = "Dynamic Loader of Modules — установка и автообновление модулей"
+    description = "Dynamic Loader of Modules"
 
     config = {
-        "auto_update": True,        # автообновлять существующие модули
-        "auto_install_new": False,  # автоустанавливать новые модули
-        "update_interval": 3600,    # период проверки (сек)
-        "notify_updates": True,     # уведомлять владельца в ЛС
+        "auto_update": True,
+        "auto_install_new": False,
+        "update_interval": 3600,
+        "notify_updates": True,
     }
 
     def __init__(self, kernel=None):
         super().__init__(kernel=kernel)
-        self._catalog_cache: Optional[list[dict]] = None
-        self._cache_time: float = 0
+        self._catalog_cache = None
+        self._cache_time = 0.0
 
     async def on_load(self):
         self.log.info("DLM loaded")
@@ -77,12 +83,12 @@ class DLMModule(Module):
     async def on_unload(self):
         self.log.debug("DLM unloaded")
 
-    async def _fetch_catalog(self, force: bool = False) -> list[dict]:
+    async def _fetch_catalog(self, force=False):
         now = time.time()
         if not force and self._catalog_cache is not None and (now - self._cache_time) < CACHE_TTL:
             return self._catalog_cache
 
-        items: list[dict] = []
+        items = []
         try:
             import aiohttp
             headers = {"Accept": "application/vnd.github+json"}
@@ -102,20 +108,19 @@ class DLMModule(Module):
                                     items.append({
                                         "file": f,
                                         "name": m.get("name") or f[:-3],
-                                        "description": m.get("description") or "—",
+                                        "description": m.get("description") or "-",
                                         "size": 0,
                                         "url": m.get("url") or f"{CATALOG_RAW}/{f}",
                                     })
                         except Exception as e:
-                            log.warning(f"DLM: catalog.json parse: {e}")
+                            log.warning("DLM: catalog.json parse: " + str(e))
 
                 if not items:
                     async with session.get(CATALOG_API, timeout=15) as resp:
                         if resp.status != 200:
-                            log.error(f"DLM: GitHub API вернул {resp.status}")
+                            log.error("DLM: GitHub API returned " + str(resp.status))
                             return self._catalog_cache or []
                         data = await resp.json(content_type=None)
-
                     for entry in data:
                         if entry.get("type") != "file":
                             continue
@@ -125,20 +130,19 @@ class DLMModule(Module):
                         items.append({
                             "file": name,
                             "name": name[:-3],
-                            "description": "—",
+                            "description": "-",
                             "size": entry.get("size", 0),
                             "url": entry.get("download_url") or f"{CATALOG_RAW}/{name}",
                         })
         except Exception as e:
-            log.exception(f"DLM: ошибка получения каталога: {e}")
+            log.exception("DLM: catalog fetch failed: " + str(e))
             return self._catalog_cache or []
 
         self._catalog_cache = items
         self._cache_time = now
         return items
 
-    async def _get_remote_version(self, file: str) -> Optional[str]:
-        """Скачать raw-файл и вытащить version."""
+    async def _get_remote_version(self, file):
         url = f"{CATALOG_RAW}/{file}"
         try:
             import aiohttp
@@ -151,11 +155,10 @@ class DLMModule(Module):
             if m:
                 return m.group(1)
         except Exception as e:
-            log.debug(f"DLM: не удалось получить версию {file}: {e}")
+            log.debug("DLM: version fetch " + file + ": " + str(e))
         return None
 
-    def _get_local_version(self, file: str) -> Optional[str]:
-        """Вытащить version из modules/ или modules_custom/."""
+    def _get_local_version(self, file):
         for base in (CUSTOM_DIR, MODULES_DIR):
             path = base / file
             if path.exists():
@@ -167,88 +170,78 @@ class DLMModule(Module):
                     pass
         return None
 
-    async def _check_updates(self) -> dict:
-        """Вернуть dict: {file: {"local": v, "remote": v, "status": 'new'/'update'/'same'}}."""
+    async def _check_updates(self):
         catalog = await self._fetch_catalog()
-        result: dict[str, dict] = {}
-
+        result = {}
         for item in catalog:
             file = item["file"]
             local = self._get_local_version(file)
             remote = await self._get_remote_version(file)
-
             if local is None and remote is not None:
                 status = "new"
             elif local is not None and remote is None:
-                status = "same"  # не смогли получить удалённую — считаем как есть
+                status = "same"
             elif local is None and remote is None:
                 status = "same"
             else:
                 cmp = _compare_versions(remote, local)
-                if cmp > 0:
-                    status = "update"
-                else:
-                    status = "same"
-
+                status = "update" if cmp > 0 else "same"
             result[file] = {"local": local, "remote": remote, "status": status}
-
         return result
 
-    async def _notify_admin(self, text: str):
-        """Отправить ЛС владельцу (и в лог)."""
+    async def _notify_admin(self, text):
         if not self.cfg.get("notify_updates", True):
             return
         admin_id = None
         if self.kernel and self.kernel.context:
             admin_id = self.kernel.context.admin_id
         if admin_id is None:
-            self.log.info(f"[DLM notify] {text}")
+            self.log.info("[DLM notify] " + str(text))
             return
         try:
             await self.client.send_message(admin_id, text, parse_mode="html")
         except Exception as e:
-            self.log.warning(f"DLM: не удалось отправить уведомление: {e}")
+            self.log.warning("DLM: notify failed: " + str(e))
 
-    async def _update_module(self, file: str) -> bool:
-        """Скачать новую версию модуля в modules_custom/ и перезагрузить."""
+    async def _update_module(self, file):
         url = f"{CATALOG_RAW}/{file}"
         if (CUSTOM_DIR / file).exists() or not (MODULES_DIR / file).exists():
             target = CUSTOM_DIR / file
         else:
-            log.warning(f"DLM: {file} — системный, обновление пропущено")
+            log.warning("DLM: " + file + " — system module, skipped")
             return False
-        backup = target.parent / f"{file}.bak"
+        backup = target.parent / (file + ".bak")
 
         try:
             import aiohttp
             async with aiohttp.ClientSession() as session:
                 async with session.get(url, timeout=15) as resp:
                     if resp.status != 200:
-                        log.error(f"DLM: HTTP {resp.status} для {url}")
+                        log.error("DLM: HTTP " + str(resp.status) + " for " + url)
                         return False
                     content = await resp.text()
         except Exception as e:
-            log.exception(f"DLM: ошибка скачивания {file}: {e}")
+            log.exception("DLM: download failed " + file + ": " + str(e))
             return False
 
         if "class " not in content or "Module" not in content:
-            log.error(f"DLM: {file} не похож на TETKO-модуль")
+            log.error("DLM: " + file + " — not a TETKO module")
             return False
 
         try:
             if target.exists():
                 backup.write_text(target.read_text(encoding="utf-8"), encoding="utf-8")
         except Exception as e:
-            log.warning(f"DLM: не удалось сделать .bak для {file}: {e}")
+            log.warning("DLM: backup failed " + file + ": " + str(e))
 
         try:
             target.write_text(content, encoding="utf-8")
         except Exception as e:
-            log.exception(f"DLM: не удалось записать {file}: {e}")
+            log.exception("DLM: write failed " + file + ": " + str(e))
             return False
 
         try:
-            file_stem = file[:-3]  # "randomedits"
+            file_stem = file[:-3]
             loader = getattr(self.client, "loader", None)
             if loader is not None:
                 real_name = None
@@ -256,49 +249,38 @@ class DLMModule(Module):
                     if reg_name.lower() == file_stem.lower() or reg_name.lower().replace(" ", "") == file_stem.lower():
                         real_name = reg_name
                         break
-
                 if real_name:
                     try:
                         await loader.unload_module(real_name)
-                        self.log.info(f"DLM: выгружен модуль {real_name}")
+                        self.log.info("DLM: unloaded " + real_name)
                     except Exception as e:
-                        self.log.debug(f"DLM: unload {real_name} failed: {e}")
-                else:
-                    self.log.debug(f"DLM: модуль {file_stem} не найден в реестре — пропускаем unload")
-
+                        self.log.debug("DLM: unload failed " + real_name + ": " + str(e))
                 await loader.load_module_from_file(target)
-                self.log.debug(f"DLM: модуль {file_stem} перезагружен")
+                self.log.debug("DLM: reloaded " + file_stem)
                 return True
         except Exception as e:
-            log.exception(f"DLM: ошибка перезагрузки {file}: {e}")
+            log.exception("DLM: reload failed " + file + ": " + str(e))
             if backup.exists():
                 try:
                     target.write_text(backup.read_text(encoding="utf-8"), encoding="utf-8")
-                    self.log.warning(f"DLM: откат {file} из .bak")
+                    self.log.warning("DLM: rollback " + file + " from .bak")
                 except Exception:
                     pass
             return False
-
         return True
 
     @loop(interval=3600)
     async def auto_update_loop(self):
-        """Периодическая проверка каталога и автообновление модулей."""
         if not self.cfg.get("auto_update", True):
             return
-
-        target_interval = int(self.cfg.get("update_interval", 3600))
-        if target_interval != 3600:
-            pass
-
         try:
             updates = await self._check_updates()
         except Exception as e:
-            log.exception(f"DLM: ошибка проверки обновлений: {e}")
+            log.exception("DLM: update check failed: " + str(e))
             return
 
-        updated_files: list[str] = []
-        new_files: list[str] = []
+        updated_files = []
+        new_files = []
 
         for file, info in updates.items():
             status = info["status"]
@@ -318,64 +300,55 @@ class DLMModule(Module):
         _names = {it["file"]: it.get("name", it["file"][:-3]) for it in catalog}
 
         if updated_files:
+            lines = ["dlm updated:"]
+            for f in updated_files:
+                lines.append("  " + _names.get(f, f))
             await self._notify_admin(
-                '<blockquote><tg-emoji emoji-id="6010179991944305029">☺️</tg-emoji>dlm<strong>: обновлены модули</strong></blockquote>\n\n'
-                + "\n".join(f'<blockquote>• {_names.get(f, f)}</blockquote>' for f in updated_files)
+                _bq("dlm: updated modules") + "\n"
+                + _shell(lines)
             )
         if new_files:
+            lines = ["dlm new modules:"]
+            for f in new_files:
+                lines.append("  " + _names.get(f, f))
+            lines.append("install with .dlm")
             await self._notify_admin(
-                '<blockquote><tg-emoji emoji-id="6010179991944305029">☺️</tg-emoji>dlm<strong>: новые модули в каталоге</strong></blockquote>\n\n'
-                + "\n".join(f'<blockquote>• {_names.get(f, f)}</blockquote>' for f in new_files)
-                + '\n\n<blockquote><tg-emoji emoji-id="5197394586938403077">❤️</tg-emoji><em>Установи </em>в dlm</blockquote>'
+                _bq("dlm: new modules in catalog") + "\n"
+                + _shell(lines)
             )
 
-    @command(name="dlm", aliases=["mods", "dlmods"], description="Менеджер модулей", only_for="owner")
+    @command(name="dlm", aliases=["mods", "dlmods"], description="Module manager", only_for="owner")
     async def dlm_cmd(self, event, args):
         await self._show_main(event, is_cb=False)
 
-    async def _send_menu_via_bot(self, cb_event, text: str, buttons: list) -> None:
-        """Отправить новое меню в чат (после callback)."""
+    async def _send_menu_via_bot(self, cb_event, text, buttons):
         bot = getattr(self.kernel, "bot_client", None)
         if bot is None:
             return
-
         topic_id = None
         try:
             rt = getattr(cb_event, "reply_to", None)
             if rt is not None:
-                topic_id = (
-                    getattr(rt, "reply_to_top_id", None)
-                    or getattr(rt, "reply_to_msg_id", None)
-                )
+                topic_id = (getattr(rt, "reply_to_top_id", None) or getattr(rt, "reply_to_msg_id", None))
         except Exception:
             pass
-
         peer = getattr(cb_event, "chat_id", None)
-
         if not peer:
             try:
                 peer = await cb_event.get_input_chat()
-            except Exception as e:
+            except Exception:
                 peer = None
-
         if not peer:
             peer = getattr(cb_event, "sender_id", None)
-
         if not peer:
             return
-
         data = getattr(cb_event, "data", b"")
         if isinstance(data, bytes):
             data = data.decode("utf-8", errors="replace")
         imid = bot.get_inline_message_id(data)
-
         try:
             if imid:
-                await bot.edit_inline_menu(
-                    inline_message_id=imid,
-                    text=text,
-                    buttons=buttons,
-                )
+                await bot.edit_inline_menu(inline_message_id=imid, text=text, buttons=buttons)
                 if not hasattr(bot, "_inlines"):
                     bot._inlines = {}
                 for row in buttons:
@@ -390,9 +363,9 @@ class DLMModule(Module):
                     topic_id=topic_id,
                 )
         except Exception as e:
-            self.log.warning(f"_send_menu_via_bot failed: {e}")
+            self.log.warning("_send_menu_via_bot failed: " + str(e))
 
-    async def _show_main(self, event_or_cb, is_cb: bool = False, force_refresh: bool = False, page: int = 0):
+    async def _show_main(self, event_or_cb, is_cb=False, force_refresh=False, page=0):
         kernel = self.kernel
         catalog = await self._fetch_catalog(force=force_refresh)
 
@@ -406,38 +379,40 @@ class DLMModule(Module):
 
         if not catalog:
             text = (
-                '<blockquote><tg-emoji emoji-id="5463276135125130498">💎</tg-emoji> DLM — Dynamic Loader of Modules.</blockquote>\n\n'
-                "<blockquote>⚠️ Каталог модулей пуст или недоступен.</blockquote>"
+                _bq("DLM — Dynamic Loader of Modules") + "\n"
+                + _shell(["catalog: empty or unavailable"])
             )
 
             async def on_refresh_empty(cb_event):
-                await cb_event.answer("Обновляю...")
+                await cb_event.answer("refreshing...")
                 await self._show_main(cb_event, is_cb=True, force_refresh=True, page=0)
 
-            buttons = [[kernel.inline.make_button("🔄 Обновить", on_refresh_empty, ttl=600)]]
+            buttons = [[kernel.inline.make_button("refresh", on_refresh_empty, ttl=600)]]
         else:
             total = len(catalog)
             total_pages = max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE)
             page = max(0, min(page, total_pages - 1))
-
             start_i = page * PAGE_SIZE
             page_items = catalog[start_i:start_i + PAGE_SIZE]
 
             text = (
-                '<blockquote><tg-emoji emoji-id="5463276135125130498">💎</tg-emoji> DLM — Dynamic Loader of Modules.</blockquote>\n\n'
-                f"<blockquote>Установлено: <code>{len(installed)}</code>/<code>{total}</code></blockquote>"
+                _bq("DLM — Dynamic Loader of Modules") + "\n"
+                + _shell([
+                    "installed: %d/%d" % (len(installed), total),
+                    "page: %d/%d" % (page + 1, total_pages),
+                ])
             )
             buttons = []
 
             for item in page_items:
                 p = _mod_path(item["file"])
                 if p is None:
-                    mark = "📥 "
+                    mark = "[+]"
                 elif p == MODULES_DIR:
-                    mark = "🔵 "
+                    mark = "[~]"
                 else:
-                    mark = "✅ "
-                label = f"{mark}{item['name']}"
+                    mark = "[*]"
+                label = mark + " " + item["name"]
 
                 async def on_click(cb_event, file=item["file"]):
                     await self._show_module(cb_event, file)
@@ -452,7 +427,7 @@ class DLMModule(Module):
 
             async def on_noop(cb):
                 await cb.answer()
-            nav.append(kernel.inline.make_button("•", on_noop, ttl=600))
+            nav.append(kernel.inline.make_button(".", on_noop, ttl=600))
 
             for i in range(total_pages):
                 if i == page:
@@ -471,19 +446,16 @@ class DLMModule(Module):
             buttons.append(nav)
 
             async def on_refresh(cb):
-                await cb.answer("Обновляю...")
+                await cb.answer("refreshing...")
                 await self._show_main(cb, is_cb=True, force_refresh=True, page=page)
 
-            buttons.append([kernel.inline.make_button("🔄 Обновить", on_refresh, ttl=600)])
+            buttons.append([kernel.inline.make_button("refresh", on_refresh, ttl=600)])
 
         topic_id = None
         try:
             rt = getattr(event_or_cb, "reply_to", None)
             if rt is not None:
-                topic_id = (
-                    getattr(rt, "reply_to_top_id", None)
-                    or getattr(rt, "reply_to_msg_id", None)
-                )
+                topic_id = (getattr(rt, "reply_to_top_id", None) or getattr(rt, "reply_to_msg_id", None))
         except Exception:
             pass
 
@@ -495,28 +467,24 @@ class DLMModule(Module):
                 await event_or_cb.delete()
             except Exception:
                 pass
-
             bot = getattr(kernel, "bot_client", None)
             if bot is not None:
                 try:
                     menu_key = f"dlm_main_{int(time.time())}"
                     await bot.send_inline_menu(
-                        chat_id=chat_id,
-                        key=menu_key,
-                        text=text,
-                        buttons=buttons,
-                        topic_id=topic_id,
+                        chat_id=chat_id, key=menu_key, text=text,
+                        buttons=buttons, topic_id=topic_id,
                     )
                     return
                 except Exception as e:
-                    log.warning(f"DLM: send_inline_menu failed: {e}, fallback")
+                    log.warning("DLM: send_inline_menu failed: " + str(e))
             await kernel.inline.form(chat_id, text, buttons)
 
-    async def _show_module(self, cb_event, file: str):
+    async def _show_module(self, cb_event, file):
         catalog = self._catalog_cache or []
         item = next((x for x in catalog if x["file"] == file), None)
         if item is None:
-            await cb_event.answer("Модуль не найден")
+            await cb_event.answer("module not found")
             return
 
         mod_path = None
@@ -528,65 +496,71 @@ class DLMModule(Module):
         local_v = self._get_local_version(file)
         remote_v = await self._get_remote_version(file)
 
-        status = "✅ Установлен" if installed else "📥 Не установлен"
-        size_kb = round(item.get("size", 0) / 1024, 1)
-        local_str = local_v or "—"
-        remote_str = remote_v or "—"
-        desc = item.get("description") or "—"
-
         text = (
-            f'<blockquote><tg-emoji emoji-id="5253643754979494754">💎</tg-emoji> {item["name"]}</blockquote>\n\n'
-            f'<blockquote><tg-emoji emoji-id="5429588718052740528">🩴</tg-emoji><strong><em>что делает</em></strong>: {desc}</blockquote>\n\n'
-            f'<blockquote><tg-emoji emoji-id="5345952703933609287">💊</tg-emoji><u>у тебя<strong>:</strong></u> {local_str}\n'
-            f'<tg-emoji emoji-id="5346270183621171895">🤩</tg-emoji>в репо: {remote_str}</blockquote>'
+            _bq(item["name"]) + "\n"
+            + _shell([
+                "status : " + ("installed" if installed else "not installed"),
+                "local  : " + (local_v or "-"),
+                "remote : " + (remote_v or "-"),
+            ]) + "\n"
+            + _shell(["info   : " + (item.get("description") or "-")])
         )
 
         async def on_download(cb_event, f=file, nm=item["name"]):
-            await cb_event.answer(f"Скачиваю {nm}...")
+            await cb_event.answer("downloading " + nm + "...")
             ok = await self._update_module(f)
             if ok:
-                await cb_event.answer(f"✅ {nm} установлен/обновлён")
+                await cb_event.answer(nm + " installed/updated")
                 await self._show_module(cb_event, f)
             else:
-                await cb_event.answer(f"❌ Не удалось скачать {nm}", alert=True)
+                await cb_event.answer("failed: " + nm, alert=True)
 
         async def on_back(cb_event):
             await self._show_main(cb_event, is_cb=True)
 
         buttons = []
         if not installed:
-            buttons.append([self.kernel.inline.make_button("📥 Скачать", on_download, ttl=600)])
+            buttons.append([self.kernel.inline.make_button("install", on_download, ttl=600)])
         else:
-            buttons.append([self.kernel.inline.make_button("🔄 Обновить", on_download, ttl=600)])
-        buttons.append([self.kernel.inline.make_button("← Назад", on_back, ttl=600)])
+            buttons.append([self.kernel.inline.make_button("update", on_download, ttl=600)])
+        buttons.append([self.kernel.inline.make_button("< back", on_back, ttl=600)])
 
         await self._send_menu_via_bot(cb_event, text, buttons)
 
-    @command(name="dlm_check", aliases=["checkmods"], description="Проверить обновления модулей", only_for="owner")
+    @command(name="dlm_check", aliases=["checkmods"], description="Check module updates", only_for="owner")
     async def dlm_check_cmd(self, event, args):
-        await event.edit('<blockquote><tg-emoji emoji-id="5408983827198547771">👀</tg-emoji> Проверяю каталог...</blockquote>', parse_mode="html")
+        await event.edit(_shell(["dlm check catalog"], running=True), parse_mode="html")
 
         try:
             updates = await self._check_updates()
         except Exception as e:
-            await event.edit(f"❌ Ошибка: <code>{e}</code>", parse_mode="html")
+            await event.edit(
+                _bq("dlm check") + "\n" + _shell(["error: " + str(e)]),
+                parse_mode="html",
+            )
             return
 
         upd = [(f, i) for f, i in updates.items() if i["status"] == "update"]
         new = [(f, i) for f, i in updates.items() if i["status"] == "new"]
 
         if not upd and not new:
-            await event.edit('<blockquote><tg-emoji emoji-id="6012519825702656293">👌</tg-emoji> неа, новых модулей нету...</blockquote>', parse_mode="html")
+            await event.edit(
+                _bq("dlm check") + "\n" + _shell(["no new modules"]),
+                parse_mode="html",
+            )
             return
 
-        lines = ["🔍 <b>Результат проверки</b>\n"]
+        lines = []
         if upd:
-            lines.append("<b>Обновления:</b>")
+            lines.append("updates:")
             for f, i in upd:
-                lines.append(f"• <code>{f}</code>: {i['local']} → {i['remote']}")
+                lines.append("  " + f + ": " + str(i['local']) + " -> " + str(i['remote']))
         if new:
-            lines.append("\n<b>Новые:</b>")
+            lines.append("new:")
             for f, i in new:
-                lines.append(f"• <code>{f}</code> (v{i['remote']})")
+                lines.append("  " + f + " (v" + str(i['remote']) + ")")
 
-        await event.edit("\n".join(lines), parse_mode="html")
+        await event.edit(
+            _bq("dlm check") + "\n" + _shell(lines),
+            parse_mode="html",
+        )

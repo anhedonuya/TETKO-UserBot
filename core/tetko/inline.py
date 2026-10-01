@@ -15,6 +15,35 @@ from telethon.tl.types import (
 log = logging.getLogger("TETKO.tetko.inline")
 
 
+def _make_btn_style(style_name, emoji_id=None):
+    bg_primary = False
+    bg_success = False
+    bg_danger = False
+    if style_name == "primary":
+        bg_primary = True
+    elif style_name == "success":
+        bg_success = True
+    elif style_name == "danger":
+        bg_danger = True
+    if emoji_id is None and not (bg_primary or bg_success or bg_danger):
+        return None
+    from telethon.tl.types import KeyboardButtonStyle
+    kwargs = {}
+    if emoji_id is not None:
+        kwargs["icon"] = emoji_id
+    if bg_primary:
+        kwargs["bg_primary"] = True
+    if bg_success:
+        kwargs["bg_success"] = True
+    if bg_danger:
+        kwargs["bg_danger"] = True
+    try:
+        return KeyboardButtonStyle(**kwargs)
+    except Exception:
+        return None
+
+
+
 
 import re as _re
 
@@ -99,10 +128,7 @@ class Inline:
             for btn in row:
                 kind = btn.get("kind", "callback") if isinstance(btn, dict) else "callback"
                 label, emoji_id = _split_label(btn["label"])
-                style = None
-                if emoji_id is not None:
-                    from telethon.tl.types import KeyboardButtonStyle
-                    style = KeyboardButtonStyle(icon=emoji_id)
+                style = _make_btn_style(btn.get("style") if isinstance(btn, dict) else None, emoji_id)
                 if kind == "switch_current":
                     kw = {"same_peer": True}
                     if style is not None:
@@ -142,10 +168,7 @@ class Inline:
             for btn in row:
                 kind = btn.get("kind", "callback") if isinstance(btn, dict) else "callback"
                 label, emoji_id = _split_label(btn["label"])
-                style = None
-                if emoji_id is not None:
-                    from telethon.tl.types import KeyboardButtonStyle
-                    style = KeyboardButtonStyle(icon=emoji_id)
+                style = _make_btn_style(btn.get("style") if isinstance(btn, dict) else None, emoji_id)
                 if kind == "switch_current":
                     kw = {"same_peer": True}
                     if style is not None:
@@ -234,10 +257,7 @@ class Inline:
             for b in row:
                 kind = b.get("kind", "callback") if isinstance(b, dict) else "callback"
                 label, emoji_id = _split_label(b["label"])
-                style = None
-                if emoji_id is not None:
-                    from telethon.tl.types import KeyboardButtonStyle
-                    style = KeyboardButtonStyle(icon=emoji_id)
+                style = _make_btn_style(b.get("style") if isinstance(b, dict) else None, emoji_id)
                 if kind == "switch_current":
                     kw = {"same_peer": True}
                     if style is not None:
@@ -285,15 +305,23 @@ class Inline:
                             bot._inlines[b["token"]] = imid
                 return
             except Exception as e:
-                log.warning(f"inline.edit через bot не сработал: {e}")
+                _es = str(e).lower()
+                if "not modified" not in _es:
+                    log.warning(f"inline.edit via bot failed: {e}")
 
         try:
             return await event.edit(text, buttons=rows, parse_mode="html")
         except Exception as e:
-            log.warning(f"inline.edit fallback тоже не сработал: {e}")
+            _es = str(e).lower()
+            if "not modified" in _es or "message is not modified" in _es:
+                return None
+            log.warning(f"inline.edit fallback failed: {e}")
             try:
                 return await event.edit(text, parse_mode="html")
-            except Exception:
+            except Exception as e2:
+                _e2 = str(e2).lower()
+                if "not modified" in _e2:
+                    return None
                 return None
 
     async def answer(self, event: Any, text: str = "", alert: bool = False):

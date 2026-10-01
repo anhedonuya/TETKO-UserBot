@@ -510,8 +510,134 @@ class Tek(Module):
             parse_mode="html",
         )
 
-    @command(name="tekcfg", description="Состояние системы")
+    @command(
+        name="ftekcfg",
+        aliases=["fkcfg"],
+        description="Force set/delete module config key",
+        only_for="owner",
+    )
+    async def cmd_ftekcfg(self, event, args):
+        from core.tetko import shell as _sh
+
+        def _out(lines, cmd=None, running=False):
+            return _sh.wrap(lines, cmd=cmd or "ftekcfg", running=running, trailing=True)
+
+        if not args:
+            await event.edit(_out([
+                "usage : ftekcfg set [-f] <Module> <key> <value>",
+                "        ftekcfg del <Module> <key>",
+                "        ftekcfg list <Module>",
+                "",
+                "flag  : -f — force create key if it does not exist",
+            ]), parse_mode="html")
+            return
+
+        sub = args[0].lower()
+
+        if sub == "set":
+            rest = list(args[1:])
+            force = False
+            if rest and rest[0] == "-f":
+                force = True
+                rest = rest[1:]
+            if len(rest) < 3:
+                await event.edit(_out([
+                    "usage : ftekcfg set [-f] <Module> <key> <value>",
+                    "error : not enough arguments",
+                ]), parse_mode="html")
+                return
+            module = rest[0]
+            key = rest[1]
+            value = " ".join(rest[2:])
+            data = self._cfg_read(module)
+            if data is None:
+                await event.edit(_out([
+                    "error : config not found",
+                    "        module: " + module,
+                ]), parse_mode="html")
+                return
+            if not force and key not in data:
+                await event.edit(_out([
+                    "error : key does not exist: " + key,
+                    "        use -f to force create",
+                ]), parse_mode="html")
+                return
+            parsed = self._parse_cfg_value(value)
+            data[key] = parsed
+            self._cfg_write(module, data)
+            await event.edit(_out([
+                "saved",
+                "  module : " + module,
+                "  key    : " + key,
+                "  value  : " + str(parsed),
+                "  force  : " + str(force).lower(),
+            ]), parse_mode="html")
+            return
+
+        if sub == "del":
+            rest = list(args[1:])
+            if len(rest) < 2:
+                await event.edit(_out([
+                    "usage : ftekcfg del <Module> <key>",
+                ]), parse_mode="html")
+                return
+            module, key = rest[0], rest[1]
+            data = self._cfg_read(module)
+            if data is None:
+                await event.edit(_out([
+                    "error : config not found: " + module,
+                ]), parse_mode="html")
+                return
+            if key not in data:
+                await event.edit(_out([
+                    "error : key not found: " + key,
+                ]), parse_mode="html")
+                return
+            data.pop(key, None)
+            self._cfg_write(module, data)
+            await event.edit(_out([
+                "removed",
+                "  module : " + module,
+                "  key    : " + key,
+            ]), parse_mode="html")
+            return
+
+        if sub == "list":
+            if len(args) < 2:
+                await event.edit(_out([
+                    "usage : ftekcfg list <Module>",
+                ]), parse_mode="html")
+                return
+            module = args[1]
+            data = self._cfg_read(module)
+            if data is None:
+                await event.edit(_out([
+                    "error : config not found: " + module,
+                ]), parse_mode="html")
+                return
+            lines = ["module : " + module, "keys   : " + str(len(data)), ""]
+            for k, v in data.items():
+                val = str(v)
+                if len(val) > 60:
+                    val = val[:60] + "..."
+                lines.append("  " + k + " = " + val)
+            await event.edit(_sh.wrap(lines, cmd="ftekcfg list " + module, trailing=True), parse_mode="html")
+            return
+
+        await event.edit(_out([
+            "error : unknown subcommand: " + sub,
+            "        try: set, del, list",
+        ]), parse_mode="html")
+
+    @command(name="tekcfg", description="System state")
     async def cmd_tekcfg(self, event, args):
+        try:
+            from core.tetko import shell as _sh
+            from core.tetko import __compat__ as _compat
+        except Exception:
+            _sh = None
+            _compat = "?"
+
         uptime = round(time.time() - START_TIME)
         hours, remainder = divmod(uptime, 3600)
         minutes, seconds = divmod(remainder, 60)
@@ -521,19 +647,26 @@ class Tek(Module):
         total_cmds = len(registry._commands)
         premium = _premium(self.kernel)
 
-        from core.tetko import __compat__ as _compat
-        uptime_str = self._t("uptime_fmt", h=hours, m=minutes, s=seconds)
+        try:
+            py = sys.version.split()[0]
+        except Exception:
+            py = "?"
 
-        text = (
-            f"<b>{self._t('cfg_title')}</b>\n\n"
-            + self._t("cfg_uptime", time=uptime_str) + "\n"
-            + self._t("cfg_modules", count=total_mods) + "\n"
-            + self._t("cfg_commands", count=total_cmds) + "\n"
-            + self._t("cfg_python", version=sys.version.split()[0]) + "\n"
-            + self._t("cfg_style", compat=_compat) + "\n"
-            + self._t("cfg_premium", premium=premium) + "\n"
-            + self._t("cfg_authors")
-        )
+        lines = [
+            "uptime    : " + str(hours) + "h " + str(minutes) + "m " + str(seconds) + "s",
+            "modules   : " + str(total_mods),
+            "commands  : " + str(total_cmds),
+            "python    : " + py,
+            "style     : tetko-compat " + str(_compat),
+            "premium   : " + str(premium).lower(),
+            "authors   : @anhedonuya, @flexownerAL",
+        ]
+        if _sh is not None:
+            text = _sh.wrap(lines, cmd="tekcfg", trailing=True)
+        else:
+            body = "flexOwnerAL@xhost:~% tekcfg\n\n" + "\n".join(lines) + "\n\nflexOwnerAL@xhost:~% "
+            esc = body.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+            text = "<pre>" + esc + "</pre>"
         await event.edit(text, parse_mode="html")
 
 
@@ -568,9 +701,9 @@ class Tek(Module):
 
     @command(name="cfg", aliases=["mcfg", "moduleconfig"], description="Конфиги модулей")
     async def cmd_cfg(self, event, args):
-        self.log.info(f"[cfg] вызвана, args={args!r}")
+        self.log.debug(f"[cfg] вызвана, args={args!r}")
         if not args:
-            await self._cfg_show_list(event)
+            await self._cfg_show_menu(event)
             return
 
         sub = args[0].lower()
@@ -655,7 +788,7 @@ class Tek(Module):
                 for f in d.glob("*.py"):
                     if f.stem.lower() == name.lower():
                         return kind
-        return "system"
+        return "orphan"
 
     async def _cfg_show_menu(self, event_or_cb, is_cb: bool = False):
         text = self._t("cfg_choose_section")
@@ -756,25 +889,52 @@ class Tek(Module):
     async def _cfg_show_module(self, event_or_cb, module: str, is_cb: bool = False):
         data = self._cfg_read(module)
         if data is None:
-            await event_or_cb.edit(self._t("cfg_not_found", module=self._esc(module)), parse_mode="html")
+            txt = self._t("cfg_not_found", module=self._esc(module))
+            if is_cb:
+                try:
+                    await self.kernel.inline.edit(event_or_cb, txt)
+                except Exception:
+                    pass
+            else:
+                await event_or_cb.edit(txt, parse_mode="html")
             return
 
         if not data:
             lines = self._t("cfg_no_keys")
         else:
+            def _fmt_val(v):
+                if isinstance(v, bool):
+                    return "true" if v else "false"
+                if v is None:
+                    return "null"
+                if isinstance(v, str):
+                    return v if len(v) <= 200 else v[:200] + "..."
+                if isinstance(v, (dict, list)):
+                    try:
+                        import json as _json
+                        js = _json.dumps(v, ensure_ascii=False, separators=(", ", ": "))
+                        if len(js) > 200:
+                            js = js[:200] + "..."
+                        return js
+                    except Exception:
+                        pass
+                txt = str(v)
+                return txt if len(txt) <= 200 else txt[:200] + "..."
             lines = "\n".join(
-                self._t("cfg_key_line", key=self._esc(k), value=self._esc(repr(v)))
+                self._t("cfg_key_line", key=self._esc(k), value=self._esc(_fmt_val(v)))
                 for k, v in data.items()
             )
 
-        text = self._t("cfg_module_title", name=self._esc(module)) + "\n\n<blockquote expandable>" + lines + "</blockquote>\n" + self._t("cfg_hint")
+        _p = getattr(self.kernel, "prefix", ".") or "."
+        _hint = "Commands: <code>" + self._esc(_p) + "ftekcfg set -f &lt;Module&gt; &lt;key&gt; &lt;value&gt;</code>"
+        text = self._t("cfg_module_title", name=self._esc(module)) + "\n\n<blockquote expandable>" + lines + "</blockquote>\n" + _hint
 
         rows = []
         chunk = []
         for k, v in list(data.items())[:20]:
             async def on_edit(cb, m=module, key=k):
                 await self._cfg_edit_key(cb, m, key)
-            chunk.append(self.kernel.inline.make_button(f"✏️ {k}", on_edit, ttl=600))
+            chunk.append(self.kernel.inline.make_button(f"{k}", on_edit, ttl=600))
             if len(chunk) == 3:
                 rows.append(chunk)
                 chunk = []
@@ -782,7 +942,10 @@ class Tek(Module):
             rows.append(chunk)
 
         async def on_back(cb):
-            await self._cfg_show_list(cb, is_cb=True)
+            _k = self._cfg_kind(module)
+            if _k == "orphan":
+                _k = "system"
+            await self._cfg_show_list(cb, is_cb=True, kind=_k)
 
         async def on_close(cb):
             await self._close_cfg(cb)
@@ -811,10 +974,28 @@ class Tek(Module):
                 spec.loader.exec_module(m)
             except Exception:
                 return None
+
             for name in dir(m):
                 cls = getattr(m, name)
-                if isinstance(cls, type) and isinstance(getattr(cls, "config", None), dict):
-                    return cls.config.get(key, None)
+                if not isinstance(cls, type):
+                    continue
+                cfg = getattr(cls, "config", None)
+
+                if isinstance(cfg, dict):
+                    if key in cfg:
+                        return cfg[key]
+                    continue
+
+                values = getattr(cfg, "_values", None)
+                if isinstance(values, dict) and key in values:
+                    cv = values[key]
+                    try:
+                        d = cv.default
+                        if callable(d):
+                            d = d()
+                        return d
+                    except Exception:
+                        pass
         except Exception:
             return None
         return None
@@ -840,10 +1021,21 @@ class Tek(Module):
         token = _sec.token_hex(3)
         if not hasattr(self.kernel, "_cfg_pending"):
             self.kernel._cfg_pending = {}
+        _imid = None
+        try:
+            _data = getattr(cb, "data", b"")
+            if isinstance(_data, bytes):
+                _data = _data.decode("utf-8", errors="replace")
+            _bot = getattr(self.kernel, "bot_client", None)
+            if _bot is not None:
+                _imid = getattr(cb, "inline_message_id", None) or _bot.get_inline_message_id(_data)
+        except Exception:
+            _imid = None
         self.kernel._cfg_pending[token] = {
             "module": module,
             "key": key,
             "ts": time.time(),
+            "inline_message_id": _imid,
         }
 
         rows = [

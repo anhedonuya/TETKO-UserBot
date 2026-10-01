@@ -1,10 +1,4 @@
-"""BotClient — inline-бот TETKO для отправки кнопок в любой чат.
-
-Работает РЯДОМ с юзерботом в одном процессе. Юзербот запрашивает
-inline-результат у бота (send_inline_menu) и отправляет его в нужный чат.
-Telegram разрешает отправлять inline-результаты в ЛЮБОЙ чат — даже
-без присутствия бота.
-"""
+"""BotClient - inline bot for TETKO."""
 from __future__ import annotations
 
 import asyncio
@@ -36,13 +30,40 @@ from telethon.tl.types import (
 log = logging.getLogger("TETKO.tetko.bot")
 
 
+def _make_btn_style_bot(style_name, emoji_id=None):
+    bg_primary = False
+    bg_success = False
+    bg_danger = False
+    if style_name == "primary":
+        bg_primary = True
+    elif style_name == "success":
+        bg_success = True
+    elif style_name == "danger":
+        bg_danger = True
+    if emoji_id is None and not (bg_primary or bg_success or bg_danger):
+        return None
+    from telethon.tl.types import KeyboardButtonStyle
+    kwargs = {}
+    if emoji_id is not None:
+        kwargs["icon"] = emoji_id
+    if bg_primary:
+        kwargs["bg_primary"] = True
+    if bg_success:
+        kwargs["bg_success"] = True
+    if bg_danger:
+        kwargs["bg_danger"] = True
+    try:
+        return KeyboardButtonStyle(**kwargs)
+    except Exception:
+        return None
+
 
 import re as _re
 
 _TG_EMOJI_RE = _re.compile(r'<tg-emoji emoji-id="(\d+)">(.*?)</tg-emoji>')
 
 
-def _split_label(label: str):
+def _split_label(label):
     if not isinstance(label, str):
         return str(label), None
     m = _TG_EMOJI_RE.search(label)
@@ -52,29 +73,21 @@ def _split_label(label: str):
     plain = _TG_EMOJI_RE.sub(lambda x: x.group(2), label)
     return plain, emoji_id
 
-class BotClient:
-    """Inline-бот: регистрация меню + отправка через inline в любой чат."""
 
-    def __init__(
-        self,
-        api_id: int,
-        api_hash: str,
-        bot_token: str,
-        kernel: Any = None,
-    ):
+class BotClient:
+    def __init__(self, api_id, api_hash, bot_token, kernel=None):
         self.kernel = kernel
-        self.username: Optional[str] = None
+        self.username = None
         self.client = TelegramClient("tetko_inline_bot", api_id, api_hash)
         self._bot_token = bot_token
+        self._menus = {}
+        self._inline_sends = {}
 
-        self._menus: dict[str, dict] = {}
-        self._inline_sends: dict[str, str] = {}
-
-    async def start(self) -> None:
+    async def start(self):
         await self.client.start(bot_token=self._bot_token)
         me = await self.client.get_me()
         self.username = me.username
-        log.info(f"🤖 Inline-бот запущен: @{self.username}")
+        log.info(f"Inline bot started: @{self.username}")
 
         @self.client.on(events.InlineQuery())
         async def on_inline(event):
@@ -88,24 +101,16 @@ class BotClient:
         async def on_start(event):
             await self._handle_start(event)
 
-        from telethon import events as _events
-        @self.client.on(_events.Raw(UpdateBotInlineSend))
+        @self.client.on(events.Raw(UpdateBotInlineSend))
         async def on_inline_send(update):
             qid = update.id
             imid = update.msg_id
             self._inline_sends[qid] = imid
 
-    async def stop(self) -> None:
+    async def stop(self):
         await self.client.disconnect()
 
-    def register_menu(
-        self,
-        key: str,
-        text: str,
-        buttons: list[list[dict]],
-        ttl: float = 600,
-    ) -> None:
-        """Зарегистрировать готовое меню под ключом key."""
+    def register_menu(self, key, text, buttons, ttl=600):
         now = time.time()
         self._menus = {
             k: v for k, v in self._menus.items()
@@ -118,13 +123,7 @@ class BotClient:
             "ttl": ttl,
         }
 
-    async def edit_inline_menu(
-        self,
-        inline_message_id: str,
-        text: str,
-        buttons: list[list[dict]],
-    ):
-        """Отредактировать существующее inline-сообщение."""
+    async def edit_inline_menu(self, inline_message_id, text, buttons):
         from telethon.tl.functions.messages import EditInlineBotMessageRequest
         from telethon.tl.types import (
             ReplyInlineMarkup, KeyboardButtonRow, KeyboardButtonCallback,
@@ -137,7 +136,7 @@ class BotClient:
             parsed, entities = await self.kernel.client._parse_message_text(text, "html")
             msg_text = parsed
         except Exception as e:
-            log.debug(f"edit_inline_menu: parse failed: {e}")
+            log.debug(f"edit_inline_menu parse failed: {e}")
 
         rows = []
         for row in buttons:
@@ -145,29 +144,18 @@ class BotClient:
             for b in row:
                 kind = b.get("kind", "callback") if isinstance(b, dict) else "callback"
                 label, emoji_id = _split_label(b["label"])
-                style = None
-                if emoji_id is not None:
-                    from telethon.tl.types import KeyboardButtonStyle
-                    style = KeyboardButtonStyle(icon=emoji_id)
+                style = _make_btn_style_bot(b.get("style") if isinstance(b, dict) else None, emoji_id)
                 if kind == "switch_current":
                     kw = {"same_peer": True}
                     if style is not None:
                         kw["style"] = style
-                    kb_row.append(KeyboardButtonSwitchInline(
-                        text=label,
-                        query=b.get("query", ""),
-                        **kw,
-                    ))
+                    kb_row.append(KeyboardButtonSwitchInline(text=label, query=b.get("query", ""), **kw))
                     continue
                 if kind == "switch":
                     kw = {"same_peer": False}
                     if style is not None:
                         kw["style"] = style
-                    kb_row.append(KeyboardButtonSwitchInline(
-                        text=label,
-                        query=b.get("query", ""),
-                        **kw,
-                    ))
+                    kb_row.append(KeyboardButtonSwitchInline(text=label, query=b.get("query", ""), **kw))
                     continue
                 data = b["token"]
                 if isinstance(data, str):
@@ -181,11 +169,7 @@ class BotClient:
             rows.append(KeyboardButtonRow(buttons=kb_row))
         markup = ReplyInlineMarkup(rows=rows) if rows else None
 
-
-        kwargs = {
-            "id": inline_message_id,
-            "message": msg_text,
-        }
+        kwargs = {"id": inline_message_id, "message": msg_text}
         if markup:
             kwargs["reply_markup"] = markup
         if entities:
@@ -193,67 +177,15 @@ class BotClient:
 
         return await self.client(EditInlineBotMessageRequest(**kwargs))
 
-    def get_inline_message_id(self, token: str):
-        """Получить inline_message_id по token кнопки."""
+    def get_inline_message_id(self, token):
         if not hasattr(self, "_inlines"):
             return None
         return self._inlines.get(token)
 
-    def get_message_id(self, token: str):
-        """Получить (chat_id, message_id) по token кнопки."""
+    def get_message_id(self, token):
         return self._menus.get(f"msgid_{token}")
 
-    async def edit_bot_message(self, chat_id, message_id, text: str, buttons: list):
-        """Отредактировать сообщение, отправленное ботом."""
-        from telethon.tl.custom import Button
-
-        rows = []
-        for row in buttons:
-            btn_row = []
-            for b in row:
-                kind = b.get("kind", "callback") if isinstance(b, dict) else "callback"
-                if kind == "switch_current":
-                    btn_row.append(Button.switch_inline(
-                        b["label"], query=b.get("query", ""), same_peer=True
-                    ))
-                    continue
-                if kind == "switch":
-                    btn_row.append(Button.switch_inline(
-                        b["label"], query=b.get("query", ""), same_peer=False
-                    ))
-                    continue
-                data = b["token"]
-                if isinstance(data, str):
-                    data = data.encode("utf-8")
-                if len(data) > 64:
-                    data = data[:64]
-                btn_row.append(Button.inline(b["label"], data=data))
-            rows.append(btn_row)
-
-        return await self.client.edit_message(
-            chat_id,
-            message_id,
-            text=text,
-            buttons=rows,
-            parse_mode="html",
-        )
-
-    async def send_inline_menu(
-        self,
-        chat_id: any,
-        key: str,
-        text: str,
-        buttons: list[list[dict]],
-        query: str | None = None,
-        topic_id: int | None = None,
-    ):
-        """Отправить меню в чат через inline-бота.
-
-        Шаги:
-          1. Регистрируем меню под ключом
-          2. Запрашиваем inline-результат у бота
-          3. Отправляем результат в чат
-        """
+    async def send_inline_menu(self, chat_id, key, text, buttons, query=None, topic_id=None):
         self.register_menu(key, text, buttons)
 
         query_str = query or key
@@ -267,7 +199,7 @@ class BotClient:
             try:
                 peer = await userbot.get_input_entity(chat_id)
             except Exception as e:
-                log.warning(f"send_inline_menu: get_input_entity failed: {e}")
+                log.warning(f"send_inline_menu get_input_entity failed: {e}")
                 peer = chat_id
 
         results = await userbot(GetInlineBotResultsRequest(
@@ -278,19 +210,14 @@ class BotClient:
         ))
 
         if not results or not results.results:
-            log.error(f"send_inline_menu: нет результатов от бота для {query_str}")
+            log.error(f"send_inline_menu no results for {query_str}")
             return None
 
         from telethon.tl.custom.inlineresult import InlineResult
-        inline_results = [
-            InlineResult(userbot, r, results.query_id)
-            for r in results.results
-        ]
+        inline_results = [InlineResult(userbot, r, results.query_id) for r in results.results]
+
         if topic_id:
-            reply_to_obj = InputReplyToMessage(
-                reply_to_msg_id=topic_id,
-                top_msg_id=topic_id,
-            )
+            reply_to_obj = InputReplyToMessage(reply_to_msg_id=topic_id, top_msg_id=topic_id)
             message = await userbot(SendInlineBotResultRequest(
                 peer=peer,
                 query_id=results.query_id,
@@ -307,10 +234,9 @@ class BotClient:
             if imid:
                 break
 
-
         if imid:
             if not hasattr(self, "_inlines"):
-                self._inlines: dict = {}
+                self._inlines = {}
             for row in buttons:
                 for btn in row:
                     if not isinstance(btn, dict) or "token" not in btn:
@@ -318,15 +244,9 @@ class BotClient:
                     token = btn["token"]
                     self._inlines[token] = imid
 
-            if "<tg-emoji" in text:
-                try:
-                    result = await self.edit_inline_menu(imid, text, buttons)
-                except Exception as e:
-                    import traceback
         return message
 
-    async def _handle_inline(self, event) -> None:
-        """Обработка inline-запросов от юзербота."""
+    async def _handle_inline(self, event):
         query = (event.text or "").strip()
 
         if query.startswith("cfg_"):
@@ -336,6 +256,12 @@ class BotClient:
                 log.exception(f"cfg inline: {e}")
             return
 
+        if query.startswith("audata_"):
+            try:
+                await self._handle_audata_inline(event, query)
+            except Exception as e:
+                log.exception(f"audata inline: {e}")
+            return
 
         if query.startswith("rich:"):
             key = query[len("rich:"):]
@@ -348,7 +274,7 @@ class BotClient:
             try:
                 rich = InputRichMessageHTML(html=html_text)
             except Exception as e:
-                log.warning(f"_handle_inline: InputRichMessageHTML failed: {e}")
+                log.warning(f"_handle_inline rich HTML failed: {e}")
                 rich = None
 
             if rich is not None:
@@ -364,25 +290,27 @@ class BotClient:
                                     kb_row.append(b)
                                     continue
                                 kind = b.get("kind", "callback")
-                                text_btn = b.get("text", "·")
+                                text_btn = b.get("text", ".")
+                                style = _make_btn_style_bot(b.get("style"), None)
                                 if kind == "switch_current":
-                                    kb_row.append(KeyboardButtonSwitchInline(
-                                        text=text_btn,
-                                        query=b.get("query", ""),
-                                        same_peer=True,
-                                    ))
+                                    kw = {"same_peer": True}
+                                    if style is not None:
+                                        kw["style"] = style
+                                    kb_row.append(KeyboardButtonSwitchInline(text=text_btn, query=b.get("query", ""), **kw))
                                     continue
                                 if kind == "switch":
-                                    kb_row.append(KeyboardButtonSwitchInline(
-                                        text=text_btn,
-                                        query=b.get("query", ""),
-                                        same_peer=False,
-                                    ))
+                                    kw = {"same_peer": False}
+                                    if style is not None:
+                                        kw["style"] = style
+                                    kb_row.append(KeyboardButtonSwitchInline(text=text_btn, query=b.get("query", ""), **kw))
                                     continue
                                 data = b.get("token", b.get("data", ""))
                                 if isinstance(data, str):
                                     data = data.encode("utf-8")
-                                kb_row.append(KeyboardButtonCallback(text=text_btn, data=data))
+                                if style is not None:
+                                    kb_row.append(KeyboardButtonCallback(text=text_btn, data=data, style=style))
+                                else:
+                                    kb_row.append(KeyboardButtonCallback(text=text_btn, data=data))
                             if kb_row:
                                 kb_rows.append(KeyboardButtonRow(buttons=kb_row))
                         if kb_rows:
@@ -401,7 +329,7 @@ class BotClient:
                     await event.answer([result], cache_time=0, gallery=False)
                     return
                 except Exception as e:
-                    log.warning(f"_handle_inline: rich result failed: {e}")
+                    log.warning(f"_handle_inline rich result failed: {e}")
 
         if query.startswith("table:"):
             body = query[len("table:"):].strip()
@@ -421,7 +349,7 @@ class BotClient:
             try:
                 rich = InputRichMessageHTML(html=html_text)
             except Exception as e:
-                log.warning(f"_handle_inline: table HTML failed: {e}")
+                log.warning(f"_handle_inline table HTML failed: {e}")
                 rich = None
 
             if rich is not None:
@@ -431,14 +359,12 @@ class BotClient:
                         type="article",
                         title="Table",
                         description=body[:80],
-                        send_message=InputBotInlineMessageRichMessage(
-                            rich_message=rich,
-                        ),
+                        send_message=InputBotInlineMessageRichMessage(rich_message=rich),
                     )
                     await event.answer([result], cache_time=0, gallery=False)
                     return
                 except Exception as e:
-                    log.warning(f"_handle_inline: table result failed: {e}")
+                    log.warning(f"_handle_inline table result failed: {e}")
 
         menu = self._menus.get(query)
 
@@ -453,10 +379,8 @@ class BotClient:
                 id=f"empty_{secrets.token_hex(4)}",
                 type="article",
                 title="TETKO",
-                description=f"Меню '{query}' не найдено",
-                send_message=InputBotInlineMessageText(
-                    message="🫥 Меню не найдено или устарело"
-                ),
+                description=f"menu '{query}' not found",
+                send_message=InputBotInlineMessageText(message="menu not found or expired"),
             )]
             await event.answer(results, cache_time=0, gallery=False)
             return
@@ -467,29 +391,18 @@ class BotClient:
             for b in row:
                 kind = b.get("kind", "callback") if isinstance(b, dict) else "callback"
                 label, emoji_id = _split_label(b["label"])
-                style = None
-                if emoji_id is not None:
-                    from telethon.tl.types import KeyboardButtonStyle
-                    style = KeyboardButtonStyle(icon=emoji_id)
+                style = _make_btn_style_bot(b.get("style") if isinstance(b, dict) else None, emoji_id)
                 if kind == "switch_current":
                     kw = {"same_peer": True}
                     if style is not None:
                         kw["style"] = style
-                    kb_row.append(KeyboardButtonSwitchInline(
-                        text=label,
-                        query=b.get("query", ""),
-                        **kw,
-                    ))
+                    kb_row.append(KeyboardButtonSwitchInline(text=label, query=b.get("query", ""), **kw))
                     continue
                 if kind == "switch":
                     kw = {"same_peer": False}
                     if style is not None:
                         kw["style"] = style
-                    kb_row.append(KeyboardButtonSwitchInline(
-                        text=label,
-                        query=b.get("query", ""),
-                        **kw,
-                    ))
+                    kb_row.append(KeyboardButtonSwitchInline(text=label, query=b.get("query", ""), **kw))
                     continue
                 data = b["token"]
                 if isinstance(data, str):
@@ -505,20 +418,15 @@ class BotClient:
         markup = ReplyInlineMarkup(rows=rows) if rows else None
 
         result_id = query
-
         msg_text = menu["text"]
         entities = None
         try:
             parsed, entities = await self.client._parse_message_text(msg_text, "html")
             msg_text = parsed
         except Exception as e:
-            log.debug(f"_handle_inline: parse failed: {e}")
+            log.debug(f"_handle_inline parse failed: {e}")
 
-        kwargs = {
-            "message": msg_text,
-            "reply_markup": markup,
-        }
-
+        kwargs = {"message": msg_text, "reply_markup": markup}
         if entities:
             kwargs["entities"] = entities
 
@@ -532,7 +440,131 @@ class BotClient:
 
         await event.answer(results, cache_time=0, gallery=False)
 
-    async def _handle_cfg_inline(self, event, query: str) -> None:
+    async def _handle_audata_inline(self, event, query):
+        plugin = None
+        try:
+            reg = getattr(self.kernel, "registry", None)
+            if reg is not None:
+                for _n, _m in reg._modules.items():
+                    if getattr(_m, "name", "") == "Audata":
+                        plugin = _m
+                        break
+        except Exception:
+            plugin = None
+
+        if plugin is None:
+            await event.answer([], cache_time=0, gallery=False)
+            return
+
+        rest = query[len("audata_"):]
+        if " " not in rest:
+            await event.answer([
+                InputBotInlineResult(
+                    id="audata_hint_" + secrets.token_hex(4),
+                    type="article",
+                    title="audata",
+                    description="type new value after the space",
+                    send_message=InputBotInlineMessageText(message="type new value after the space"),
+                )
+            ], cache_time=0, gallery=False)
+            return
+
+        head, value = rest.split(" ", 1)
+        value = value.strip()
+        if not value:
+            await event.answer([], cache_time=0, gallery=False)
+            return
+
+        if "_" not in head:
+            await event.answer([], cache_time=0, gallery=False)
+            return
+
+        token, field = head.rsplit("_", 1)
+        token = token.strip()
+        field = field.strip().lower()
+
+        if field not in ("title", "artist", "album", "year", "genre", "track"):
+            await event.answer([
+                InputBotInlineResult(
+                    id="audata_badfield_" + secrets.token_hex(4),
+                    type="article",
+                    title="audata",
+                    description="unknown field: " + field,
+                    send_message=InputBotInlineMessageText(message="unknown field: " + field),
+                )
+            ], cache_time=0, gallery=False)
+            return
+
+        sessions = getattr(plugin, "_sessions", None) or {}
+        session = sessions.get(token)
+        if session is None:
+            await event.answer([
+                InputBotInlineResult(
+                    id="audata_exp_" + secrets.token_hex(4),
+                    type="article",
+                    title="audata",
+                    description="session expired",
+                    send_message=InputBotInlineMessageText(message="session expired - reopen audata"),
+                )
+            ], cache_time=0, gallery=False)
+            return
+
+        session.fields[field] = value
+
+        try:
+            imid = getattr(session, "inline_message_id", None)
+            if imid:
+                await self.edit_inline_menu(
+                    inline_message_id=imid,
+                    text=plugin._render(session),
+                    buttons=plugin._buttons(session),
+                )
+                if not hasattr(self, "_inlines"):
+                    self._inlines = {}
+                for row in plugin._buttons(session):
+                    for b in row:
+                        tok = b.get("token") if isinstance(b, dict) else None
+                        if tok:
+                            self._inlines[tok] = imid
+        except Exception as e:
+            es = str(e).lower()
+            if "not modified" not in es:
+                log.warning("audata refresh failed: " + str(e))
+
+        from core.tetko import shell as _sh
+        try:
+            prefix = getattr(self.kernel, "prefix", ".") or "."
+        except Exception:
+            prefix = "."
+
+        text = _sh.wrap([
+            "saved",
+            "field    : " + field,
+            "value    : " + value,
+            "",
+            "hint     : " + prefix + "audata to reopen",
+        ], cmd="audata " + field, trailing=True)
+
+        try:
+            parsed_text, entities = await self.client._parse_message_text(text, "html")
+        except Exception:
+            parsed_text, entities = text, None
+
+        kw = {"message": parsed_text}
+        if entities:
+            kw["entities"] = entities
+
+        await event.answer([
+            InputBotInlineResult(
+                id="audata_ok_" + secrets.token_hex(4),
+                type="article",
+                title="saved: " + field,
+                description=value[:100],
+                send_message=InputBotInlineMessageText(**kw),
+            )
+        ], cache_time=0, gallery=False)
+
+    async def _handle_cfg_inline(self, event, query):
         import json as _json
         from pathlib import Path as _P
 
@@ -543,10 +575,8 @@ class BotClient:
                     id=f"cfgerr_{secrets.token_hex(4)}",
                     type="article",
                     title="cfg",
-                    description="формат: cfg_<token> <значение>",
-                    send_message=InputBotInlineMessageText(
-                        message="🫥 формат: cfg_<token> <значение>"
-                    ),
+                    description="format: cfg_<token> <value>",
+                    send_message=InputBotInlineMessageText(message="format: cfg_<token> <value>"),
                 )
             ], cache_time=0, gallery=False)
             return
@@ -556,7 +586,7 @@ class BotClient:
         token = head[len("cfg_"):]
 
         pending = getattr(self.kernel, "_cfg_pending", {}) or {}
-        now = __import__("time").time()
+        now = time.time()
         for _t in [t for t, v in list(pending.items()) if now - v.get("ts", 0) > 900]:
             pending.pop(_t, None)
         info = pending.get(token)
@@ -566,17 +596,14 @@ class BotClient:
                     id=f"cfgexp_{secrets.token_hex(4)}",
                     type="article",
                     title="cfg",
-                    description="токен истёк",
-                    send_message=InputBotInlineMessageText(
-                        message="🫥 токен истёк — открой .cfg заново"
-                    ),
+                    description="token expired",
+                    send_message=InputBotInlineMessageText(message="token expired - open cfg again"),
                 )
             ], cache_time=0, gallery=False)
             return
 
         module = info.get("module")
         key = info.get("key")
-
         parsed = self._parse_cfg_value(raw_value)
 
         cfg_path = _P("data/tetko_config") / f"{module}.json"
@@ -590,7 +617,7 @@ class BotClient:
         cfg_path.parent.mkdir(parents=True, exist_ok=True)
         cfg_path.write_text(_json.dumps(data, ensure_ascii=False, indent=4), encoding="utf-8")
 
-        result_text = f"✅ <b>{module}</b> → <code>{key}</code> = <code>{parsed!r}</code>"
+        result_text = f"<b>{module}</b> -> <code>{key}</code> = <code>{parsed!r}</code>"
         try:
             parsed_text, entities = await self.client._parse_message_text(result_text, "html")
         except Exception:
@@ -604,14 +631,14 @@ class BotClient:
             InputBotInlineResult(
                 id=f"cfgok_{secrets.token_hex(4)}",
                 type="article",
-                title="✅ сохранено",
+                title="saved",
                 description=f"{module}.{key} = {parsed!r}",
                 send_message=InputBotInlineMessageText(**kwargs),
             )
         ], cache_time=0, gallery=False)
 
     @staticmethod
-    def _parse_cfg_value(s: str):
+    def _parse_cfg_value(s):
         low = s.lower()
         if low in ("true", "yes", "on"):
             return True
@@ -635,13 +662,12 @@ class BotClient:
                 pass
         return s
 
-    async def _handle_callback(self, event) -> None:
-        """Callback от inline-меню или owner-кнопок."""
+    async def _handle_callback(self, event):
         data = event.data
         if isinstance(data, bytes):
             data = data.decode("utf-8", errors="replace")
 
-        log.debug(f"🤖 Bot callback: data={data!r}")
+        log.debug(f"Bot callback: data={data!r}")
 
         sender = getattr(event, "sender_id", None)
         if sender is None:
@@ -669,9 +695,9 @@ class BotClient:
                     allowed = False
 
         if not allowed:
-            log.warning(f"🤖 Bot callback: отказано sender={sender} (owner={owner})")
+            log.warning(f"Bot callback denied sender={sender} owner={owner}")
             try:
-                await event.answer("🚫 Нет доступа", alert=True)
+                await event.answer("no access", alert=True)
             except Exception:
                 pass
             return
@@ -691,9 +717,9 @@ class BotClient:
             admin_id = self.kernel.context.admin_id
 
         if admin_id is None or sender_id != admin_id:
-            log.warning(f"🤖 Bot callback: отказано sender={sender_id} (owner={admin_id})")
+            log.warning(f"Bot callback denied sender={sender_id} owner={admin_id}")
             try:
-                await event.answer("🚫 Нет доступа", alert=True)
+                await event.answer("no access", alert=True)
             except Exception:
                 pass
             return
@@ -703,8 +729,7 @@ class BotClient:
         except Exception:
             pass
 
-    async def _handle_start(self, event) -> None:
-        """Обработчик /start бота."""
+    async def _handle_start(self, event):
         if self.kernel is not None and hasattr(self.kernel, "inline"):
             handler = getattr(self.kernel.inline, "_start_handler", None)
             if handler is not None:
@@ -715,6 +740,6 @@ class BotClient:
                     log.exception(f"_handle_start error: {e}")
 
         await event.reply(
-            "👋 Я inline-бот TETKO.\n"
-            "Используй .dlm через юзербот, чтобы получить меню в любом чате."
+            "TETKO inline bot.\n"
+            "Use .dlm via userbot to get menu in any chat."
         )

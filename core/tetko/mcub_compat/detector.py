@@ -61,25 +61,26 @@ def _strip_strings_and_comments(code: str) -> str:
 def is_mcub_module(code: str) -> bool:
     """True, если исходник похож на MCUB-модуль.
 
-    Проверяем по маркерам с приоритетом:
-      1. Явные MCUB-импорты → точно mcub.
-      2. Явные tetko-маркеры → точно не mcub.
-      3. Иначе — False (пусть грузится как tetko).
+    Приоритет:
+      1. Явные tetko-маркеры (from core.tetko) → точно НЕ mcub.
+      2. Явные mcub-импорты → точно mcub.
+      3. ModuleBase в class() → mcub.
+      4. Иначе False.
     """
     if not code:
         return False
 
     cleaned = _strip_strings_and_comments(code)
 
-    # 1. Точные mcub-импорты — побеждают всегда
-    for marker in _MCUB_MARKERS:
-        if marker in cleaned:
-            return True
-
-    # 2. Явные tetko-маркеры — сразу False
+    # 1. Явные tetko-маркеры — высший приоритет
     for marker in _TETKO_MARKERS:
         if marker in cleaned:
             return False
+
+    # 2. Точные mcub-импорты
+    for marker in _MCUB_MARKERS:
+        if marker in cleaned:
+            return True
 
     if re.search(r"\bclass\s+\w+\s*\(\s*ModuleBase\s*\)", cleaned):
         return True
