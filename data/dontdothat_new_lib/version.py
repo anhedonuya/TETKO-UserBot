@@ -1,2 +1,0 @@
-PLUGIN_API = "1.5.0"
-CONFIG_VERSION = "1.5.0"

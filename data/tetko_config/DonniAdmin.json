@@ -1,6 +1,0 @@
-{
-    "max_warns": 3,
-    "warn_ban_duration": 0,
-    "notify_on_action": true,
-    "delete_command": true
-}

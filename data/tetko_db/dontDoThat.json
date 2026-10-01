@@ -1,8 +1,0 @@
-{
-  "sites": {
-    "doxbin": {
-      "url": "https://doxbin.com/?search=title&query={query}",
-      "host": "doxbin.com"
-    }
-  }
-}
