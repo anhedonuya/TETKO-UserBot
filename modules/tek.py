@@ -568,9 +568,8 @@ class Tek(Module):
 
     @command(name="cfg", aliases=["mcfg", "moduleconfig"], description="Конфиги модулей")
     async def cmd_cfg(self, event, args):
-        self.log.info(f"[cfg] вызвана, args={args!r}")
         if not args:
-            await self._cfg_show_list(event)
+            await self._cfg_show_menu(event)
             return
 
         sub = args[0].lower()
