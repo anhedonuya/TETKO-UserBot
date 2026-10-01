@@ -130,7 +130,6 @@ class ModuleLoader:
         except Exception as e:
             log.error(f"Ошибка в on_load модуля {mod_instance.name}: {e}")
 
-        log.info(f"[OK] Модуль {mod_instance.name} загружен")
         return mod_instance
 
 
@@ -160,22 +159,38 @@ class ModuleLoader:
         return True
 
     async def load_all(self) -> int:
-        """Загрузить модули из modules/ (системные) и modules_custom/ (пользовательские)."""
+        try:
+            from core.tetko import ui
+        except Exception:
+            ui = None
         count = 0
+        if ui is not None:
+            ui.collect("collecting system modules")
         for p in sorted(self.modules_dir.glob("*.py")):
             if p.name.startswith("_"):
                 continue
             try:
                 await self.load_module_from_file(p)
+                if ui is not None:
+                    ui.item("modules/" + p.name)
                 count += 1
             except Exception as e:
+                if ui is not None:
+                    ui.item("modules/" + p.name + ": " + str(e), "err")
                 log.error(f"Ошибка загрузки {p.name}: {e}")
+        if ui is not None:
+            ui.collect("collecting custom modules")
         for p in sorted(self.custom_dir.glob("*.py")):
             if p.name.startswith("_"):
                 continue
             try:
                 await self.load_module_from_file(p)
+                if ui is not None:
+                    ui.item("modules_custom/" + p.name)
                 count += 1
             except Exception as e:
+                if ui is not None:
+                    ui.item("modules_custom/" + p.name + ": " + str(e), "err")
                 log.error(f"Ошибка загрузки custom/{p.name}: {e}")
         return count
+

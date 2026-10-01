@@ -1,80 +1,22 @@
-# ─── Runtime данные TETKO ───
-data/
-*.session
-*.session-journal
-*.db
-*.db-journal
-*.log
-logs/
-
-# ─── Конфиги с секретами ───
 config.json
-config.local.json
-.env
-.env.local
-
-# ─── Python ───
+main.log
+*.log
+data/
+modules_custom/
 __pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-build/
-dist/
-*.egg-info/
-.installed.cfg
-*.egg
-
-# ─── Virtual env ───
-venv/
-env/
-.venv/
-ENV/
-
-# ─── IDE ───
-.vscode/
-.idea/
-*.swp
-*.swo
-*.sublime-*
-
-# ─── OS ───
-.DS_Store
-Thumbs.db
-desktop.ini
-
-# ─── Прочее ───
-*.bak
-*.backup
-*.mybackup
-main.py.mybackup
-*.tmp
-.cache/
-.pytest_cache/
-
-# ─── Sessions (никогда не пушить!) ───
-sessions/
-session/
+*.pyc
+*.pyo
+*.pyd
 *.session
 *.session-journal
-*.token_marker
-
-# ─── TETKO: дополнительные защиты ───
-data/tetko_db/
-token.txt
-secrets.json
-tetko.session
-bump.sh
-
-# ─── Старые модули ───
-modules_legacy/
-
-# ─── Пользовательские модули (не публикуются) ───
-modules_custom/
-modules_custom/**/*.py
-modules_custom/**/*.bak
-*.logcd
-*.old
-*.log
-config.json.*
-TETKO-UserBot-main/
+*.session-wal
+.env
+.DS_Store
+venv/
+.venv/
+.idea/
+.vscode/
+_bk_*
+*.bak
+*.bak.*
+_backup_*

@@ -150,19 +150,52 @@ class Kernel:
         self.client.context = self.context
 
     async def start(self) -> None:
-        """Запуск ядра, загрузка модулей и старт событий."""
-        log.info("🚀 Запуск ядра TETKO...")
-        # await self.setup_mcub_inline()
+        t0 = time.time()
+        try:
+            from core.tetko import ui
+        except Exception:
+            ui = None
+
+        def _log(msg, status="ok"):
+            if ui is not None:
+                if status == "ok":
+                    ui.item(msg)
+                else:
+                    ui.item(msg, status)
+
+        if ui is not None:
+            ui.collect("preparing kernel")
 
         try:
             me = await self.client.get_me()
             self.context.user_premium = bool(getattr(me, "premium", False))
-            log.info(f"👑 Premium: {self.context.user_premium}")
+            try:
+                _uname = getattr(me, "username", None) or getattr(me, "first_name", None)
+                if _uname:
+                    self.context.user_username = str(_uname)
+            except Exception:
+                pass
+            try:
+                from core.tetko import shell as _sh
+                _sh._KERNEL = self
+            except Exception:
+                pass
+            self._me = me
+            _log("owner: " + str(getattr(me, "id", "?")))
+            _log("premium: " + str(self.context.user_premium).lower())
         except Exception as e:
-            log.warning(f"Не удалось проверить premium: {e}")
+            _log("get_me failed: " + str(e), "warn")
 
-        count = await self.loader.load_all()
-        log.info(f"📦 Успешно загружено модулей: {count}")
+        await self.loader.load_all()
+
+        if ui is not None:
+            ui.collect("installing")
+        _log(
+            str(self.registry.modules_count) + " modules, "
+            + str(self.registry.commands_count) + " commands, "
+            + str(len(self.registry.list_watchers())) + " watchers, "
+            + str(len(self.registry.list_loops())) + " loops"
+        )
 
         @self.client.on(events.NewMessage(outgoing=True))
         async def message_handler(event):
@@ -178,7 +211,9 @@ class Kernel:
 
         self._start_loops()
 
-        log.info("✅ Ядро TETKO полностью инициализировано и готово!")
+        if ui is not None:
+            ui.done("successfully loaded in " + ("%.2f" % (time.time() - t0)) + "s.")
+
 
     def _start_loops(self) -> None:
         """Запуск фоновых периодических функций модулей."""
@@ -198,7 +233,7 @@ class Kernel:
 
     async def stop(self) -> None:
         """Остановка ядра и корректная выгрузка модулей."""
-        log.info("🛑 Остановка ядра TETKO...")
+        log.info("Остановка ядра TETKO...")
 
         for task in self._loop_tasks:
             task.cancel()
@@ -209,7 +244,7 @@ class Kernel:
         for mod_name in list(self.registry.list_modules().keys()):
             await self.loader.unload_module(mod_name)
 
-        log.info("👋 Ядро TETKO остановлено.")
+        log.info("Ядро TETKO остановлено.")
 
     async def log_to_chat(self, text: str):
         """Отправить сообщение в log_chat_id (если задан)."""

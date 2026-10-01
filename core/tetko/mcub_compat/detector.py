@@ -71,15 +71,13 @@ def is_mcub_module(code: str) -> bool:
 
     cleaned = _strip_strings_and_comments(code)
 
-    # 1. Точные mcub-импорты — побеждают всегда
-    for marker in _MCUB_MARKERS:
-        if marker in cleaned:
-            return True
-
-    # 2. Явные tetko-маркеры — сразу False
     for marker in _TETKO_MARKERS:
         if marker in cleaned:
             return False
+
+    for marker in _MCUB_MARKERS:
+        if marker in cleaned:
+            return True
 
     if re.search(r"\bclass\s+\w+\s*\(\s*ModuleBase\s*\)", cleaned):
         return True
