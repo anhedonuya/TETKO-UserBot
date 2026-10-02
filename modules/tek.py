@@ -962,7 +962,7 @@ class Tek(Module):
         return t
 
 
-    async def _cfg_show_module(self, event_or_cb, module: str, is_cb: bool = False):
+    async def _cfg_show_module(self, event_or_cb, module: str, is_cb: bool = False, page: int = 0):
         data = self._cfg_read(module)
         if data is None:
             txt = self._t("cfg_not_found", module=self._esc(module))
@@ -977,35 +977,35 @@ class Tek(Module):
 
         schema = self._get_module_schema(module)
 
-        def _fmt_val(v):
-            if isinstance(v, bool):
-                return "true" if v else "false"
-            if v is None:
-                return "null"
-            if isinstance(v, str):
-                return v if len(v) <= 120 else v[:120] + "..."
-            if isinstance(v, (dict, list)):
-                try:
-                    import json as _json
-                    js = _json.dumps(v, ensure_ascii=False, separators=(", ", ": "))
-                    if len(js) > 120:
-                        js = js[:120] + "..."
-                    return js
-                except Exception:
-                    pass
-            txt = str(v)
-            return txt if len(txt) <= 120 else txt[:120] + "..."
+        keys_all = list(data.items())
+        per_page = int(self.cfg.get("cfg_page_size", 6)) if hasattr(self, "cfg") else 6
+        if per_page <= 0:
+            per_page = 6
+        per_page = min(per_page, 24)
+
+        total_pages = max(1, (len(keys_all) + per_page - 1) // per_page)
+        page = max(0, min(page, total_pages - 1))
+
+        if not hasattr(self.kernel, "_cfg_current_page"):
+            self.kernel._cfg_current_page = {}
+        self.kernel._cfg_current_page[module] = page
+
+        start_i = page * per_page
+        end_i = start_i + per_page
+        keys_page = keys_all[start_i:end_i]
+
+        lines = []
+        for k, v in keys_page:
+            t = self._type_of(v)
+            emoji = self._TYPE_EMOJI.get(t, "\u2753")
+            lines.append(f"{emoji} <b>{self._esc(k)}</b> <i>({t})</i>")
+        if not lines:
+            lines.append("<i>" + self._t("cfg_no_keys") + "</i>")
 
         title = self._t("cfg_module_title", name=self._esc(module))
-        lines = []
-        if data:
-            for k, v in data.items():
-                t = self._type_of(v)
-                emoji = self._TYPE_EMOJI.get(t, "\u2753")
-                val_str = self._esc(_fmt_val(v))
-                lines.append(f"{emoji} <b>{self._esc(k)}</b> <i>({t})</i>")
-        else:
-            lines.append("<i>" + self._t("cfg_no_keys") + "</i>")
+        page_info = ""
+        if total_pages > 1:
+            page_info = " <i>[%d/%d]</i>" % (page + 1, total_pages)
 
         _p = getattr(self.kernel, "prefix", ".") or "."
         hint_html = (
@@ -1014,14 +1014,14 @@ class Tek(Module):
         )
 
         text = (
-            title + "\n\n"
+            title + page_info + "\n\n"
             + "<blockquote expandable>" + "\n".join(lines) + "</blockquote>\n"
             + hint_html
         )
 
         rows = []
         chunk = []
-        for k, v in list(data.items())[:20]:
+        for k, v in keys_page:
             t = self._type_of(v)
             emoji = self._TYPE_EMOJI.get(t, "\u2753")
             async def on_edit(cb, m=module, key=k):
@@ -1035,6 +1035,27 @@ class Tek(Module):
                 chunk = []
         if chunk:
             rows.append(chunk)
+
+        if total_pages > 1:
+            nav = []
+            if page > 0:
+                async def on_prev(cb, m=module, p=page - 1):
+                    await self._cfg_show_module(cb, m, is_cb=True, page=p)
+                nav.append(self.kernel.inline.make_button("<", on_prev, ttl=600))
+
+            async def on_noop(cb):
+                try:
+                    await cb.answer()
+                except Exception:
+                    pass
+            nav.append(self.kernel.inline.make_button(
+                "%d/%d" % (page + 1, total_pages), on_noop, ttl=600))
+
+            if page < total_pages - 1:
+                async def on_next(cb, m=module, p=page + 1):
+                    await self._cfg_show_module(cb, m, is_cb=True, page=p)
+                nav.append(self.kernel.inline.make_button(">", on_next, ttl=600))
+            rows.append(nav)
 
         async def on_back(cb):
             _k = self._cfg_kind(module)
@@ -1161,7 +1182,8 @@ class Tek(Module):
         rows = []
 
         async def on_back(c, m=module):
-            await self._cfg_show_module(c, m, is_cb=True)
+            _pg = getattr(self.kernel, "_cfg_current_page", {}).get(m, 0)
+            await self._cfg_show_module(c, m, is_cb=True, page=_pg)
 
         async def on_close(c):
             await self._close_cfg(c)
