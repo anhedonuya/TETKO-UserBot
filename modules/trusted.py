@@ -556,9 +556,11 @@ class Trusted(Module):
                     style = "danger"
 
                 async def on_toggle(cb, u=uid, c=cat):
-                    sender = cb.sender_id
-                    if not (self._is_owner(sender) or await self._is_sgroup_member(sender)):
-                        await cb.answer("no access", alert=False)
+                    if not self._is_owner(cb.sender_id):
+                        try:
+                            await cb.answer("🚫 only owner", alert=True)
+                        except Exception:
+                            pass
                         return
                     cur = await self._get_access(u)
                     cur[c] = not cur.get(c, False)
@@ -578,6 +580,10 @@ class Trusted(Module):
 
         async def on_allow_all(cb, u=uid):
             if not self._is_owner(cb.sender_id):
+                try:
+                    await cb.answer("🚫 only owner", alert=True)
+                except Exception:
+                    pass
                 return
             full = {k: True for k in ACCESS_CATEGORIES}
             await self._set_access(u, full)
@@ -586,6 +592,10 @@ class Trusted(Module):
 
         async def on_deny_all(cb, u=uid):
             if not self._is_owner(cb.sender_id):
+                try:
+                    await cb.answer("🚫 only owner", alert=True)
+                except Exception:
+                    pass
                 return
             none = {k: False for k in ACCESS_CATEGORIES}
             await self._set_access(u, none)
@@ -665,7 +675,11 @@ class Trusted(Module):
                 cat = self._category_of(c)
                 allowed = access.get(cat, False) if cat else False
             async def on_toggle(cb2, u=uid, cc=c, a=allowed, p=page):
-                if not (self._is_owner(cb2.sender_id) or await self._is_sgroup_member(cb2.sender_id)):
+                if not self._is_owner(cb2.sender_id):
+                    try:
+                        await cb2.answer("🚫 only owner", alert=True)
+                    except Exception:
+                        pass
                     return
                 d = await self._get_cmd_access(u)
                 d[cc] = not a
@@ -746,6 +760,12 @@ class Trusted(Module):
                 label = label[:24]
 
             async def on_toggle_mod(cb2, u=uid, m=mod, p=page):
+                if not self._is_owner(cb2.sender_id):
+                    try:
+                        await cb2.answer("🚫 only owner", alert=True)
+                    except Exception:
+                        pass
+                    return
                 cur = await self._get_custom_access(u)
                 cur[m] = not cur.get(m, False)
                 await self._set_custom_access(u, cur)
