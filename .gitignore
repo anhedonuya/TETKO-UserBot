@@ -71,3 +71,7 @@ TETKO-UserBot-main/
 
 data/adder_repo/
 data/dontdothat_repo/
+
+data/
+modules_custom/
+bump.sh

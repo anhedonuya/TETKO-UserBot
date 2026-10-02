@@ -19,7 +19,7 @@ except Exception:
 
 logging.getLogger("telethon").setLevel(logging.WARNING)
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.WARNING,
     format="%(asctime)s - [%(levelname)s] - %(name)s: %(message)s",
     datefmt="%H:%M:%S",
 )
