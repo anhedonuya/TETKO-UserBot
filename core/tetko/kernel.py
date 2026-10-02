@@ -187,6 +187,9 @@ class Kernel:
         return len(_seen)
 
 
+    def get_prefix_for_sender(self, uid):
+        return self.prefix
+
     async def start(self) -> None:
         """Запуск ядра, загрузка модулей и старт событий."""
         t0 = time.time()

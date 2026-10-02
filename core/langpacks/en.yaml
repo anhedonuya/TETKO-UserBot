@@ -1,212 +1,289 @@
 lang: en
-
 _common:
   __global__: 1
-  ok: "ok"
-  err: "error"
-  no_access: "no access"
-  owner_only: "owner only"
-  running: "running"
-  saved: "saved"
-  usage: "usage"
-  hint: "hint"
-  cancelled: "cancelled"
-  not_found: "not found"
-  loading: "loading"
-  processing: "processing"
-  done: "done"
-  updated: "updated"
-  back: "back"
-  close: "close"
-  cancel: "cancel"
-  confirm: "confirm"
-  yes: "yes"
-  no: "no"
-  add: "add"
-  remove: "remove"
-  list: "list"
-  set: "set"
-  get: "get"
-  delete: "delete"
-  clear: "clear"
-  help: "help"
-  page: "page"
-  next: "next"
-  prev: "prev"
-  field: "field"
-  value: "value"
-  file: "file"
-  size: "size"
-  time: "time"
-
+  ok: ok
+  err: error
+  no_access: no access
+  owner_only: owner only
+  running: running
+  saved: saved
+  usage: usage
+  hint: hint
+  cancelled: cancelled
+  not_found: not found
+  loading: loading
+  processing: processing
+  done: done
+  updated: updated
+  back: back
+  close: close
+  cancel: cancel
+  confirm: confirm
+  true: 'yes'
+  false: 'no'
+  add: add
+  remove: remove
+  list: list
+  set: set
+  get: get
+  delete: delete
+  clear: clear
+  help: help
+  page: page
+  next: next
+  prev: prev
+  field: field
+  value: value
+  file: file
+  size: size
+  time: time
 wizard:
-  greet: "hello tetko user, i see u are new here"
-  ask_api_id: "so basically give me ur api id"
-  ask_api_hash: "next will be api hash"
-  ask_phone: "and the last one phone num"
-  saved: "config saved -> {path}"
-  hint_2fa: "login code and 2FA will be requested by Telethon on first connect"
-  err_int: "positive integer required"
-  err_hash: "api_hash looks too short - check my.telegram.org"
-  connecting: "connecting to telegram"
-  stopped: "tetko stopped"
-
+  greet: hello tetko user, i see u are new here
+  ask_api_id: so basically give me ur api id
+  ask_api_hash: next will be api hash
+  ask_phone: and the last one phone num
+  saved: config saved -> {path}
+  hint_2fa: login code and 2FA will be requested by Telethon on first connect
+  err_int: positive integer required
+  err_hash: api_hash looks too short - check my.telegram.org
+  connecting: connecting to telegram
+  stopped: tetko stopped
 console:
-  header: "[console] commands: {cmds}"
-  restarting: "restarting tetko..."
-  stopping: "stopping tetko..."
-  unknown: "unknown: {cmd}"
-
+  header: '[console] commands: {cmds}'
+  restarting: restarting tetko...
+  stopping: stopping tetko...
+  unknown: 'unknown: {cmd}'
 kernel:
-  loading_first: "tetko loading in first time.., bugs? t.me/tetkosupport"
-  loading_normal: "loading ur tetko // t.me/tetkosupport"
-  preparing: "preparing kernel"
-  owner: "owner"
-  premium: "premium"
-  get_me_failed: "failed to get profile"
-  collecting_sys: "collecting system modules"
-  collecting_custom: "collecting custom modules"
-  installing: "installing"
-  loaded_in: "successfully loaded in {sec}s."
-  stats: "{mods} modules, {cmds} commands, {watchers} watchers, {loops} loops"
-
+  loading_first: tetko loading in first time.., bugs? t.me/tetkosupport
+  loading_normal: loading ur tetko // t.me/tetkosupport
+  preparing: preparing kernel
+  owner: owner
+  premium: premium
+  get_me_failed: failed to get profile
+  collecting_sys: collecting system modules
+  collecting_custom: collecting custom modules
+  installing: installing
+  loaded_in: successfully loaded in {sec}s.
+  stats: '{mods} modules, {cmds} commands, {watchers} watchers, {loops} loops'
 shell:
-  edit: "editing"
-  current: "current"
-  hint_value: "tap edit, type new value, send"
-  session_expired: "session expired"
-  empty_value: "empty value"
-
+  edit: editing
+  current: current
+  hint_value: tap edit, type new value, send
+  session_expired: session expired
+  empty_value: empty value
 dlm:
-  description: "Dynamic Loader of Modules"
-  cmd_dlm: "Module manager"
-  cmd_check: "Check module updates"
-  catalog_empty: "catalog is empty"
-  checking: "checking catalog..."
-  no_updates: "no new modules"
-  check_result: "check result"
-  updates_header: "updates"
-  new_header: "new"
-  updated_modules: "updated modules"
-  new_modules: "new modules in catalog"
-  install_via_dlm: "install via dlm"
-  refreshing: "refreshing..."
-
+  description: Dynamic Loader of Modules
+  cmd_dlm: Module manager
+  cmd_check: Check module updates
+  catalog_empty: catalog is empty
+  checking: checking catalog...
+  no_updates: no new modules
+  check_result: check result
+  updates_header: updates
+  new_header: new
+  updated_modules: updated modules
+  new_modules: new modules in catalog
+  install_via_dlm: install via dlm
+  refreshing: refreshing...
 loader:
-  description: "Dynamic module loader"
-  cmd_load: "Load module from file or URL"
-  cmd_unload: "Unload and remove module"
-  cmd_unlm: "Send module file"
-  cmd_um: "Remove module"
-  cmd_restart: "Restart tetko"
-  downloading: "downloading module file..."
-  download_url: "downloading from url..."
-  installing_deps: "installing dependencies"
-  connect_module: "connecting module {name}"
-  module_info: "Module {name}\nDescription: {desc}\nAuthor: {author}\nCommands: {cmds}"
-  saved_restart: "file {path} saved, restart bot"
-  init_error: "init error in module {name}"
-  module_not_found: "module {name} not found"
-  list_empty: "no installed modules"
-  list_header: "installed modules"
+  description: Dynamic module loader
+  cmd_load: Load module from file or URL
+  cmd_unload: Unload and remove module
+  cmd_unlm: Send module file
+  cmd_um: Remove module
+  cmd_restart: Restart tetko
+  downloading: downloading module file...
+  download_url: downloading from url...
+  installing_deps: installing dependencies
+  connect_module: connecting module {name}
+  module_info: 'Module {name}
 
+    Description: {desc}
+
+    Author: {author}
+
+    Commands: {cmds}'
+  saved_restart: file {path} saved, restart bot
+  init_error: init error in module {name}
+  module_not_found: module {name} not found
+  list_empty: no installed modules
+  list_header: installed modules
 ping:
-  description: "Latency and status check"
-  cmd_ping: "Measure bot latency"
-  cmd_info: "Tetko system info"
-  pong: "hello!! your tetko WORKS!!!\nping is fine {ms}"
-  info_style: "Module style"
-  info_authors: "Authors"
-  info_engine: "Engine"
+  description: Latency and status check
+  cmd_ping: Measure bot latency
+  cmd_info: Tetko system info
+  pong: 'hello!! your tetko WORKS!!!
 
+    ping is fine {ms}'
+  info_style: Module style
+  info_authors: Authors
+  info_engine: Engine
 settings:
-  description: "Tetko settings"
-  cmd_setlang: "Change bot language"
-  setlang_current: "current language: <code>{lang}</code>"
-  setlang_available: "available: {list}"
-  setlang_unknown: "unknown language: <code>{lang}</code>"
-  setlang_changed: "language changed to <code>{lang}</code>"
-
+  description: Tetko settings
+  cmd_setlang: Change bot language
+  setlang_current: 'current language: <code>{lang}</code>'
+  setlang_available: 'available: {list}'
+  setlang_unknown: 'unknown language: <code>{lang}</code>'
+  setlang_changed: language changed to <code>{lang}</code>
 tek:
-  description: "Modules, commands, hiding, info"
-  cmd_tek: "Modules and commands"
-  cmd_tekhide: "Hide/show module"
-  cmd_setprefix: "Change command prefix"
-  cmd_ftekcfg: "Force set config value"
-  cmd_tekcfg: "System state"
-  cmd_cfg: "Module configs"
-  help_title: "tetko"
-  title: "tetko"
-  modules_line: "modules: {sys} system, {user} user"
-  btn_sys: "System"
-  btn_user: "User"
-  no_cmds: "no commands"
-  module_not_found: "module {name} not found"
-  kind_system: "system"
-  kind_user: "user"
-  module_header: "{name} v{version} ({kind})"
-  module_desc: "Description: {desc}"
-  module_cmds: "Commands ({count}):"
-  module_author: "Author: {author}"
-  module_compat: "Compat: {compat}"
-  hide_title: "Hide modules"
-  prefix_current: "current prefix: <code>{prefix}</code>"
-  prefix_usage: "usage: <code>{prefix}setprefix &lt;new&gt;</code>"
-  prefix_empty: "prefix cannot be empty"
-  prefix_too_long: "prefix too long (max 3)"
-  prefix_space: "prefix cannot be space"
-  prefix_changed: "prefix changed from <code>{old}</code> to <code>{new}</code>"
-  cfg_no_modules: "no configs found"
-  cfg_title: "config: {name}"
-  cfg_back: "back"
-  cfg_close: "close"
-  cfg_btn_edit: "edit"
-  cfg_btn_reset: "reset"
-  cfg_btn_sys: "System"
-  cfg_btn_user: "User"
-  cfg_page: "page {page}/{total}"
-  cfg_no_keys: "no keys"
-  cfg_key_not_found: "key not found"
-  cfg_choose_section: "choose section"
-  cfg_modules_title_sys: "System configs"
-  cfg_modules_title_user: "User configs"
-  cfg_not_found: "config {module} not found"
-  cfg_hint: "Commands: <code>{prefix}ftekcfg set -f &lt;Module&gt; &lt;key&gt; &lt;value&gt;</code>"
-
-  cfg_module_title: "🔧 <b>Module: {name}</b>"
-  cfg_key_line: "  <code>{key}</code> = <code>{value}</code>"
-  cfg_edit_title: "✏️ <b>Editing:</b> <code>{module}.{key}</code>"
-  cfg_inline_hint: "💡 Type the new value in the input field above and send it."
-  cfg_hint_ftekcfg: "Commands: <code>{prefix}ftekcfg set -f &lt;Module&gt; &lt;key&gt; &lt;value&gt;</code>"
+  description: Modules, commands, hiding, info
+  cmd_tek: Modules and commands
+  cmd_tekhide: Hide/show module
+  cmd_setprefix: Change command prefix
+  cmd_ftekcfg: Force set config value
+  cmd_tekcfg: System state
+  cmd_cfg: Module configs
+  help_title: tetko
+  title: tetko
+  modules_line: 'modules: {sys} system, {user} user'
+  btn_sys: System
+  btn_user: User
+  no_cmds: no commands
+  module_not_found: module {name} not found
+  kind_system: system
+  kind_user: user
+  module_header: '{name} v{version} ({kind})'
+  module_desc: 'Description: {desc}'
+  module_cmds: 'Commands ({count}):'
+  module_author: 'Author: {author}'
+  module_compat: 'Compat: {compat}'
+  hide_title: Hide modules
+  prefix_current: 'current prefix: <code>{prefix}</code>'
+  prefix_usage: 'usage: <code>{prefix}setprefix &lt;new&gt;</code>'
+  prefix_empty: prefix cannot be empty
+  prefix_too_long: prefix too long (max 3)
+  prefix_space: prefix cannot be space
+  prefix_changed: prefix changed from <code>{old}</code> to <code>{new}</code>
+  cfg_no_modules: no configs found
+  cfg_title: 'config: {name}'
+  cfg_back: back
+  cfg_close: close
+  cfg_btn_edit: edit
+  cfg_btn_reset: reset
+  cfg_btn_sys: System
+  cfg_btn_user: User
+  cfg_page: page {page}/{total}
+  cfg_no_keys: no keys
+  cfg_key_not_found: key not found
+  cfg_choose_section: choose section
+  cfg_modules_title_sys: System configs
+  cfg_modules_title_user: User configs
+  cfg_not_found: config {module} not found
+  cfg_hint: 'Commands: <code>{prefix}ftekcfg set -f &lt;Module&gt; &lt;key&gt; &lt;value&gt;</code>'
+  cfg_module_title: '🔧 <b>Module: {name}</b>'
+  cfg_key_line: '  <code>{key}</code> = <code>{value}</code>'
+  cfg_edit_title: ✏️ <b>Editing:</b> <code>{module}.{key}</code>
+  cfg_inline_hint: 💡 Type the new value in the input field above and send it.
+  cfg_hint_ftekcfg: 'Commands: <code>{prefix}ftekcfg set -f &lt;Module&gt; &lt;key&gt; &lt;value&gt;</code>'
 terminal:
-  description: "Execute shell commands (owner only)"
-  cmd_terminal: "Execute shell command"
-  usage: "usage: <code>{prefix}t &lt;command&gt;</code>"
-  example: "example: <code>{prefix}t ls -la</code>"
-  blocked: "command blocked"
-  matched: "matched forbidden pattern"
-  executing: "executing"
-  no_output: "(no output)"
-  timeout: "timeout ({sec}s)"
-  truncated: "truncated to {n} chars"
-
+  description: Execute shell commands (owner only)
+  cmd_terminal: Execute shell command
+  usage: 'usage: <code>{prefix}t &lt;command&gt;</code>'
+  example: 'example: <code>{prefix}t ls -la</code>'
+  blocked: command blocked
+  matched: matched forbidden pattern
+  executing: executing
+  no_output: (no output)
+  timeout: timeout ({sec}s)
+  truncated: truncated to {n} chars
 trusted:
-  description: "Trusted users"
-  not_owner: "owner only"
-  usage: "usage"
-  trust_already: "already trusted"
-  trust_added: "added to trusted"
-  trust_removed: "removed from trusted"
-  trust_not_in_list: "not in trusted list"
-  trustlist_empty: "list is empty"
-  trustlist_title: "trusted users"
+  description: Trusted users
+  not_owner: owner only
+  usage: usage
+  trust_already: already trusted
+  trust_added: added to trusted
+  trust_removed: removed from trusted
+  trust_not_in_list: not in trusted list
+  trustlist_empty: list is empty
+  trustlist_title: trusted users
+  btn_cmds: 📋 Commands
+  btn_inline_cmds: 🎯 Inline commands
+  btn_allow_all: ✅ Allow all
+  btn_deny_all: 🚫 Deny all
+  btn_close: 🗑 Close
+  btn_confirm_delete: 🗑 Delete
+  btn_cancel: ❌ Cancel
+  trustaccess_usage: 'Usage: .trustaccess <reply|@user|id>'
+  trustaccess_title: 🔐 <b>Access for {user}:</b>
+  trustaccess_footer: <i>Tap category to toggle</i>
+  access_allowed: allowed
+  access_denied: denied
+  access_allowed_group: allowed via group
+  nonick_usage: 'Usage: .nonickuser <reply|@user|id>'
+  nonick_toggled_on: 🔑 NoNick enabled for {name}
+  nonick_toggled_off: NoNick disabled for {name}
+  nonick_list_empty: NoNick list is empty
+  nonick_list_title: 🔑 <b>NoNick users:</b>
+  timed_trusted_empty: No temporary trusted
+  timed_trusted_title: ⏳ <b>Temporary trusted:</b>
+  trust_expiring: ' — {time} left'
+  trust_expired: '⏰ Trust expired: {user}'
+  percmd_title: 📋 <b>Commands for {user}:</b>
+  percmd_back: ← Back
+  inlinecmd_title: 🎯 <b>Inline commands for {user}:</b>
+  inlinecmd_empty: No inline commands
+  trustcmd_usage: 'Usage: .trustcmd <reply|@user|id> [+|-] <command> | list'
+  trustcmd_list_title: 📋 <b>Per-command access for {user}:</b>
+  trustcmd_list_empty: No per-command access
+  trustcmd_not_found: 'Command not found: {cmd}'
+  trustcmd_added: ✅ Allowed <code>{cmd}</code> for {user}
+  trustcmd_removed: 🚫 Denied <code>{cmd}</code> for {user}
+  inlinesec_usage: 'Usage: .inlinesec <reply|@user|id> [command]'
+  inlinesec_not_found: 'Inline command not found: {cmd}'
+  inlinesec_allowed: ✅ Allowed <code>{cmd}</code> for {user}
+  inlinesec_denied: 🚫 Denied <code>{cmd}</code> for {user}
+  sgroup_usage: 'Usage: .sgroup create|delete|add|remove|list|access|info'
+  sgroup_already_exists: 'Group already exists: {name}'
+  sgroup_created: '✅ Group created: {name}'
+  sgroup_not_found: 'Group not found: {name}'
+  sgroup_deleted: '🗑 Group deleted: {name}'
+  sgroup_user_in_group: User already in group
+  sgroup_user_added: ✅ {user} added to {group}
+  sgroup_user_not_in_group: User not in group
+  sgroup_user_removed: 🗑 {user} removed from {group}
+  sgroup_list_empty: No groups
+  sgroup_list_title: 📋 <b>Access groups:</b>
+  sgroup_menu_title: '🔐 <b>Group: {name}</b>'
+  sgroup_confirm_delete: 🗑 Delete group {name}?
+  sgroup_btn_access: 🔐 Access
+  sgroup_btn_delete: 🗑 Delete
+  sgroup_info_users_empty: none
+  sgroup_info_access_empty: none
+  ownerprefix_usage: 'Usage: .ownerprefix [reply|@user|id]'
+  ownerprefix_source_personal: personal
+  ownerprefix_source_fallback: fallback
+  ownerprefix_one: '👤 {user} (<code>{user_id}</code>): <code>{prefix}</code> — {source}'
+  ownerprefix_list_title: 👑 <b>Owner prefixes:</b>
+  ownerprefix_list_item: '• {user} (<code>{user_id}</code>): <code>{prefix}</code> — {source}'
+  watcher_usage: 'Usage: .watcher <module> <watcher>'
+  watcher_not_found: 'Watcher not found: {module}.{watcher}'
+  watcher_enabled: ✅ {module}.{watcher} enabled
+  watcher_disabled: 🚫 {module}.{watcher} disabled
+  watchers_empty: No watchers
+  watchers_title: 👁 <b>Watchers:</b>
+  watchers_debug_title: 👁 <b>Watchers debug:</b>
+  watchers_debug_empty: Not found
+  trusted_error: '❌ Error: {error}'
+  trusted_error_full: '❌ Error: {error}
 
+    <pre>{full_error}</pre>'
+  access_title: 🔐 <b>Access</b> for <code>{user}</code>
+  access_via_group: via group
+  access_footer: 💡 Tap category to toggle
+  btn_percmd: 📋 Commands
+  btn_back: ← Back
+  menu_closed: 🗑 Menu closed
+  no_access_cmd: 🚫 No access to command
+  btn_custom: 🧩 Custom
+  custom_title: 🧩 <b>Custom modules</b> for <code>{user}</code>
+  custom_footer: 💡 Tap module to toggle
+  custom_empty: 📭 No custom modules
 updates:
-  description: "Auto-update and restart of tetko"
-  cmd_update: "Update tetko from git"
-  updating: "wait a sec, checking updates!!"
-  already_uptodate: "why???? you have the latest version!!!"
-  pulled: "update successful!"
-  restarting: "restarting..."
-  reloaded: "your auntie was successfully reloaded!!"
-  failed: "git pull failed"
+  description: Auto-update and restart of tetko
+  cmd_update: Update tetko from git
+  updating: wait a sec, checking updates!!
+  already_uptodate: why???? you have the latest version!!!
+  pulled: update successful!
+  restarting: restarting...
+  reloaded: your auntie was successfully reloaded!!
+  failed: git pull failed

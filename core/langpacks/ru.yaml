@@ -1,212 +1,289 @@
 lang: ru
-
 _common:
   __global__: 1
-  ok: "ок"
-  err: "ошибка"
-  no_access: "нет доступа"
-  owner_only: "только владелец"
-  running: "выполняется"
-  saved: "сохранено"
-  usage: "использование"
-  hint: "подсказка"
-  cancelled: "отменено"
-  not_found: "не найдено"
-  loading: "загрузка"
-  processing: "обработка"
-  done: "готово"
-  updated: "обновлено"
-  back: "назад"
-  close: "закрыть"
-  cancel: "отмена"
-  confirm: "подтвердить"
-  yes: "да"
-  no: "нет"
-  add: "добавить"
-  remove: "удалить"
-  list: "список"
-  set: "установить"
-  get: "получить"
-  delete: "удалить"
-  clear: "очистить"
-  help: "помощь"
-  page: "страница"
-  next: "след"
-  prev: "пред"
-  field: "поле"
-  value: "значение"
-  file: "файл"
-  size: "размер"
-  time: "время"
-
+  ok: ок
+  err: ошибка
+  no_access: нет доступа
+  owner_only: только владелец
+  running: выполняется
+  saved: сохранено
+  usage: использование
+  hint: подсказка
+  cancelled: отменено
+  not_found: не найдено
+  loading: загрузка
+  processing: обработка
+  done: готово
+  updated: обновлено
+  back: назад
+  close: закрыть
+  cancel: отмена
+  confirm: подтвердить
+  true: да
+  false: нет
+  add: добавить
+  remove: удалить
+  list: список
+  set: установить
+  get: получить
+  delete: удалить
+  clear: очистить
+  help: помощь
+  page: страница
+  next: след
+  prev: пред
+  field: поле
+  value: значение
+  file: файл
+  size: размер
+  time: время
 wizard:
-  greet: "привет тетко юзер, вижу ты тут впервые"
-  ask_api_id: "давай свой api id"
-  ask_api_hash: "теперь api hash"
-  ask_phone: "и последнее — номер телефона"
-  saved: "конфиг сохранён -> {path}"
-  hint_2fa: "код входа и 2FA запросит Telethon при подключении"
-  err_int: "нужно положительное число"
-  err_hash: "api_hash слишком короткий — проверь my.telegram.org"
-  connecting: "подключаюсь к telegram"
-  stopped: "тетко остановлен"
-
+  greet: привет тетко юзер, вижу ты тут впервые
+  ask_api_id: давай свой api id
+  ask_api_hash: теперь api hash
+  ask_phone: и последнее — номер телефона
+  saved: конфиг сохранён -> {path}
+  hint_2fa: код входа и 2FA запросит Telethon при подключении
+  err_int: нужно положительное число
+  err_hash: api_hash слишком короткий — проверь my.telegram.org
+  connecting: подключаюсь к telegram
+  stopped: тетко остановлен
 console:
-  header: "[console] команды: {cmds}"
-  restarting: "перезапускаю тетко..."
-  stopping: "останавливаю тетко..."
-  unknown: "неизвестно: {cmd}"
-
+  header: '[console] команды: {cmds}'
+  restarting: перезапускаю тетко...
+  stopping: останавливаю тетко...
+  unknown: 'неизвестно: {cmd}'
 kernel:
-  loading_first: "тетко загружается впервые.., баги? t.me/tetkosupport"
-  loading_normal: "загружаю твой тетко // t.me/tetkosupport"
-  preparing: "готовлю ядро"
-  owner: "владелец"
-  premium: "премиум"
-  get_me_failed: "не удалось получить профиль"
-  collecting_sys: "собираю системные модули"
-  collecting_custom: "собираю пользовательские модули"
-  installing: "устанавливаю"
-  loaded_in: "успешно загружено за {sec}с."
-  stats: "{mods} модулей, {cmds} команд, {watchers} вотчеров, {loops} циклов"
-
+  loading_first: тетко загружается впервые.., баги? t.me/tetkosupport
+  loading_normal: загружаю твой тетко // t.me/tetkosupport
+  preparing: готовлю ядро
+  owner: владелец
+  premium: премиум
+  get_me_failed: не удалось получить профиль
+  collecting_sys: собираю системные модули
+  collecting_custom: собираю пользовательские модули
+  installing: устанавливаю
+  loaded_in: успешно загружено за {sec}с.
+  stats: '{mods} модулей, {cmds} команд, {watchers} вотчеров, {loops} циклов'
 shell:
-  edit: "редактирую"
-  current: "текущее"
-  hint_value: "нажми edit, введи новое значение, отправь"
-  session_expired: "сессия истекла"
-  empty_value: "пустое значение"
-
+  edit: редактирую
+  current: текущее
+  hint_value: нажми edit, введи новое значение, отправь
+  session_expired: сессия истекла
+  empty_value: пустое значение
 dlm:
-  description: "Динамический загрузчик модулей"
-  cmd_dlm: "Менеджер модулей"
-  cmd_check: "Проверить обновления модулей"
-  catalog_empty: "каталог модулей пуст"
-  checking: "проверяю каталог..."
-  no_updates: "новых модулей нет"
-  check_result: "результат проверки"
-  updates_header: "обновления"
-  new_header: "новые"
-  updated_modules: "обновлены модули"
-  new_modules: "новые модули в каталоге"
-  install_via_dlm: "установи через dlm"
-  refreshing: "обновляю..."
-
+  description: Динамический загрузчик модулей
+  cmd_dlm: Менеджер модулей
+  cmd_check: Проверить обновления модулей
+  catalog_empty: каталог модулей пуст
+  checking: проверяю каталог...
+  no_updates: новых модулей нет
+  check_result: результат проверки
+  updates_header: обновления
+  new_header: новые
+  updated_modules: обновлены модули
+  new_modules: новые модули в каталоге
+  install_via_dlm: установи через dlm
+  refreshing: обновляю...
 loader:
-  description: "Динамическая загрузка модулей"
-  cmd_load: "Загрузить модуль по файлу или ссылке"
-  cmd_unload: "Выгрузить и удалить модуль"
-  cmd_unlm: "Отправить файл модуля"
-  cmd_um: "Удалить модуль"
-  cmd_restart: "Перезапустить тетко"
-  downloading: "скачиваю файл модуля..."
-  download_url: "скачиваю по url..."
-  installing_deps: "устанавливаю зависимости"
-  connect_module: "подключаю модуль {name}"
-  module_info: "Модуль {name}\nОписание: {desc}\nАвтор: {author}\nКоманды: {cmds}"
-  saved_restart: "файл {path} сохранён, перезапусти бота"
-  init_error: "ошибка инициализации модуля {name}"
-  module_not_found: "модуль {name} не найден"
-  list_empty: "нет установленных модулей"
-  list_header: "установленные модули"
+  description: Динамическая загрузка модулей
+  cmd_load: Загрузить модуль по файлу или ссылке
+  cmd_unload: Выгрузить и удалить модуль
+  cmd_unlm: Отправить файл модуля
+  cmd_um: Удалить модуль
+  cmd_restart: Перезапустить тетко
+  downloading: скачиваю файл модуля...
+  download_url: скачиваю по url...
+  installing_deps: устанавливаю зависимости
+  connect_module: подключаю модуль {name}
+  module_info: 'Модуль {name}
 
+    Описание: {desc}
+
+    Автор: {author}
+
+    Команды: {cmds}'
+  saved_restart: файл {path} сохранён, перезапусти бота
+  init_error: ошибка инициализации модуля {name}
+  module_not_found: модуль {name} не найден
+  list_empty: нет установленных модулей
+  list_header: установленные модули
 ping:
-  description: "Проверка задержки и состояния тетко"
-  cmd_ping: "Измерить пинг бота"
-  cmd_info: "Информация о системе тетко"
-  pong: "пивет!! твоя тетко РАБОТАИТ!!!\nпо пингу все харашо {ms}"
-  info_style: "Стиль модулей"
-  info_authors: "Авторы"
-  info_engine: "Движок"
+  description: Проверка задержки и состояния тетко
+  cmd_ping: Измерить пинг бота
+  cmd_info: Информация о системе тетко
+  pong: 'пивет!! твоя тетко РАБОТАИТ!!!
 
+    по пингу все харашо {ms}'
+  info_style: Стиль модулей
+  info_authors: Авторы
+  info_engine: Движок
 settings:
-  description: "Настройки тетко"
-  cmd_setlang: "Сменить язык бота"
-  setlang_current: "текущий язык: <code>{lang}</code>"
-  setlang_available: "доступные: {list}"
-  setlang_unknown: "неизвестный язык: <code>{lang}</code>"
-  setlang_changed: "язык изменён на <code>{lang}</code>"
-
+  description: Настройки тетко
+  cmd_setlang: Сменить язык бота
+  setlang_current: 'текущий язык: <code>{lang}</code>'
+  setlang_available: 'доступные: {list}'
+  setlang_unknown: 'неизвестный язык: <code>{lang}</code>'
+  setlang_changed: язык изменён на <code>{lang}</code>
 tek:
-  description: "Модули, команды, скрытие, инфо"
-  cmd_tek: "Модули и команды"
-  cmd_tekhide: "Скрыть/показать модуль"
-  cmd_setprefix: "Сменить префикс команд"
-  cmd_ftekcfg: "Принудительно установить значение конфига"
-  cmd_tekcfg: "Состояние системы"
-  cmd_cfg: "Конфиги модулей"
-  help_title: "тетко"
-  title: "тетко"
-  modules_line: "модулей: {sys} системных, {user} пользовательских"
-  btn_sys: "Системные"
-  btn_user: "Пользовательские"
-  no_cmds: "нет команд"
-  module_not_found: "модуль {name} не найден"
-  kind_system: "системный"
-  kind_user: "пользовательский"
-  module_header: "{name} v{version} ({kind})"
-  module_desc: "Описание: {desc}"
-  module_cmds: "Команды ({count}):"
-  module_author: "Автор: {author}"
-  module_compat: "Совместимость: {compat}"
-  hide_title: "Скрыть модули"
-  prefix_current: "текущий префикс: <code>{prefix}</code>"
-  prefix_usage: "использование: <code>{prefix}setprefix &lt;новый&gt;</code>"
-  prefix_empty: "префикс не может быть пустым"
-  prefix_too_long: "префикс слишком длинный (макс 3)"
-  prefix_space: "префикс не может быть пробелом"
-  prefix_changed: "префикс изменён с <code>{old}</code> на <code>{new}</code>"
-  cfg_no_modules: "конфигов не найдено"
-  cfg_title: "конфиг: {name}"
-  cfg_back: "назад"
-  cfg_close: "закрыть"
-  cfg_btn_edit: "изменить"
-  cfg_btn_reset: "сброс"
-  cfg_btn_sys: "Системные"
-  cfg_btn_user: "Пользовательские"
-  cfg_page: "стр {page}/{total}"
-  cfg_no_keys: "нет ключей"
-  cfg_key_not_found: "ключ не найден"
-  cfg_choose_section: "выбери раздел"
-  cfg_modules_title_sys: "Системные конфиги"
-  cfg_modules_title_user: "Пользовательские конфиги"
-  cfg_not_found: "конфиг {module} не найден"
-  cfg_hint: "Команды: <code>{prefix}ftekcfg set -f &lt;Module&gt; &lt;key&gt; &lt;value&gt;</code>"
-
-  cfg_module_title: "🔧 <b>Модуль: {name}</b>"
-  cfg_key_line: "  <code>{key}</code> = <code>{value}</code>"
-  cfg_edit_title: "✏️ <b>Редактирование:</b> <code>{module}.{key}</code>"
-  cfg_inline_hint: "💡 Введи новое значение в поле ввода выше и отправь боту."
-  cfg_hint_ftekcfg: "Команды: <code>{prefix}ftekcfg set -f &lt;Module&gt; &lt;key&gt; &lt;value&gt;</code>"
+  description: Модули, команды, скрытие, инфо
+  cmd_tek: Модули и команды
+  cmd_tekhide: Скрыть/показать модуль
+  cmd_setprefix: Сменить префикс команд
+  cmd_ftekcfg: Принудительно установить значение конфига
+  cmd_tekcfg: Состояние системы
+  cmd_cfg: Конфиги модулей
+  help_title: тетко
+  title: тетко
+  modules_line: 'модулей: {sys} системных, {user} пользовательских'
+  btn_sys: Системные
+  btn_user: Пользовательские
+  no_cmds: нет команд
+  module_not_found: модуль {name} не найден
+  kind_system: системный
+  kind_user: пользовательский
+  module_header: '{name} v{version} ({kind})'
+  module_desc: 'Описание: {desc}'
+  module_cmds: 'Команды ({count}):'
+  module_author: 'Автор: {author}'
+  module_compat: 'Совместимость: {compat}'
+  hide_title: Скрыть модули
+  prefix_current: 'текущий префикс: <code>{prefix}</code>'
+  prefix_usage: 'использование: <code>{prefix}setprefix &lt;новый&gt;</code>'
+  prefix_empty: префикс не может быть пустым
+  prefix_too_long: префикс слишком длинный (макс 3)
+  prefix_space: префикс не может быть пробелом
+  prefix_changed: префикс изменён с <code>{old}</code> на <code>{new}</code>
+  cfg_no_modules: конфигов не найдено
+  cfg_title: 'конфиг: {name}'
+  cfg_back: назад
+  cfg_close: закрыть
+  cfg_btn_edit: изменить
+  cfg_btn_reset: сброс
+  cfg_btn_sys: Системные
+  cfg_btn_user: Пользовательские
+  cfg_page: стр {page}/{total}
+  cfg_no_keys: нет ключей
+  cfg_key_not_found: ключ не найден
+  cfg_choose_section: выбери раздел
+  cfg_modules_title_sys: Системные конфиги
+  cfg_modules_title_user: Пользовательские конфиги
+  cfg_not_found: конфиг {module} не найден
+  cfg_hint: 'Команды: <code>{prefix}ftekcfg set -f &lt;Module&gt; &lt;key&gt; &lt;value&gt;</code>'
+  cfg_module_title: '🔧 <b>Модуль: {name}</b>'
+  cfg_key_line: '  <code>{key}</code> = <code>{value}</code>'
+  cfg_edit_title: ✏️ <b>Редактирование:</b> <code>{module}.{key}</code>
+  cfg_inline_hint: 💡 Введи новое значение в поле ввода выше и отправь боту.
+  cfg_hint_ftekcfg: 'Команды: <code>{prefix}ftekcfg set -f &lt;Module&gt; &lt;key&gt; &lt;value&gt;</code>'
 terminal:
-  description: "Выполнение shell-команд (только владелец)"
-  cmd_terminal: "Выполнить shell-команду"
-  usage: "использование: <code>{prefix}t &lt;команда&gt;</code>"
-  example: "пример: <code>{prefix}t ls -la</code>"
-  blocked: "команда заблокирована"
-  matched: "совпал запрещённый паттерн"
-  executing: "выполняется"
-  no_output: "(нет вывода)"
-  timeout: "таймаут ({sec}с)"
-  truncated: "обрезано до {n} символов"
-
+  description: Выполнение shell-команд (только владелец)
+  cmd_terminal: Выполнить shell-команду
+  usage: 'использование: <code>{prefix}t &lt;команда&gt;</code>'
+  example: 'пример: <code>{prefix}t ls -la</code>'
+  blocked: команда заблокирована
+  matched: совпал запрещённый паттерн
+  executing: выполняется
+  no_output: (нет вывода)
+  timeout: таймаут ({sec}с)
+  truncated: обрезано до {n} символов
 trusted:
-  description: "Доверенные пользователи"
-  not_owner: "только владелец"
-  usage: "использование"
-  trust_already: "уже в списке"
-  trust_added: "добавлен в доверенные"
-  trust_removed: "удалён из доверенных"
-  trust_not_in_list: "не в списке доверенных"
-  trustlist_empty: "список пуст"
-  trustlist_title: "доверенные пользователи"
+  description: Доверенные пользователи
+  not_owner: только владелец
+  usage: использование
+  trust_already: уже в списке
+  trust_added: добавлен в доверенные
+  trust_removed: удалён из доверенных
+  trust_not_in_list: не в списке доверенных
+  trustlist_empty: список пуст
+  trustlist_title: доверенные пользователи
+  btn_cmds: 📋 Команды
+  btn_inline_cmds: 🎯 Инлайн-команды
+  btn_allow_all: ✅ Разрешить всё
+  btn_deny_all: 🚫 Запретить всё
+  btn_close: 🗑 Закрыть
+  btn_confirm_delete: 🗑 Удалить
+  btn_cancel: ❌ Отмена
+  trustaccess_usage: 'Использование: .trustaccess <reply|@user|id>'
+  trustaccess_title: 🔐 <b>Доступы для {user}:</b>
+  trustaccess_footer: <i>Тапни категорию чтобы переключить</i>
+  access_allowed: разрешено
+  access_denied: запрещено
+  access_allowed_group: разрешено через группу
+  nonick_usage: 'Использование: .nonickuser <reply|@user|id>'
+  nonick_toggled_on: 🔑 NoNick включён для {name}
+  nonick_toggled_off: NoNick выключен для {name}
+  nonick_list_empty: Список NoNick пуст
+  nonick_list_title: 🔑 <b>NoNick пользователи:</b>
+  timed_trusted_empty: Нет временных доверенных
+  timed_trusted_title: ⏳ <b>Временные доверенные:</b>
+  trust_expiring: ' — осталось {time}'
+  trust_expired: '⏰ Доверие истекло: {user}'
+  percmd_title: 📋 <b>Команды для {user}:</b>
+  percmd_back: ← Назад
+  inlinecmd_title: 🎯 <b>Инлайн-команды для {user}:</b>
+  inlinecmd_empty: Нет инлайн-команд
+  trustcmd_usage: 'Использование: .trustcmd <reply|@user|id> [+|-] <command> | list'
+  trustcmd_list_title: 📋 <b>Персональные доступы для {user}:</b>
+  trustcmd_list_empty: Нет персональных доступов
+  trustcmd_not_found: 'Команда не найдена: {cmd}'
+  trustcmd_added: ✅ Разрешено <code>{cmd}</code> для {user}
+  trustcmd_removed: 🚫 Запрещено <code>{cmd}</code> для {user}
+  inlinesec_usage: 'Использование: .inlinesec <reply|@user|id> [command]'
+  inlinesec_not_found: 'Инлайн-команда не найдена: {cmd}'
+  inlinesec_allowed: ✅ Разрешено <code>{cmd}</code> для {user}
+  inlinesec_denied: 🚫 Запрещено <code>{cmd}</code> для {user}
+  sgroup_usage: 'Использование: .sgroup create|delete|add|remove|list|access|info'
+  sgroup_already_exists: 'Группа уже существует: {name}'
+  sgroup_created: '✅ Создана группа: {name}'
+  sgroup_not_found: 'Группа не найдена: {name}'
+  sgroup_deleted: '🗑 Удалена группа: {name}'
+  sgroup_user_in_group: Пользователь уже в группе
+  sgroup_user_added: ✅ {user} добавлен в {group}
+  sgroup_user_not_in_group: Пользователь не в группе
+  sgroup_user_removed: 🗑 {user} удалён из {group}
+  sgroup_list_empty: Нет групп
+  sgroup_list_title: 📋 <b>Группы доступа:</b>
+  sgroup_menu_title: '🔐 <b>Группа: {name}</b>'
+  sgroup_confirm_delete: 🗑 Удалить группу {name}?
+  sgroup_btn_access: 🔐 Доступы
+  sgroup_btn_delete: 🗑 Удалить
+  sgroup_info_users_empty: нет
+  sgroup_info_access_empty: нет
+  ownerprefix_usage: 'Использование: .ownerprefix [reply|@user|id]'
+  ownerprefix_source_personal: личный
+  ownerprefix_source_fallback: система
+  ownerprefix_one: '👤 {user} (<code>{user_id}</code>): <code>{prefix}</code> — {source}'
+  ownerprefix_list_title: 👑 <b>Префиксы владельцев:</b>
+  ownerprefix_list_item: '• {user} (<code>{user_id}</code>): <code>{prefix}</code> — {source}'
+  watcher_usage: 'Использование: .watcher <module> <watcher>'
+  watcher_not_found: 'Watcher не найден: {module}.{watcher}'
+  watcher_enabled: ✅ {module}.{watcher} включён
+  watcher_disabled: 🚫 {module}.{watcher} выключен
+  watchers_empty: Нет watcher'ов
+  watchers_title: 👁 <b>Watchers:</b>
+  watchers_debug_title: 👁 <b>Watchers debug:</b>
+  watchers_debug_empty: Не найдено
+  trusted_error: '❌ Ошибка: {error}'
+  trusted_error_full: '❌ Ошибка: {error}
 
+    <pre>{full_error}</pre>'
+  access_title: 🔐 <b>Доступы</b> для <code>{user}</code>
+  access_via_group: через группу
+  access_footer: 💡 Тапни категорию чтобы переключить
+  btn_percmd: 📋 Команды
+  btn_back: ← Назад
+  menu_closed: 🗑 Меню закрыто
+  no_access_cmd: 🚫 Нет доступа к команде
+  btn_custom: 🧩 Кастом
+  custom_title: 🧩 <b>Кастомные модули</b> для <code>{user}</code>
+  custom_footer: 💡 Тапни модуль чтобы переключить
+  custom_empty: 📭 Нет кастомных модулей
 updates:
-  description: "Авто-обновление и перезапуск тетко"
-  cmd_update: "Обновить тетко из git"
-  updating: "щаща погоди я обновы сматрю!!"
-  already_uptodate: "зачем???? у тя последняя версия тетко!!!"
-  pulled: "обновление успешно!"
-  restarting: "перезапуск..."
-  reloaded: "ваша тетенька успешно перезагрузилась!!"
-  failed: "git pull упал"
+  description: Авто-обновление и перезапуск тетко
+  cmd_update: Обновить тетко из git
+  updating: щаща погоди я обновы сматрю!!
+  already_uptodate: зачем???? у тя последняя версия тетко!!!
+  pulled: обновление успешно!
+  restarting: перезапуск...
+  reloaded: ваша тетенька успешно перезагрузилась!!
+  failed: git pull упал
