@@ -142,6 +142,12 @@ class _ModuleDB:
 
 
 class Trusted(Module):
+    config = {
+        "notify_on_expire": True,
+        "expire_check_interval": 60,
+        "permission_refresh_interval": 30,
+    }
+
     """Доверенные пользователи могут выполнять команды владельца."""
 
     name = "trusted"

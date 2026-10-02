@@ -173,6 +173,11 @@ tek:
   cfg_not_found: "конфіг {module} не знайдено"
   cfg_hint: "Команди: <code>{prefix}ftekcfg set -f &lt;Module&gt; &lt;key&gt; &lt;value&gt;</code>"
 
+  cfg_module_title: "🔧 <b>Модуль: {name}</b>"
+  cfg_key_line: "  <code>{key}</code> = <code>{value}</code>"
+  cfg_edit_title: "✏️ <b>Редагування:</b> <code>{module}.{key}</code>"
+  cfg_inline_hint: "💡 Введи нове значення у полі вище та надішли боту."
+  cfg_hint_ftekcfg: "Команди: <code>{prefix}ftekcfg set -f &lt;Module&gt; &lt;key&gt; &lt;value&gt;</code>"
 terminal:
   description: "Виконання shell-команд (тільки власник)"
   cmd_terminal: "Виконати shell-команду"

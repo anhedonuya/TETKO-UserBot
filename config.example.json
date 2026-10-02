@@ -7,5 +7,9 @@
     "command_prefix": ".",
     "language": "ru",
     "inline_bot_token": "",
-    "log_chat_id": null
+    "log_chat_id": null,
+    "shell_prompt": "%",
+    "shell_host": "tetko",
+    "shell_host_owner": "god",
+    "shell_host_overrides": {}
 }

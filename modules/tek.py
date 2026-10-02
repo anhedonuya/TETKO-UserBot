@@ -32,6 +32,14 @@ def _premium(kernel) -> bool:
 
 
 class Tek(Module):
+    config = {
+        "page_size": 10,
+        "cmd_limit": 3,
+        "cfg_page_size": 6,
+        "cfg_keys_page": 20,
+        "menu_ttl": 600,
+    }
+
     name = "Tek"
     __compat__ = "0.9.1"
     version = "2.1.0"
@@ -699,6 +707,18 @@ class Tek(Module):
         p = d / f"{module}.json"
         p.write_text(json.dumps(data, ensure_ascii=False, indent=4), encoding="utf-8")
 
+        # refresh живого ModuleConfig (без рестарта)
+        try:
+            for _name, _mod in self.kernel.registry._modules.items():
+                if _name == module or getattr(_mod, "name", "") == module:
+                    mc = getattr(_mod, "_config", None)
+                    if mc is not None and hasattr(mc, "_load"):
+                        mc._load()
+                        self.log.info("[cfg] refreshed ModuleConfig: %s", module)
+                    break
+        except Exception as _e:
+            self.log.warning("[cfg] refresh failed: %s", _e)
+
     @command(name="cfg", aliases=["mcfg", "moduleconfig"], description="Конфиги модулей")
     async def cmd_cfg(self, event, args):
         self.log.debug(f"[cfg] вызвана, args={args!r}")
@@ -886,6 +906,62 @@ class Tek(Module):
 
         await self._reply_cfg(event_or_cb, is_cb, text, rows)
 
+    # ---------- cfg schema helpers ----------
+    _TYPE_EMOJI = {
+        "bool": "\u2611\ufe0f",
+        "int": "\U0001F522",
+        "float": "\U0001F522",
+        "str": "\U0001F4DD",
+        "list": "\U0001F4CB",
+        "dict": "\U0001F4E6",
+        "none": "\u2753",
+        "?": "\u2753",
+    }
+
+    @staticmethod
+    def _type_of(v):
+        if isinstance(v, bool): return "bool"
+        if isinstance(v, int): return "int"
+        if isinstance(v, float): return "float"
+        if isinstance(v, str): return "str"
+        if isinstance(v, list): return "list"
+        if isinstance(v, dict): return "dict"
+        if v is None: return "none"
+        return "?"
+
+    def _get_module_schema(self, module_name):
+        reg = getattr(self.kernel, "registry", None)
+        if reg is None:
+            return {}
+        for name, mod in reg._modules.items():
+            if name.lower() == module_name.lower() or \
+               getattr(mod, "name", "").lower() == module_name.lower():
+                schema = getattr(mod, "config_schema", None)
+                if isinstance(schema, dict):
+                    return schema
+        return {}
+
+    def _new_cfg_token(self, cb, module, key):
+        import secrets as _sec
+        t = _sec.token_hex(3)
+        if not hasattr(self.kernel, "_cfg_pending"):
+            self.kernel._cfg_pending = {}
+        try:
+            _data = getattr(cb, "data", b"")
+            if isinstance(_data, bytes):
+                _data = _data.decode("utf-8", errors="replace")
+            _bot = getattr(self.kernel, "bot_client", None)
+            _imid = (getattr(cb, "inline_message_id", None) or
+                     (_bot.get_inline_message_id(_data) if _bot else None))
+        except Exception:
+            _imid = None
+        self.kernel._cfg_pending[t] = {
+            "module": module, "key": key, "ts": time.time(),
+            "inline_message_id": _imid,
+        }
+        return t
+
+
     async def _cfg_show_module(self, event_or_cb, module: str, is_cb: bool = False):
         data = self._cfg_read(module)
         if data is None:
@@ -899,42 +975,61 @@ class Tek(Module):
                 await event_or_cb.edit(txt, parse_mode="html")
             return
 
-        if not data:
-            lines = self._t("cfg_no_keys")
+        schema = self._get_module_schema(module)
+
+        def _fmt_val(v):
+            if isinstance(v, bool):
+                return "true" if v else "false"
+            if v is None:
+                return "null"
+            if isinstance(v, str):
+                return v if len(v) <= 120 else v[:120] + "..."
+            if isinstance(v, (dict, list)):
+                try:
+                    import json as _json
+                    js = _json.dumps(v, ensure_ascii=False, separators=(", ", ": "))
+                    if len(js) > 120:
+                        js = js[:120] + "..."
+                    return js
+                except Exception:
+                    pass
+            txt = str(v)
+            return txt if len(txt) <= 120 else txt[:120] + "..."
+
+        title = self._t("cfg_module_title", name=self._esc(module))
+        lines = []
+        if data:
+            for k, v in data.items():
+                t = self._type_of(v)
+                emoji = self._TYPE_EMOJI.get(t, "\u2753")
+                val_str = self._esc(_fmt_val(v))
+                lines.append(f"{emoji} <b>{self._esc(k)}</b> <i>({t})</i>")
         else:
-            def _fmt_val(v):
-                if isinstance(v, bool):
-                    return "true" if v else "false"
-                if v is None:
-                    return "null"
-                if isinstance(v, str):
-                    return v if len(v) <= 200 else v[:200] + "..."
-                if isinstance(v, (dict, list)):
-                    try:
-                        import json as _json
-                        js = _json.dumps(v, ensure_ascii=False, separators=(", ", ": "))
-                        if len(js) > 200:
-                            js = js[:200] + "..."
-                        return js
-                    except Exception:
-                        pass
-                txt = str(v)
-                return txt if len(txt) <= 200 else txt[:200] + "..."
-            lines = "\n".join(
-                self._t("cfg_key_line", key=self._esc(k), value=self._esc(_fmt_val(v)))
-                for k, v in data.items()
-            )
+            lines.append("<i>" + self._t("cfg_no_keys") + "</i>")
 
         _p = getattr(self.kernel, "prefix", ".") or "."
-        _hint = "Commands: <code>" + self._esc(_p) + "ftekcfg set -f &lt;Module&gt; &lt;key&gt; &lt;value&gt;</code>"
-        text = self._t("cfg_module_title", name=self._esc(module)) + "\n\n<blockquote expandable>" + lines + "</blockquote>\n" + _hint
+        hint_html = (
+            "\U0001F4A1 <code>" + self._esc(_p)
+            + "ftekcfg set -f &lt;Module&gt; &lt;key&gt; &lt;value&gt;</code>"
+        )
+
+        text = (
+            title + "\n\n"
+            + "<blockquote expandable>" + "\n".join(lines) + "</blockquote>\n"
+            + hint_html
+        )
 
         rows = []
         chunk = []
         for k, v in list(data.items())[:20]:
+            t = self._type_of(v)
+            emoji = self._TYPE_EMOJI.get(t, "\u2753")
             async def on_edit(cb, m=module, key=k):
                 await self._cfg_edit_key(cb, m, key)
-            chunk.append(self.kernel.inline.make_button(f"{k}", on_edit, ttl=600))
+            label = f"{emoji} {k}"
+            if len(label) > 40:
+                label = label[:40]
+            chunk.append(self.kernel.inline.make_button(label, on_edit, ttl=600))
             if len(chunk) == 3:
                 rows.append(chunk)
                 chunk = []
@@ -956,6 +1051,7 @@ class Tek(Module):
         ])
 
         await self._reply_cfg(event_or_cb, is_cb, text, rows)
+
 
     def _defaults_for(self, module: str, key: str):
         try:
@@ -1000,6 +1096,29 @@ class Tek(Module):
             return None
         return None
 
+    @staticmethod
+    def _fmt_val_inline(v):
+        """Форматирование значения для карточки edit-view."""
+        if isinstance(v, bool):
+            return "true" if v else "false"
+        if v is None:
+            return "null"
+        if isinstance(v, str):
+            if v == "":
+                return "(пусто)"
+            return v if len(v) <= 120 else v[:120] + "..."
+        if isinstance(v, (dict, list)):
+            try:
+                import json as _json
+                js = _json.dumps(v, ensure_ascii=False, separators=(", ", ": "))
+                if len(js) > 120:
+                    js = js[:120] + "..."
+                return js
+            except Exception:
+                pass
+        txt = str(v)
+        return txt if len(txt) <= 120 else txt[:120] + "..."
+
     async def _cfg_edit_key(self, cb, module: str, key: str):
         data = self._cfg_read(module)
         if data is None or key not in data:
@@ -1012,39 +1131,40 @@ class Tek(Module):
         except Exception:
             pass
 
-        header = self._t("cfg_edit_title", module=self._esc(module), key=self._esc(key))
+        schema = self._get_module_schema(module)
+        key_schema = schema.get(key, {}) if isinstance(schema, dict) else {}
+        description = key_schema.get("description", "") or ""
+        options = key_schema.get("options") or []
+
+        t = self._type_of(value)
+        emoji = self._TYPE_EMOJI.get(t, "\u2753")
+
+        title = self._t("cfg_edit_title", module=self._esc(module), key=self._esc(key))
         cur = self._t("cfg_key_line", key=self._esc(key), value=self._esc(repr(value)))
-        hint = self._t("cfg_inline_hint")
-        text = f"{header}\n\n<blockquote>{cur}</blockquote>\n{hint}"
 
-        import secrets as _sec
-        token = _sec.token_hex(3)
-        if not hasattr(self.kernel, "_cfg_pending"):
-            self.kernel._cfg_pending = {}
-        _imid = None
-        try:
-            _data = getattr(cb, "data", b"")
-            if isinstance(_data, bytes):
-                _data = _data.decode("utf-8", errors="replace")
-            _bot = getattr(self.kernel, "bot_client", None)
-            if _bot is not None:
-                _imid = getattr(cb, "inline_message_id", None) or _bot.get_inline_message_id(_data)
-        except Exception:
-            _imid = None
-        self.kernel._cfg_pending[token] = {
-            "module": module,
-            "key": key,
-            "ts": time.time(),
-            "inline_message_id": _imid,
-        }
+        # текущее значение
+        _val_display = self._fmt_val_inline(value)
+        body_lines = [f"{emoji} <code>{self._esc(key)}</code> <i>({t})</i> = <code>{self._esc(_val_display)}</code>"]
+        if description:
+            body_lines.append("📖 <i>" + self._esc(description) + "</i>")
+        if options:
+            opts_html = ", ".join(f"<code>{self._esc(str(o))}</code>" for o in options)
+            body_lines.append("📋 Доступные варианты: " + opts_html)
+        if not description and not options:
+            body_lines.append(self._esc(self._t("cfg_inline_hint")))
 
-        rows = [
-            [{
-                "label": self._t("cfg_btn_edit"),
-                "kind": "switch_current",
-                "query": f"cfg_{token} ",
-            }],
-        ]
+        text = (
+            title + "\n\n"
+            + "<blockquote expandable>" + "\n".join(body_lines) + "</blockquote>"
+        )
+
+        rows = []
+
+        async def on_back(c, m=module):
+            await self._cfg_show_module(c, m, is_cb=True)
+
+        async def on_close(c):
+            await self._close_cfg(c)
 
         async def on_reset(c, m=module, k=key, v=value):
             d = self._cfg_read(m) or {}
@@ -1052,26 +1172,148 @@ class Tek(Module):
             if default is not None:
                 d[k] = default
             else:
-                if isinstance(v, str):
-                    d[k] = ""
-                elif isinstance(v, list):
-                    d[k] = []
-                elif isinstance(v, dict):
-                    d[k] = {}
-                elif isinstance(v, bool):
-                    d[k] = False
-                elif isinstance(v, int):
-                    d[k] = 0
-                elif isinstance(v, float):
-                    d[k] = 0.0
+                if isinstance(v, bool): d[k] = False
+                elif isinstance(v, int): d[k] = 0
+                elif isinstance(v, float): d[k] = 0.0
+                elif isinstance(v, str): d[k] = ""
+                elif isinstance(v, list): d[k] = []
+                elif isinstance(v, dict): d[k] = {}
             self._cfg_write(m, d)
             await self._cfg_edit_key(c, m, k)
 
-        async def on_back(c, m=module):
-            await self._cfg_show_module(c, m, is_cb=True)
+        # ---------- BOOL ----------
+        if isinstance(value, bool):
+            target = not value
+            if target:
+                label = "\u2705 to true"
+                style = "success"
+            else:
+                label = "\U0001F6AB to false"
+                style = "danger"
 
-        async def on_close(c):
-            await self._close_cfg(c)
+            async def on_toggle_bool(c, m=module, k=key, tt=target):
+                d = self._cfg_read(m) or {}
+                d[k] = bool(tt)
+                self._cfg_write(m, d)
+                try:
+                    await c.answer("\u2192 " + str(tt).lower())
+                except Exception:
+                    pass
+                await self._cfg_edit_key(c, m, k)
+
+            rows.append([
+                self.kernel.inline.make_button(label, on_toggle_bool, ttl=600, style=style),
+            ])
+
+        # ---------- INT / FLOAT ----------
+        elif isinstance(value, (int, float)):
+            step = 1 if isinstance(value, int) else 0.5
+            step_emoji = "\U0001F522"
+
+            async def on_bump(c, m=module, k=key, delta=0):
+                d2 = self._cfg_read(m) or {}
+                if k not in d2:
+                    return
+                cur_v = d2[k]
+                try:
+                    nv = cur_v + delta
+                    if isinstance(cur_v, int):
+                        nv = int(nv)
+                    else:
+                        nv = round(float(nv), 4)
+                except Exception:
+                    return
+                d2[k] = nv
+                self._cfg_write(m, d2)
+                try:
+                    await c.answer("\u2192 " + str(nv))
+                except Exception:
+                    pass
+                await self._cfg_edit_key(c, m, k)
+
+            async def on_minus(c, m=module, k=key, st=step):
+                await on_bump(c, m, k, -st)
+
+            async def on_plus(c, m=module, k=key, st=step):
+                await on_bump(c, m, k, +st)
+
+            token = self._new_cfg_token(cb, module, key)
+            rows.append([
+                self.kernel.inline.make_button(f"\u2796 {step}", on_minus, ttl=600, style="danger"),
+                {"label": step_emoji + " edit", "kind": "switch_current", "query": f"cfg_{token} "},
+                self.kernel.inline.make_button(f"\u2795 {step}", on_plus, ttl=600, style="success"),
+            ])
+
+        # ---------- STR ----------
+        elif isinstance(value, str):
+            token = self._new_cfg_token(cb, module, key)
+
+            if options:
+                opt_row = []
+                for opt in options:
+                    ov = str(opt)
+                    async def on_pick(c, m=module, k=key, v=ov):
+                        d = self._cfg_read(m) or {}
+                        d[k] = v
+                        self._cfg_write(m, d)
+                        try:
+                            await c.answer("\u2192 " + repr(v))
+                        except Exception:
+                            pass
+                        await self._cfg_edit_key(c, m, k)
+                    is_current = (str(value) == ov)
+                    mark = "\u2705 " if is_current else ""
+                    opt_row.append(self.kernel.inline.make_button(
+                        mark + ov, on_pick, ttl=600,
+                        style=("success" if is_current else "primary"),
+                    ))
+                    if len(opt_row) == 3:
+                        rows.append(opt_row)
+                        opt_row = []
+                if opt_row:
+                    rows.append(opt_row)
+                rows.append([
+                    {"label": "\u270f\ufe0f edit other", "kind": "switch_current",
+                     "query": f"cfg_{token} "},
+                ])
+            else:
+                kl = (key or "").lower()
+                presets = []
+                if kl in ("shell_prompt", "prompt"):
+                    presets = [("\u2192 %", "%"), ("\u2192 $", "$"), ("\u2192 #", "#"), ("\u2192 \u276f", "\u276f")]
+                elif kl == "branch":
+                    presets = [("main", "main"), ("dev", "dev"), ("beta", "beta")]
+                elif kl in ("language", "lang"):
+                    presets = [("ru", "ru"), ("en", "en"), ("uk", "uk")]
+
+                preset_row = []
+                for plabel, pval in presets:
+                    if pval == value:
+                        continue
+                    async def on_preset(c, m=module, k=key, v=pval):
+                        d = self._cfg_read(m) or {}
+                        d[k] = v
+                        self._cfg_write(m, d)
+                        try:
+                            await c.answer("\u2192 " + repr(v))
+                        except Exception:
+                            pass
+                        await self._cfg_edit_key(c, m, k)
+                    preset_row.append(self.kernel.inline.make_button(
+                        plabel, on_preset, ttl=600, style="primary"))
+                if preset_row:
+                    rows.append(preset_row)
+
+                rows.append([
+                    {"label": "\u270f\ufe0f edit", "kind": "switch_current", "query": f"cfg_{token} "},
+                ])
+
+        # ---------- LIST / DICT ----------
+        elif isinstance(value, (list, dict)):
+            token = self._new_cfg_token(cb, module, key)
+            rows.append([
+                {"label": "\u270f\ufe0f edit JSON", "kind": "switch_current", "query": f"cfg_{token} "},
+            ])
 
         rows.append([
             self.kernel.inline.make_button(self._t("cfg_btn_reset"), on_reset, ttl=600),
@@ -1082,6 +1324,7 @@ class Tek(Module):
         ])
 
         await self.kernel.inline.edit(cb, text, rows)
+
 
     async def _cfg_set_key(self, cb, module: str, key: str, value):
         data = self._cfg_read(module) or {}
@@ -1110,28 +1353,50 @@ class Tek(Module):
         await self._cfg_edit_key(cb, module, key)
 
     async def _close_cfg(self, cb):
+        """Закрыть inline-меню: сначала пробуем edit через bot_client, потом event.edit."""
         try:
             await cb.answer()
         except Exception:
             pass
+
+        text = self._t("menu_closed")
+
+        # 1. Пробуем через bot_client (правильный путь — inline_message_id)
         bot = getattr(self.kernel, "bot_client", None)
-        if bot is None:
-            return
-        data = getattr(cb, "data", b"")
-        if isinstance(data, bytes):
-            data = data.decode("utf-8", errors="replace")
-        imid = getattr(cb, "inline_message_id", None) or bot.get_inline_message_id(data)
-        if not imid:
-            return
+        if bot is not None:
+            data = getattr(cb, "data", b"")
+            if isinstance(data, bytes):
+                data = data.decode("utf-8", errors="replace")
+            imid = getattr(cb, "inline_message_id", None) or bot.get_inline_message_id(data)
+            if imid:
+                try:
+                    from telethon.tl.functions.messages import EditInlineBotMessageRequest
+                    parsed, entities = await bot.client._parse_message_text(text, "html")
+                    await bot.client(EditInlineBotMessageRequest(
+                        id=imid,
+                        message=parsed,
+                        entities=entities,
+                        reply_markup=None,
+                    ))
+                    log.info("[TEK] close cfg via bot_client OK")
+                    return
+                except Exception as e:
+                    log.warning(f"[TEK] close via bot_client failed: {e}")
+
+        # 2. Fallback: обычный event.edit с пустой клавиатурой
         try:
-            from telethon.tl.functions.messages import EditInlineBotMessageRequest
-            await bot.client(EditInlineBotMessageRequest(
-                id=imid,
-                message=self._t("menu_closed"),
-                reply_markup=None,
-            ))
+            await cb.edit(text, parse_mode="html", buttons=None)
+            log.info("[TEK] close cfg via event.edit OK")
+            return
         except Exception as e:
-            log.warning(f"[TEK] close cfg failed: {e}")
+            log.warning(f"[TEK] close via event.edit failed: {e}")
+
+        # 3. Last resort: удалить сообщение
+        try:
+            await cb.delete()
+            log.info("[TEK] close cfg via delete OK")
+        except Exception as e:
+            log.warning(f"[TEK] close via delete failed: {e}")
 
     async def _reply_cfg(self, event_or_cb, is_cb: bool, text: str, rows: list):
         if is_cb:

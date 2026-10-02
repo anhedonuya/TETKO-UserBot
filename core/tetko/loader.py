@@ -34,6 +34,7 @@ class ModuleLoader:
     async def load_module_from_file(self, file_path: str | Path) -> Module:
         """Загрузить модуль из .py файла (тетко или mcub)."""
         path = Path(file_path)
+        log.debug("[LOG] loading %s", path)
         if not path.exists():
             raise ModuleNotFoundError(f"Файл {path} не найден")
 
@@ -97,6 +98,9 @@ class ModuleLoader:
                 pass
             self.registry.unregister_module(mod_instance.name)
         self.registry.register_module(mod_instance)
+        log.info("[LOG] %s loaded: name=%r version=%r", mod_name,
+                 getattr(mod_instance, "name", "?"),
+                 getattr(mod_instance, "version", "?"))
 
         for attr_name in dir(mod_instance):
             attr = getattr(mod_instance, attr_name)

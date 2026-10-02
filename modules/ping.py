@@ -40,6 +40,13 @@ def _ms(v):
 
 
 class PingModule(Module):
+    config = {
+        "banner_url": "https://raw.githubusercontent.com/anhedonuya/TETKO-UserBot/main/ping_banner.png",
+        "show_banner": True,
+        "icmp_host": "1.1.1.1",
+        "dns_host": "telegram.org",
+    }
+
     name = "Ping"
     __compat__ = "0.0.9.0"
     description = "Latency probe"
@@ -195,6 +202,15 @@ class PingModule(Module):
         ]
         text = _term(lines)
 
+        _show_banner = bool(self.cfg.get("show_banner", True))
+        _banner_url = self.cfg.get("banner_url") or PING_BANNER
+        log.info("[ping] show_banner=%s banner_url=%r", _show_banner, _banner_url)
+
+        if not _show_banner:
+            log.info("[ping] banner disabled — plain edit")
+            await event.edit(text, parse_mode="html")
+            return
+
         try:
             from telethon.tl.functions.messages import EditMessageRequest
             parsed, entities = await self.client._parse_message_text(text, "html")
@@ -203,7 +219,7 @@ class PingModule(Module):
                 id=event.id,
                 message=parsed,
                 entities=entities,
-                media=InputMediaWebPage(PING_BANNER, force_large_media=True, optional=True),
+                media=InputMediaWebPage(_banner_url, force_large_media=True, optional=True),
                 invert_media=True,
             ))
         except Exception as e:
@@ -254,6 +270,15 @@ class PingModule(Module):
         text = _term(lines)
 
         # C БАННЕРОМ
+        _show_banner = bool(self.cfg.get("show_banner", True))
+        _banner_url = self.cfg.get("banner_url") or PING_BANNER
+        log.info("[ping] show_banner=%s banner_url=%r", _show_banner, _banner_url)
+
+        if not _show_banner:
+            log.info("[ping] banner disabled — plain edit")
+            await event.edit(text, parse_mode="html")
+            return
+
         try:
             from telethon.tl.functions.messages import EditMessageRequest
             parsed, entities = await self.client._parse_message_text(text, "html")
@@ -262,7 +287,7 @@ class PingModule(Module):
                 id=event.id,
                 message=parsed,
                 entities=entities,
-                media=InputMediaWebPage(PING_BANNER, force_large_media=True, optional=True),
+                media=InputMediaWebPage(_banner_url, force_large_media=True, optional=True),
                 invert_media=True,
             ))
         except Exception as e:

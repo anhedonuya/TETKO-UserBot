@@ -18,6 +18,11 @@ def _bq_i(msg):
 
 
 class Settings(Module):
+    config = {
+        "default_language": "ru",
+        "warn_on_missing_lang": True,
+    }
+
     name = "settings"
     version = "1.1.0"
     author = "@anhedonuya"

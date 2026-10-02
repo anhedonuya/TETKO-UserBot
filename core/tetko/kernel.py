@@ -126,6 +126,7 @@ class Kernel:
             language=self.config.get("language", "ru"),
             config=self.config,
         )
+        self._ensure_global_config()
 
         self.registry = Registry()
         self.loader = ModuleLoader(registry=self.registry, kernel=self)
@@ -150,14 +151,59 @@ class Kernel:
         self.client.registry = self.registry
         self.client.context = self.context
 
+    def _register_shell_everywhere(self):
+        """Зарегистрировать self во всех копиях core.tetko.shell в sys.modules."""
+        import sys as _sys
+        _seen = set()
+        _candidates = []
+
+        # 1. Прямой импорт
+        try:
+            from core.tetko import shell as _sh_main
+            _candidates.append(_sh_main)
+        except Exception:
+            pass
+
+        # 2. Все модули в sys.modules с именем core.tetko.shell или shell
+        for _m in list(_sys.modules.values()):
+            if _m is None:
+                continue
+            _n = getattr(_m, "__name__", "")
+            if _n in ("core.tetko.shell", "core.tetko.shell"):
+                _candidates.append(_m)
+
+        for _sh in _candidates:
+            if id(_sh) in _seen:
+                continue
+            _seen.add(id(_sh))
+            try:
+                if hasattr(_sh, "_KERNEL"):
+                    _sh._KERNEL = self
+                if hasattr(_sh, "set_kernel"):
+                    _sh.set_kernel(self)
+            except Exception:
+                pass
+
+        return len(_seen)
+
+
     async def start(self) -> None:
         """Запуск ядра, загрузка модулей и старт событий."""
         t0 = time.time()
         ui.collect("Preparing kernel")
         try:
             me = await self.client.get_me()
-            from core.tetko import shell
-            shell.set_username(getattr(me, "username", None) or getattr(me, "first_name", None) or "user")
+
+            try:
+
+                _u = getattr(me, 'username', None) or getattr(me, 'first_name', None) or str(getattr(me, 'id', 'user'))
+
+                self.context.user_username = str(_u)
+
+            except Exception:
+
+                pass
+            self._register_shell_everywhere()
             self.context.user_premium = bool(getattr(me, "premium", False))
             ui.item("owner: " + str(getattr(me, "id", "?")))
             ui.item("premium: " + str(self.context.user_premium).lower())
@@ -185,6 +231,21 @@ class Kernel:
         @self.client.on(events.CallbackQuery())
         async def callback_handler(event):
             await self.dispatcher.handle_callback(self.client, event)
+
+        @self.client.on(events.NewMessage(outgoing=True))
+        async def _cfg_deliver_watcher(event):
+            """Удаляет эфемерные сообщения после inline-cfg-edit."""
+            txt = (getattr(event, "raw_text", "") or "").strip()
+            if not txt.startswith("✅ Изменения доставлены в инлайн"):
+                return
+            import asyncio as _aio
+            async def _later():
+                await _aio.sleep(1.5)
+                try:
+                    await event.delete()
+                except Exception:
+                    pass
+            _aio.create_task(_later())
 
         self._start_loops()
 
@@ -233,3 +294,36 @@ class Kernel:
             )
         except Exception as e:
             log.warning(f"log_to_chat failed: {e}")
+
+    GLOBAL_CONFIG_DEFAULTS = {
+        "shell_prompt": "%",
+        "shell_host": "tetko",
+        "message_delete_delay": 0,
+        "command_cooldown": 0,
+        "verbose_errors": False,
+        "log_chat_id": None,
+    }
+
+    def _ensure_global_config(self):
+        import json
+        from pathlib import Path
+        d = Path("data/tetko_config")
+        d.mkdir(parents=True, exist_ok=True)
+        p = d / "__global__.json"
+        if not p.exists():
+            p.write_text(
+                json.dumps(self.GLOBAL_CONFIG_DEFAULTS, ensure_ascii=False, indent=4),
+                encoding="utf-8",
+            )
+            return
+        try:
+            data = json.loads(p.read_text(encoding="utf-8"))
+            changed = False
+            for k, v in self.GLOBAL_CONFIG_DEFAULTS.items():
+                if k not in data:
+                    data[k] = v
+                    changed = True
+            if changed:
+                p.write_text(json.dumps(data, ensure_ascii=False, indent=4), encoding="utf-8")
+        except Exception:
+            pass

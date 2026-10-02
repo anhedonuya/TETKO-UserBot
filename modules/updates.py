@@ -37,6 +37,13 @@ def _shell_out(cmd, out):
 
 
 class UpdatesModule(Module):
+    config = {
+        "branch": "main",
+        "auto_pull": False,
+        "auto_restart": True,
+        "check_interval": 3600,
+    }
+
     name = "Updates"
     __compat__ = "0.0.9.0"
     version = "1.4.0"

@@ -1,77 +1,157 @@
+# ============================================================
+# TETKO UserBot — .gitignore
+# ============================================================
+
+# --- runtime config / secrets ---
+config.json
+config.local.json
+*.local.json
+.env
+.env.*
+secrets.json
+credentials.json
+
+# --- runtime data ---
+data/
+!data/.gitkeep
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# --- пользовательские модули ---
+modules_custom/
+!modules_custom/.gitkeep
+
+# --- плагины и движки ---
+dontdothat_plugins/
+dontdothat_plugins_new/
+dontdothat_plugins_logs/
+neverfake/
+liteflare/
+ddt_plugins/
+
+# --- кэши ---
+music_cache/
+.cache/
+cache/
+tmp/
+temp/
+*.tmp
+*.temp
+
+# --- Telethon sessions ---
+*.session
+*.session-journal
+*.session-wal
+*.session-shm
+*.session.backup
+
+# --- python ---
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
 build/
+develop-eggs/
 dist/
-*.egg-info/
+downloads/
+eggs/
 .eggs/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
 .installed.cfg
-
-venv/
-env/
-.venv/
-ENV/
-
-config.json
-config.local.json
-config.json.*
-.env
-.env.*
-secrets.json
-token.txt
-*.token
-*.token_marker
-
-*.session
-*.session-journal
-sessions/
-session/
-
-*.db
-*.db-journal
-*.sqlite
-*.sqlite3
-*.db-shm
-*.db-wal
-
-*.log
-logs/
-*.logcd
-
-.cache/
+*.egg
+MANIFEST
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
 .coverage
 htmlcov/
 
-.vscode/
+# --- venv ---
+venv/
+.venv/
+env/
+ENV/
+.python-version
+
+# --- IDE / редакторы ---
 .idea/
+.vscode/
 *.swp
 *.swo
-*.sublime-*
+*~
+.vim/
+.nvim/
+.history/
 
+# --- OS ---
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
 Thumbs.db
+ehthumbs.db
 desktop.ini
 
+# --- логи ---
+*.log
+!CHANGELOG.log
+main.log
+tetko.log
+bot.log
+ddt.log
+logs/
+
+# --- бэкапы и временные файлы от патчей ---
 *.bak
 *.bak.*
 *.backup
-*.mybackup
-*.tmp
-*.old
+*.orig
+*.rej
+_backup_*
+_bk_*
+*.BROKEN*
+*.SHIFTED*
+*.NEW_*
 
-modules_custom/__pycache__/
-modules_custom/**/*.bak
-modules_legacy/
-TETKO-UserBot-main/
+# --- Termux / Android ---
+.termux/
+storage/
+*.apk
+*.aab
 
+# --- runtime data (from origin) ---
 data/adder_repo/
 data/dontdothat_repo/
-
 data/
 modules_custom/
 bump.sh
+
+# --- test / coverage ---
+tests/.cache/
+.pytest_cache/
+.coverage.*
+nosetests.xml
+coverage.xml
+*.cover
+
+# --- Jupyter ---
+.ipynb_checkpoints/
+
+# --- misc ---
+*.pid
+*.pid.lock
+*.seed
+*.tgz
+*.tar.gz
+*.zip

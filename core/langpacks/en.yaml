@@ -173,6 +173,11 @@ tek:
   cfg_not_found: "config {module} not found"
   cfg_hint: "Commands: <code>{prefix}ftekcfg set -f &lt;Module&gt; &lt;key&gt; &lt;value&gt;</code>"
 
+  cfg_module_title: "🔧 <b>Module: {name}</b>"
+  cfg_key_line: "  <code>{key}</code> = <code>{value}</code>"
+  cfg_edit_title: "✏️ <b>Editing:</b> <code>{module}.{key}</code>"
+  cfg_inline_hint: "💡 Type the new value in the input field above and send it."
+  cfg_hint_ftekcfg: "Commands: <code>{prefix}ftekcfg set -f &lt;Module&gt; &lt;key&gt; &lt;value&gt;</code>"
 terminal:
   description: "Execute shell commands (owner only)"
   cmd_terminal: "Execute shell command"

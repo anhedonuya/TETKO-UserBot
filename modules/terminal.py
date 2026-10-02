@@ -64,9 +64,18 @@ def _clean_error(text):
 class TerminalModule(Module):
     name = "Terminal"
     __compat__ = "0.0.9.0"
-    version = "0.5.0"
+    version = "0.6.0"
     author = "@anhedonuya"
     description = "Выполнение shell-команд (только владелец)"
+
+    config = {
+        "timeout": 30,
+        "max_output": 3500,
+        "live_update": True,
+        "live_interval": 3,
+        "show_exit_code": True,
+        "show_elapsed": True,
+    }
 
     @command(
         name="t",
@@ -78,8 +87,8 @@ class TerminalModule(Module):
         if not args:
             await event.edit(
                 shell.wrap([
-                    "usage    : .t <command>",
-                    "example  : .t fastfetch",
+                    "usage    : " + str(self._p()) + "t <command>",
+                    "example  : " + str(self._p()) + "t fastfetch",
                 ], cmd="t", trailing=True),
                 parse_mode="html",
             )
@@ -99,6 +108,22 @@ class TerminalModule(Module):
             log.warning("Terminal: blocked: %r (pattern: %s)" % (cmd, reason))
             return
 
+        await self._run_live(event, cmd)
+
+    def _p(self):
+        try:
+            return self.kernel.prefix
+        except Exception:
+            return "."
+
+    async def _run_live(self, event, cmd):
+        timeout = float(self.cfg.get("timeout", 30))
+        max_out = int(self.cfg.get("max_output", 3500))
+        live = bool(self.cfg.get("live_update", True))
+        interval = float(self.cfg.get("live_interval", 3))
+        show_exit = bool(self.cfg.get("show_exit_code", True))
+        show_elapsed = bool(self.cfg.get("show_elapsed", True))
+
         await event.edit(
             shell.wrap([], cmd=cmd, running=True, trailing=False),
             parse_mode="html",
@@ -112,37 +137,87 @@ class TerminalModule(Module):
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,
             )
+        except Exception as e:
+            log.exception("terminal: spawn failed")
+            await event.edit(
+                shell.wrap(["error    : " + str(e)], cmd=cmd, trailing=True),
+                parse_mode="html",
+            )
+            return
+
+        buf = bytearray()
+        last_edit = started
+        timed_out = False
+
+        async def _reader():
+            nonlocal buf
+            try:
+                while True:
+                    chunk = await proc.stdout.read(4096)
+                    if not chunk:
+                        break
+                    buf.extend(chunk)
+            except Exception:
+                pass
+
+        reader_task = asyncio.create_task(_reader())
+
+        try:
+            while True:
+                done, _ = await asyncio.wait({reader_task}, timeout=interval)
+                now = time.perf_counter()
+
+                if reader_task in done and proc.returncode is not None:
+                    break
+
+                if live and (now - last_edit) >= interval:
+                    await self._flush(event, cmd, buf, now - started, False, max_out, show_elapsed)
+                    last_edit = now
+
+                if (now - started) >= timeout:
+                    timed_out = True
+                    try:
+                        proc.kill()
+                    except Exception:
+                        pass
+                    await proc.wait()
+                    break
 
             try:
-                stdout, _ = await asyncio.wait_for(
-                    proc.communicate(), timeout=CMD_TIMEOUT
-                )
-            except asyncio.TimeoutError:
-                proc.kill()
-                await proc.wait()
-                elapsed = time.perf_counter() - started
+                await asyncio.wait_for(reader_task, timeout=2)
+            except Exception:
+                reader_task.cancel()
+
+            if not timed_out:
+                try:
+                    await proc.wait()
+                except Exception:
+                    pass
+
+            elapsed = time.perf_counter() - started
+            exit_code = proc.returncode
+
+            if timed_out:
                 await event.edit(
                     shell.wrap([
-                        "timeout  : " + str(CMD_TIMEOUT) + "s",
+                        "timeout  : " + str(int(timeout)) + "s",
                         "elapsed  : " + ("%.2f" % elapsed) + "s",
                     ], cmd=cmd, trailing=True),
                     parse_mode="html",
                 )
                 return
 
-            elapsed = time.perf_counter() - started
-            output = stdout.decode(errors="replace").rstrip()
-            exit_code = proc.returncode
+            output = buf.decode(errors="replace").rstrip()
 
-            if exit_code != 0:
-                err = output or ("exit code " + str(exit_code))
-                if len(err) > MAX_OUTPUT:
-                    err = err[:MAX_OUTPUT]
-                err_clean = _clean_error(err)
+            if exit_code not in (0, None):
+                if not output:
+                    output = "exit code " + str(exit_code)
+                if len(output) > max_out:
+                    output = output[:max_out]
                 await event.edit(
                     shell.wrap([
                         "exit     : " + str(exit_code),
-                        "error    : " + err_clean,
+                        "error    : " + _clean_error(output),
                         "elapsed  : " + ("%.2f" % elapsed) + "s",
                     ], cmd=cmd, trailing=True),
                     parse_mode="html",
@@ -153,30 +228,48 @@ class TerminalModule(Module):
                 output = "(no output)"
 
             truncated = False
-            if len(output) > MAX_OUTPUT:
-                output = output[:MAX_OUTPUT]
+            if len(output) > max_out:
+                output = output[:max_out]
                 truncated = True
 
             body = _esc(output)
             if truncated:
-                body += "\n... truncated to " + str(MAX_OUTPUT) + " chars"
+                body += "\n... truncated to " + str(max_out) + " chars"
+
+            tail = []
+            if show_elapsed:
+                tail.append("elapsed  : " + ("%.2f" % elapsed) + "s")
+            if show_exit and exit_code is not None:
+                tail.append("exit     : " + str(exit_code))
 
             await event.edit(
-                shell.wrap([
-                    body,
-                    "",
-                    "elapsed  : " + ("%.2f" % elapsed) + "s",
-                ], cmd=cmd, trailing=True),
+                shell.wrap([body, ""] + tail, cmd=cmd, trailing=True),
                 parse_mode="html",
             )
 
         except Exception as e:
-            elapsed = time.perf_counter() - started
-            log.exception("terminal command failed")
+            log.exception("terminal: live run failed")
+            try:
+                await event.edit(
+                    shell.wrap(["error    : " + str(e)], cmd=cmd, trailing=True),
+                    parse_mode="html",
+                )
+            except Exception:
+                pass
+
+    async def _flush(self, event, cmd, buf, elapsed, running, max_out, show_elapsed):
+        text = buf.decode(errors="replace")
+        if len(text) > max_out:
+            text = text[-max_out:]
+        tail = []
+        if show_elapsed:
+            tail.append("elapsed  : " + ("%.2f" % elapsed) + "s")
+        if running:
+            tail.append("(running...)")
+        try:
             await event.edit(
-                shell.wrap([
-                    "error    : " + str(e),
-                    "elapsed  : " + ("%.2f" % elapsed) + "s",
-                ], cmd=cmd, trailing=True),
+                shell.wrap([text or "(running...)", ""] + tail, cmd=cmd, trailing=True),
                 parse_mode="html",
             )
+        except Exception:
+            pass
