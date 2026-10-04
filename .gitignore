@@ -155,3 +155,22 @@ coverage.xml
 *.tgz
 *.tar.gz
 *.zip
+
+# --- sessions dir ---
+sessions/
+!sessions/.gitkeep
+
+# --- bot token markers ---
+*.token_marker
+token.txt
+
+# --- old session backups ---
+*.session.202*
+tetko.session.202*
+
+# --- envrc / direnv ---
+.envrc
+
+# --- misc config backups ---
+config.json.*
+config.example.json.bak

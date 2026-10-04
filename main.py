@@ -18,52 +18,24 @@ except Exception:
 
 
 logging.getLogger("telethon").setLevel(logging.WARNING)
-logging.basicConfig(
-    level=logging.WARNING,
-    format="%(asctime)s - [%(levelname)s] - %(name)s: %(message)s",
-    datefmt="%H:%M:%S",
-)
-_fh = logging.FileHandler("main.log", encoding="utf-8", mode="a")
-_fh.setLevel(logging.INFO)
-_fh.setFormatter(logging.Formatter(
+
+_console = logging.StreamHandler()
+_console.setLevel(logging.ERROR)
+_console.setFormatter(logging.Formatter(
     "%(asctime)s - [%(levelname)s] - %(name)s: %(message)s",
     datefmt="%H:%M:%S",
 ))
+
+_fh = logging.FileHandler("tetko.log", encoding="utf-8", mode="w")
+_fh.setLevel(logging.DEBUG)
+_fh.setFormatter(logging.Formatter(
+    "%(asctime)s [%(levelname)-7s] %(name)s:%(lineno)d — %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+))
+
+logging.getLogger().addHandler(_console)
 logging.getLogger().addHandler(_fh)
-# === TETKO_DEBUG_LOGS ===
-import logging as _dbg
-from pathlib import Path as _P_dbg
-
-# корневой уровень DEBUG, но console отфильтрован до INFO
-_dbg.getLogger().setLevel(_dbg.DEBUG)
-
-# целевые логгеры в DEBUG
-for _lname in ("TETKO", "TETKO.tetko", "TETKO.tetko.loader",
-               "TETKO.tetko.kernel", "TETKO.tetko.dispatcher",
-               "TETKO.tetko.inline", "TETKO.tetko.bot",
-               "TETKO.module", "TETKO.module.Ping", "TETKO.module.Tek",
-               "TETKO.module.Terminal", "TETKO.module.DLM",
-               "TETKO.shell", "TETKO.context",
-               "TETKO.mcub_compat"):
-    _dbg.getLogger(_lname).setLevel(_dbg.DEBUG)
-
-# файловый handler в tetko.log (пересоздаём каждый запуск)
-try:
-    _log_path = _P_dbg("tetko.log")
-    # очищаем старый
-    if _log_path.exists():
-        _log_path.unlink()
-    _fh_dbg = _dbg.FileHandler(str(_log_path), mode="a", encoding="utf-8")
-    _fh_dbg.setLevel(_dbg.DEBUG)
-    _fh_dbg.setFormatter(_dbg.Formatter(
-        "%(asctime)s [%(levelname)-7s] %(name)s:%(lineno)d — %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    ))
-    _dbg.getLogger().addHandler(_fh_dbg)
-    _dbg.getLogger("TETKO").info("=== TETKO DEBUG → tetko.log (root DEBUG, file DEBUG) ===")
-except Exception as _e:
-    _dbg.getLogger("TETKO").warning("tetko.log handler failed: %s", _e)
-# === /TETKO_DEBUG_LOGS ===
+logging.getLogger().setLevel(logging.DEBUG)
 
 log = logging.getLogger("TETKO")
 
