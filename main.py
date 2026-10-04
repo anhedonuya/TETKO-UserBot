@@ -212,6 +212,8 @@ def loading_banner(first_run=False):
     print(f"{C_GREEN}{C_BOLD}=> Kernel loaded <={C_RESET}")
     _rule(16)
     print()
+    return line
+
 
 
 async def console_reader():
@@ -313,7 +315,23 @@ async def main():
 
     await kernel.start()
 
-    loading_banner(first_run=first_run)
+    _line = loading_banner(first_run=first_run)
+
+    try:
+        print(f"{C_GRAY}=>{C_RESET} clear terminal? (Y/n): ", end="")
+        sys.stdout.flush()
+        _ans = await asyncio.get_event_loop().run_in_executor(None, sys.stdin.readline)
+        if _ans.strip().lower() in ("", "y", "yes", "д", "да"):
+            os.system("clear")
+            print()
+            print(f"{C_BOLD}=>{C_RESET} {C_ITAL}{_line}{C_RESET}")
+            print()
+            _rule(16)
+            print(f"{C_GREEN}{C_BOLD}=> Kernel loaded <={C_RESET}")
+            _rule(16)
+            print()
+    except Exception:
+        pass
 
     console_task = asyncio.create_task(console_reader())
 
