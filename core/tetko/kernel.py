@@ -42,47 +42,13 @@ class Kernel:
     """Ядро TETKO (tetko-compat API 0.0.9.0)."""
 
     async def setup_mcub_inline(self):
-        """Подключить MCUB InlineBot + InlineHandlers к ядру."""
+        """MCUB inline-стек отключён — работает BotClient из main.py."""
         if InlineBot is None or InlineHandlers is None:
-            import logging
-            logging.getLogger("TETKO.tetko.kernel").warning(
-                "MCUB core_inline недоступен, остаёмся на старом Inline"
-            )
             return
-
-        import logging
-        log = logging.getLogger("TETKO.tetko.kernel")
-
-        token = (self.config or {}).get("inline_bot_token")
-        if not token:
-            log.warning("inline_bot_token не задан — MCUB inline не стартует")
-            return
-
-        try:
-            bot_manager = InlineBot(self)
-            await bot_manager.setup()
-            self._mcub_inline_bot = bot_manager
-
-            bot_client = getattr(bot_manager, "bot_client", None)
-            if bot_client is None:
-                log.warning("InlineBot не создал bot_client")
-                return
-
-            handlers = InlineHandlers(self, bot_client)
-            self._mcub_inline_handlers = handlers
-
-            if getattr(self, "bot_client", None) is None:
-                self.bot_client = bot_client
-            else:
-                log.info("setup_mcub_inline: сохраняем существующий bot_client=%s",
-                         type(self.bot_client).__name__)
-            self.inline_bot = bot_manager
-
-            await handlers.register_handlers()
-            log.info("MCUB inline запущен, bot_client=%s", type(bot_client).__name__)
-        except Exception as e:
-            log.exception(f"Не удалось запустить MCUB inline: {e}")
-
+        log.info(
+            "MCUB InlineBot пропущен: inline работает через kernel.bot_client"
+        )
+        return
 
     def __init__(
         self,
