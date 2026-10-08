@@ -321,6 +321,36 @@ class DLMModule(Module):
     async def dlm_cmd(self, event, args):
         await self._show_main(event, is_cb=False)
 
+
+    async def _close_dlm(self, cb_event):
+        try:
+            await cb_event.answer()
+        except Exception:
+            pass
+        bot = getattr(self.kernel, "bot_client", None)
+        if bot is None:
+            return
+        data = getattr(cb_event, "data", b"")
+        if isinstance(data, bytes):
+            data = data.decode("utf-8", errors="replace")
+        imid = bot.get_inline_message_id(data)
+        if not imid:
+            return
+        text = _shell([
+            "dlm close",
+            "",
+            "status : menu closed",
+        ], cmd=None)
+        try:
+            from telethon.tl.functions.messages import EditInlineBotMessageRequest
+            parsed, entities = await bot.client._parse_message_text(text, "html")
+            kwargs = {"id": imid, "message": parsed}
+            if entities:
+                kwargs["entities"] = entities
+            await bot.client(EditInlineBotMessageRequest(**kwargs))
+        except Exception as e:
+            self.log.warning("[DLM] close failed: " + str(e))
+
     async def _send_menu_via_bot(self, cb_event, text, buttons):
         bot = getattr(self.kernel, "bot_client", None)
         if bot is None:
@@ -387,7 +417,12 @@ class DLMModule(Module):
                 await cb_event.answer("refreshing...")
                 await self._show_main(cb_event, is_cb=True, force_refresh=True, page=0)
 
-            buttons = [[kernel.inline.make_button("refresh", on_refresh_empty, ttl=600)]]
+            async def on_close_empty(cb):
+                await self._close_dlm(cb)
+            buttons = [
+                [kernel.inline.make_button("refresh", on_refresh_empty, ttl=600)],
+                [kernel.inline.make_button("close", on_close_empty, ttl=600)],
+            ]
         else:
             total = len(catalog)
             total_pages = max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE)
@@ -450,6 +485,10 @@ class DLMModule(Module):
                 await self._show_main(cb, is_cb=True, force_refresh=True, page=page)
 
             buttons.append([kernel.inline.make_button("refresh", on_refresh, ttl=600)])
+
+        async def on_close_main(cb):
+            await self._close_dlm(cb)
+        buttons.append([kernel.inline.make_button("close", on_close_main, ttl=600)])
 
         topic_id = None
         try:
@@ -518,12 +557,18 @@ class DLMModule(Module):
         async def on_back(cb_event):
             await self._show_main(cb_event, is_cb=True)
 
+        async def on_close_module(cb):
+            await self._close_dlm(cb)
+
         buttons = []
         if not installed:
             buttons.append([self.kernel.inline.make_button("install", on_download, ttl=600)])
         else:
             buttons.append([self.kernel.inline.make_button("update", on_download, ttl=600)])
-        buttons.append([self.kernel.inline.make_button("< back", on_back, ttl=600)])
+        buttons.append([
+            self.kernel.inline.make_button("< back", on_back, ttl=600),
+            self.kernel.inline.make_button("close", on_close_module, ttl=600),
+        ])
 
         await self._send_menu_via_bot(cb_event, text, buttons)
 
