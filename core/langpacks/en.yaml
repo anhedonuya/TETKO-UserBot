@@ -126,6 +126,13 @@ settings:
   setlang_unknown: 'unknown language: <code>{lang}</code>'
   setlang_changed: language changed to <code>{lang}</code>
 tek:
+  cfg_set_usage: "Usage: <code>.cfg set &lt;module&gt; &lt;key&gt; &lt;value&gt;</code>"
+  cfg_del_usage: "Usage: <code>.cfg del &lt;module&gt; &lt;key&gt;</code>"
+  cfg_set_done: "✅ <code>{key}</code> = <code>{value}</code>"
+  cfg_del_done: "🗑 Removed <code>{key}</code>"
+  menu_closed: "🗑 <i>Menu closed</i>"
+  updated: "Updated"
+  page: "{page}/{total}"
   description: Modules, commands, hiding, info
   cmd_tek: Modules and commands
   cmd_tekhide: Hide/show module

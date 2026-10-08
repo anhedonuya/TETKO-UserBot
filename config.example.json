@@ -11,5 +11,15 @@
     "shell_prompt": "%",
     "shell_host": "tetko",
     "shell_host_owner": "god",
-    "shell_host_overrides": {}
+    "shell_host_overrides": {},
+    "proxy": {
+        "enabled": false,
+        "type": "socks5",
+        "host": "",
+        "port": 0,
+        "user": "",
+        "password": "",
+        "secret": "",
+        "rdns": true
+    }
 }

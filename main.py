@@ -155,6 +155,13 @@ def first_run_setup(existing=None):
     cfg.setdefault("language", "en")
     cfg.setdefault("db_version", 2)
 
+    try:
+        ans = input(f"{C_BOLD}настроить прокси сейчас? (y/N){C_RESET}: ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        ans = "n"
+    if ans in ("y", "yes", "д", "да"):
+        setup_proxy_interactive(cfg)
+
     _save_config(cfg)
 
     print()
@@ -183,6 +190,116 @@ def load_config():
     if missing:
         return first_run_setup(cfg), True
     return cfg, False
+
+
+def apply_proxy(cfg):
+    proxy = cfg.get("proxy") or {}
+    if not proxy.get("enabled"):
+        return {}
+    ptype = (proxy.get("type") or "").lower()
+    host = proxy.get("host")
+    port = proxy.get("port")
+    if not host or not port:
+        return {}
+
+    try:
+        port = int(port)
+    except (TypeError, ValueError):
+        return {}
+
+    if ptype in ("socks5", "socks4", "http"):
+        from python_socks import ProxyType
+        tmap = {"socks5": ProxyType.SOCKS5, "socks4": ProxyType.SOCKS4, "http": ProxyType.HTTP}
+        pkw = {
+            "proxy_type": tmap[ptype],
+            "addr": host,
+            "port": port,
+            "rdns": bool(proxy.get("rdns", True)),
+        }
+        if proxy.get("user"):
+            pkw["username"] = proxy["user"]
+        if proxy.get("password"):
+            pkw["password"] = proxy["password"]
+        return {"proxy": pkw}
+
+    if ptype in ("mtproto", "mtproto_dd"):
+        from telethon.network.connection.tcpmtproxy import ConnectionTcpMTProxyRandomizedIntermediate
+        secret = proxy.get("secret") or ""
+        return {
+            "connection": ConnectionTcpMTProxyRandomizedIntermediate,
+            "proxy": (host, port, secret),
+        }
+
+    if ptype == "mtproto_ee":
+        from TelethonFakeTLS import ConnectionTcpMTProxyFakeTLS
+        secret = proxy.get("secret") or ""
+        return {
+            "connection": ConnectionTcpMTProxyFakeTLS,
+            "proxy": (host, port, secret),
+        }
+
+    return {}
+
+
+def _detect_mtproto_type(secret):
+    if not secret:
+        return "mtproto_dd"
+    s = secret.strip()
+    if s.startswith("dd") or s.startswith("ee"):
+        return "mtproto_ee" if s.startswith("ee") else "mtproto_dd"
+    if all(c in "0123456789abcdefABCDEF" for c in s) and len(s) in (32, 34):
+        return "mtproto_dd"
+    return "mtproto_ee"
+
+
+def setup_proxy_interactive(cfg):
+    print()
+    _arrow("proxy setup", color=C_CYAN)
+    _hint("socks5 / http / mtproto / skip")
+    print()
+    try:
+        raw = input(f"{C_BOLD}proxy type [skip]{C_RESET}: ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        print()
+        return
+    if not raw or raw in ("skip", "n", "no", "none"):
+        cfg.pop("proxy", None)
+        return
+
+    ptype = raw
+    if ptype == "socks":
+        ptype = "socks5"
+
+    try:
+        host = input(f"{C_BOLD}host{C_RESET}: ").strip()
+        port_raw = input(f"{C_BOLD}port{C_RESET}: ").strip()
+        port = int(port_raw)
+    except (EOFError, KeyboardInterrupt, ValueError):
+        _err("cancelled")
+        return
+
+    entry = {"enabled": True, "type": ptype, "host": host, "port": port}
+
+    if ptype in ("socks5", "socks4", "http"):
+        u = input(f"{C_BOLD}user (optional){C_RESET}: ").strip()
+        pw = input(f"{C_BOLD}password (optional){C_RESET}: ").strip()
+        if u:
+            entry["user"] = u
+        if pw:
+            entry["password"] = pw
+    elif ptype in ("mtproto", "mtproto_dd", "mtproto_ee"):
+        sec = input(f"{C_BOLD}secret{C_RESET}: ").strip()
+        if not sec:
+            _err("secret required")
+            return
+        entry["type"] = _detect_mtproto_type(sec) if ptype == "mtproto" else ptype
+        entry["secret"] = sec
+    else:
+        _err(f"unknown type: {ptype}")
+        return
+
+    cfg["proxy"] = entry
+    _ok(f"proxy saved: {entry.get('type')} {host}:{port}")
 
 
 def loading_banner(first_run=False):
@@ -274,11 +391,16 @@ async def main():
     _arrow("connecting to telegram", color=C_CYAN)
     sys.stdout.flush()
 
+    _proxy_kwargs = apply_proxy(cfg)
+    if _proxy_kwargs:
+        _pinfo = cfg.get("proxy") or {}
+        _arrow(f"proxy: {_pinfo.get('type')} {_pinfo.get('host')}:{_pinfo.get('port')}", color=C_CYAN)
     client = TelegramClient(
         session_name, api_id, api_hash,
         device_model="TETKO",
         system_version="TETKO",
         app_version=TETKO_VERSION,
+        **_proxy_kwargs,
     )
 
     await client.start(phone=phone)

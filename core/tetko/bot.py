@@ -6,7 +6,6 @@ import logging
 import re
 import secrets
 import time
-from typing import Any, Optional
 
 from telethon import TelegramClient, events
 from telethon.tl.functions.messages import (

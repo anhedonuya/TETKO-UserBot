@@ -126,6 +126,13 @@ settings:
   setlang_unknown: 'неизвестный язык: <code>{lang}</code>'
   setlang_changed: язык изменён на <code>{lang}</code>
 tek:
+  cfg_set_usage: "Использование: <code>.cfg set &lt;модуль&gt; &lt;ключ&gt; &lt;значение&gt;</code>"
+  cfg_del_usage: "Использование: <code>.cfg del &lt;модуль&gt; &lt;ключ&gt;</code>"
+  cfg_set_done: "✅ <code>{key}</code> = <code>{value}</code>"
+  cfg_del_done: "🗑 Удалён <code>{key}</code>"
+  menu_closed: "🗑 <i>Меню закрыто</i>"
+  updated: "Обновлено"
+  page: "{page}/{total}"
   description: Модули, команды, скрытие, инфо
   cmd_tek: Модули и команды
   cmd_tekhide: Скрыть/показать модуль
