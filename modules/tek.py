@@ -3,7 +3,7 @@ import time
 import logging
 import sys
 
-from core.tetko import Module, command, db_get, db_set
+from core.tetko import Module, command, db_get, db_set, shell
 
 START_TIME = time.time()
 log = logging.getLogger("TETKO.module.tek")
@@ -19,6 +19,24 @@ FB_SYS = '🔧'
 FB_USER = '👤'
 FB_Q = '❔'
 FB_TRASH = '🗑'
+
+
+PROMPT = shell.PROMPT
+
+
+def _esc(text):
+    if text is None:
+        return "-"
+    return str(text).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def _shell(lines, cmd=None):
+    return shell.wrap(lines, cmd=cmd, running=False, trailing=True)
+
+
+def _bq(msg):
+    return "<blockquote><b>" + msg + "</b></blockquote>"
+
 
 PAGE_SIZE = 10
 CMD_LIMIT = 3
@@ -148,28 +166,31 @@ class Tek(Module):
     async def _show_module_info(self, event, name: str):
         mod = self._find_module(name)
         if mod is None:
-            await event.edit(
-                "<blockquote>" + self._t("module_not_found", name=self._esc(name)) + "</blockquote>",
-                parse_mode="html",
-            )
+            await event.edit(_shell([
+                "tek " + str(name),
+                "",
+                "module not found",
+            ]), parse_mode="html")
             return
+        await self._render_module_info(event, mod, is_cb=False)
 
+    async def _render_module_info(self, event_or_cb, mod, is_cb: bool):
         lang_code = self._get_lang()
         if hasattr(mod, "get_description"):
             try:
                 desc = mod.get_description(lang_code)
             except Exception:
-                desc = "—"
+                desc = "-"
         else:
-            _d = getattr(mod, "description", "—")
+            _d = getattr(mod, "description", "-")
             if isinstance(_d, dict):
-                desc = _d.get(lang_code) or _d.get("ru") or _d.get("en") or next(iter(_d.values()), "—")
+                desc = _d.get(lang_code) or _d.get("ru") or _d.get("en") or next(iter(_d.values()), "-")
             else:
-                desc = _d or "—"
+                desc = _d or "-"
         if not isinstance(desc, str):
             desc = str(desc)
-        ver = getattr(mod, "version", "—")
-        author = getattr(mod, "author", "—")
+        ver = getattr(mod, "version", "-")
+        author = getattr(mod, "author", "-")
         compat = getattr(mod, "__compat__", None)
         if not compat:
             try:
@@ -177,58 +198,86 @@ class Tek(Module):
                 _is_mcub = any("MCUBModuleBase" in c.__name__ for c in mro)
             except Exception:
                 _is_mcub = False
-            compat = "mcub-compat" if _is_mcub else "—"
+            compat = "mcub" if _is_mcub else "-"
         is_sys = self._is_system(mod)
-        kind = self._t("kind_system") if is_sys else self._t("kind_user")
+        kind = "system" if is_sys else "user"
+
+        lines = [
+            "tek " + str(mod.name),
+            "",
+            "  version    " + str(ver),
+            "  kind       " + kind,
+            "  compat     " + str(compat),
+            "  author     " + str(author),
+        ]
+        if desc:
+            lines.append("")
+            lines.append("  desc       " + desc)
 
         cmds = self._cmds_for_module(mod)
         if cmds:
-            cmd_lines = []
+            lines.append("")
+            lines.append("  commands (" + str(len(cmds)) + ")")
+            _prefix = getattr(self.kernel, "prefix", ".") or "."
             for c in cmds:
-                _prefix = getattr(self.kernel, "prefix", ".") or "."
-                line = f"🪬 <code>{_prefix}{self._esc(c.name)}</code>"
+                line = "    " + _prefix + str(c.name)
                 if c.aliases:
-                    aliases = ", ".join(f"{_prefix}{self._esc(a)}" for a in c.aliases)
-                    line += f" [<i>{aliases}</i>]"
+                    line += "  (" + ", ".join(_prefix + str(a) for a in c.aliases) + ")"
                 if c.only_for:
-                    line += f" <i>({self._esc(c.only_for)})</i>"
+                    line += "  [" + str(c.only_for) + "]"
                 if c.doc:
-                    doc = c.doc if isinstance(c.doc, str) else (
+                    d = c.doc if isinstance(c.doc, str) else (
                         c.doc.get(lang_code) or c.doc.get("ru") or c.doc.get("en") or ""
                     )
-                    if doc:
-                        line += f" — {self._esc(doc)}"
-                cmd_lines.append(line)
-            cmds_block = "\n".join(cmd_lines)
-        else:
-            cmds_block = "<i>" + self._t("no_cmds") + "</i>"
+                    if d:
+                        line += "  - " + str(d)
+                lines.append(line)
 
-        header = self._t("module_header", name=self._esc(mod.name), version=self._esc(ver), kind=kind)
-        desc_line = self._t("module_desc", desc=self._esc(desc))
-        cmds_header = self._t("module_cmds", count=len(cmds))
-        author_line = self._t("module_author", author=self._esc(author))
-        compat_line = self._t("module_compat", compat=self._esc(compat))
+        text = _shell(lines)
 
-        text = (
-            f"<blockquote><b>{header}</b></blockquote>\n"
-            f"<blockquote>{desc_line}</blockquote>\n"
-            f"<blockquote><b>{cmds_header}</b>\n{cmds_block}</blockquote>\n"
-            f"<blockquote>{author_line}\n{compat_line}</blockquote>"
-        )
-        await event.edit(text, parse_mode="html")
+        async def on_back(cb):
+            await self._show_help(cb, is_cb=True)
 
-    async def _show_help(self, event_or_cb, is_cb: bool = False):
+        async def on_close(cb):
+            await self._close_tek(cb)
+
+        rows = [
+            [
+                self.kernel.inline.make_button("← back", on_back, ttl=600),
+                self.kernel.inline.make_button(FB_TRASH + " close", on_close, ttl=600),
+            ],
+        ]
+
+        if is_cb:
+            await self.kernel.inline.edit(event_or_cb, text, rows)
+            return
         bot = getattr(self.kernel, "bot_client", None)
         if bot is None:
+            await event_or_cb.edit(text, parse_mode="html")
             return
+        chat_id = event_or_cb.chat_id
+        try:
+            await event_or_cb.delete()
+        except Exception:
+            pass
+        await bot.send_inline_menu(
+            chat_id=chat_id,
+            key="tek_info_" + str(int(time.time())),
+            text=text,
+            buttons=rows,
+        )
 
-        premium = _premium(self.kernel)
+    async def _show_help(self, event_or_cb, is_cb: bool = False):
+        sys_mods, user_mods = self._modules_split()
+        total_cmds = len(self.kernel.registry._commands)
 
-        sys_emoji = FB_SYS
-        user_emoji = FB_USER
-        q_emoji = EMOJI_Q if premium else FB_Q
-
-        text = f"{self._t('help_title')} {q_emoji}{q_emoji}"
+        lines = [
+            "tek",
+            "",
+            "modules    sys: " + str(len(sys_mods)) + "  user: " + str(len(user_mods)),
+            "commands   " + str(total_cmds),
+        ]
+        text = _shell(lines)
 
         async def on_sys(cb):
             await self._show_list(cb, "system", 0)
@@ -236,148 +285,184 @@ class Tek(Module):
         async def on_user(cb):
             await self._show_list(cb, "user", 0)
 
-        buttons = [[
-            self.kernel.inline.make_button(f"{sys_emoji} {self._t('btn_sys')}", on_sys, ttl=600),
-            self.kernel.inline.make_button(f"{user_emoji} {self._t('btn_user')}", on_user, ttl=600),
-        ]]
+        async def on_hide(cb):
+            await self._show_hide(cb, is_cb=True, page=0)
+
+        async def on_close(cb):
+            await self._close_tek(cb)
+
+        rows = [
+            [
+                self.kernel.inline.make_button(FB_SYS + " sys", on_sys, ttl=600),
+                self.kernel.inline.make_button(FB_USER + " user", on_user, ttl=600),
+            ],
+            [
+                self.kernel.inline.make_button("👁 hide", on_hide, ttl=600),
+                self.kernel.inline.make_button(FB_TRASH + " close", on_close, ttl=600),
+            ],
+        ]
 
         if is_cb:
-            await self.kernel.inline.edit(event_or_cb, text, buttons)
-        else:
-            chat_id = event_or_cb.chat_id
-            try:
-                await event_or_cb.delete()
-            except Exception:
-                pass
-            await bot.send_inline_menu(
-                chat_id=chat_id,
-                key=f"tek_help_{int(time.time())}",
-                text=text,
-                buttons=buttons,
-            )
-
-    async def _show_list(self, cb_event, kind: str, page: int):
+            await self.kernel.inline.edit(event_or_cb, text, rows)
+            return
         bot = getattr(self.kernel, "bot_client", None)
         if bot is None:
+            await event_or_cb.edit(text, parse_mode="html")
             return
+        chat_id = event_or_cb.chat_id
+        try:
+            await event_or_cb.delete()
+        except Exception:
+            pass
+        await bot.send_inline_menu(
+            chat_id=chat_id,
+            key="tek_help_" + str(int(time.time())),
+            text=text,
+            buttons=rows,
+        )
 
-        premium = _premium(self.kernel)
+    async def _close_tek(self, cb):
+        try:
+            await cb.answer()
+        except Exception:
+            pass
+        text = _shell(["tek close", "", "status     menu closed"])
+        bot = getattr(self.kernel, "bot_client", None)
+        if bot is not None:
+            data = getattr(cb, "data", b"")
+            if isinstance(data, bytes):
+                data = data.decode("utf-8", errors="replace")
+            imid = getattr(cb, "inline_message_id", None) or bot.get_inline_message_id(data)
+            if imid:
+                try:
+                    from telethon.tl.functions.messages import EditInlineBotMessageRequest
+                    parsed, entities = await bot.client._parse_message_text(text, "html")
+                    kwargs = {"id": imid, "message": parsed}
+                    if entities:
+                        kwargs["entities"] = entities
+                    await bot.client(EditInlineBotMessageRequest(**kwargs))
+                    return
+                except Exception as e:
+                    log.warning("[TEK] close failed: " + str(e))
+        try:
+            await cb.edit(text, parse_mode="html", buttons=None)
+        except Exception:
+            pass
 
+    async def _show_list(self, cb_event, kind: str, page: int):
         sys_mods, user_mods = self._modules_split()
         mods = sys_mods if kind == "system" else user_mods
 
         total_pages = max(1, (len(mods) + PAGE_SIZE - 1) // PAGE_SIZE)
         page = max(0, min(page, total_pages - 1))
+        page_mods = mods[page * PAGE_SIZE:(page + 1) * PAGE_SIZE]
 
-        start = page * PAGE_SIZE
-        page_mods = mods[start:start + PAGE_SIZE]
+        lines = ["tek " + kind, ""]
+        if not page_mods:
+            lines.append("(no modules)")
+        else:
+            for mod in page_mods:
+                cmds = self._cmds_for_module(mod)
+                _prefix = getattr(self.kernel, "prefix", ".") or "."
+                name = str(mod.name)
+                if not cmds:
+                    lines.append("  " + name.ljust(16) + "(no commands)")
+                    continue
+                parts = []
+                for i, c in enumerate(cmds):
+                    if i >= CMD_LIMIT:
+                        parts.append("(+" + str(len(cmds) - CMD_LIMIT) + ")")
+                        break
+                    parts.append(_prefix + str(c.name))
+                lines.append("  " + name.ljust(16) + " ".join(parts))
+        if total_pages > 1:
+            lines.append("")
+            lines.append("page " + str(page + 1) + "/" + str(total_pages))
 
-        h1 = EMOJI_HEART1 if premium else "❤️"
-        h2 = EMOJI_HEART2 if premium else "❤️"
-        modules_line = self._t("modules_line", sys=len(sys_mods), user=len(user_mods))
-        text = (
-            f"{h1} <b>{self._t('title')}</b>\n"
-            f"{h2} <b>{modules_line}</b>\n\n"
-            "<blockquote expandable>"
-        )
-        for mod in page_mods:
-            text += self._module_line(mod, None) + "\n"
-        text += "</blockquote>"
+        text = _shell(lines)
 
         rows = []
+        chunk = []
+        for mod in page_mods:
+            async def on_mod(cb, name=mod.name):
+                await self._show_module_info_cb(cb, name)
+            chunk.append(self.kernel.inline.make_button(str(mod.name), on_mod, ttl=600))
+            if len(chunk) == 3:
+                rows.append(chunk)
+                chunk = []
+        if chunk:
+            rows.append(chunk)
+
         nav = []
         if page > 0:
             async def on_prev(cb, k=kind, p=page - 1):
                 await self._show_list(cb, k, p)
             nav.append(self.kernel.inline.make_button("<", on_prev, ttl=600))
 
-        async def on_noop(cb):
-            await cb.answer()
-        nav.append(self.kernel.inline.make_button("•", on_noop, ttl=600))
-
-        for i in range(total_pages):
-            if i == page:
-                continue
-            if len(nav) > 6:
-                break
-            async def on_page(cb, k=kind, p=i):
-                await self._show_list(cb, k, p)
-            nav.append(self.kernel.inline.make_button(str(i + 1), on_page, ttl=600))
+        if total_pages > 1:
+            async def on_noop(cb):
+                try:
+                    await cb.answer()
+                except Exception:
+                    pass
+            nav.append(self.kernel.inline.make_button(
+                str(page + 1) + "/" + str(total_pages), on_noop, ttl=600))
 
         if page < total_pages - 1:
             async def on_next(cb, k=kind, p=page + 1):
                 await self._show_list(cb, k, p)
             nav.append(self.kernel.inline.make_button(">", on_next, ttl=600))
-
-        rows.append(nav)
+        if nav:
+            rows.append(nav)
 
         async def on_back(cb):
             await self._show_help(cb, is_cb=True)
 
         async def on_close(cb):
-            try:
-                await cb.answer()
-            except Exception:
-                pass
-            bot = getattr(self.kernel, "bot_client", None)
-            if bot is None:
-                return
-            data = getattr(cb, "data", b"")
-            if isinstance(data, bytes):
-                data = data.decode("utf-8", errors="replace")
-            imid = getattr(cb, "inline_message_id", None) or bot.get_inline_message_id(data)
-            if not imid:
-                return
-            try:
-                from telethon.tl.functions.messages import EditInlineBotMessageRequest
-                await bot.client(EditInlineBotMessageRequest(
-                    id=imid,
-                    message=self._t("menu_closed"),
-                    reply_markup=None,
-                ))
-            except Exception as e:
-                log.warning(f"[TEK] close edit failed: {e}")
+            await self._close_tek(cb)
 
-        trash = FB_TRASH
         rows.append([
-            self.kernel.inline.make_button(f"← {self._t('back')}", on_back, ttl=600),
-            self.kernel.inline.make_button(f"{trash} {self._t('close')}", on_close, ttl=600),
+            self.kernel.inline.make_button("← back", on_back, ttl=600),
+            self.kernel.inline.make_button(FB_TRASH + " close", on_close, ttl=600),
         ])
 
         await self.kernel.inline.edit(cb_event, text, rows)
+
+    async def _show_module_info_cb(self, cb_event, name):
+        mod = self._find_module(name)
+        if mod is None:
+            await cb_event.answer("not found")
+            return
+        await self._render_module_info(cb_event, mod, is_cb=True)
 
     @command(name="tekhide", description="Скрыть/показать модуль")
     async def cmd_tekhide(self, event, args):
         await self._show_hide(event)
 
     async def _show_hide(self, event_or_cb, is_cb: bool = False, page: int = 0):
-        bot = getattr(self.kernel, "bot_client", None)
-        if bot is None:
-            return
-
-        premium = _premium(self.kernel)
         hidden = self._get_hidden()
-
         registry = self.kernel.registry
         all_mods = sorted(registry._modules.keys())
 
         total_pages = max(1, (len(all_mods) + PAGE_SIZE - 1) // PAGE_SIZE)
         page = max(0, min(page, total_pages - 1))
-        start = page * PAGE_SIZE
-        page_mods = all_mods[start:start + PAGE_SIZE]
+        page_mods = all_mods[page * PAGE_SIZE:(page + 1) * PAGE_SIZE]
 
-        page_line = self._t("page", page=page + 1, total=total_pages)
-        text = f"<b>{self._t('hide_title')}</b> ({page_line})\n\n"
-        text += "<blockquote expandable>"
+        lines = ["tekhide", ""]
         for name in page_mods:
-            mark = "🔒" if name in hidden else "▫️"
-            text += f"{mark} <code>{name}</code>\n"
-        text += "</blockquote>"
+            mark = "[x]" if name in hidden else "[ ]"
+            lines.append("  " + mark + " " + str(name))
+        if total_pages > 1:
+            lines.append("")
+            lines.append("page " + str(page + 1) + "/" + str(total_pages))
+
+        text = _shell(lines)
 
         rows = []
+        chunk = []
         for name in page_mods:
             is_hidden = name in hidden
-            label = f"✅ {name}" if is_hidden else f"▫️ {name}"
+            label = ("✅ " if is_hidden else "▫️ ") + str(name)
 
             async def on_toggle(cb, n=name, cur=is_hidden, p=page):
                 h = self._get_hidden()
@@ -388,16 +473,32 @@ class Tek(Module):
                     if n not in h:
                         h.append(n)
                 self._set_hidden(h)
-                await cb.answer(self._t("updated"))
+                try:
+                    await cb.answer("updated")
+                except Exception:
+                    pass
                 await self._show_hide(cb, is_cb=True, page=p)
 
-            rows.append([self.kernel.inline.make_button(label, on_toggle, ttl=600)])
+            chunk.append(self.kernel.inline.make_button(label, on_toggle, ttl=600))
+            if len(chunk) == 3:
+                rows.append(chunk)
+                chunk = []
+        if chunk:
+            rows.append(chunk)
 
         nav = []
         if page > 0:
             async def on_prev(cb, p=page - 1):
                 await self._show_hide(cb, is_cb=True, page=p)
             nav.append(self.kernel.inline.make_button("<", on_prev, ttl=600))
+        if total_pages > 1:
+            async def on_noop(cb):
+                try:
+                    await cb.answer()
+                except Exception:
+                    pass
+            nav.append(self.kernel.inline.make_button(
+                str(page + 1) + "/" + str(total_pages), on_noop, ttl=600))
         if page < total_pages - 1:
             async def on_next(cb, p=page + 1):
                 await self._show_hide(cb, is_cb=True, page=p)
@@ -409,55 +510,31 @@ class Tek(Module):
             await self._show_help(cb, is_cb=True)
 
         async def on_close(cb):
-            try:
-                await cb.answer()
-            except Exception:
-                pass
-            bot = getattr(self.kernel, "bot_client", None)
-            if bot is None:
-                return
-            data = getattr(cb, "data", b"")
-            if isinstance(data, bytes):
-                data = data.decode("utf-8", errors="replace")
-            imid = getattr(cb, "inline_message_id", None) or bot.get_inline_message_id(data)
-            if not imid:
-                return
-            try:
-                from telethon.tl.functions.messages import EditInlineBotMessageRequest
-                close_html = self._t("menu_closed")
-                try:
-                    parsed, entities = await bot.client._parse_message_text(close_html, "html")
-                except Exception:
-                    parsed, entities = close_html, None
-                await bot.client(EditInlineBotMessageRequest(
-                    id=imid,
-                    message=parsed,
-                    entities=entities,
-                    reply_markup=None,
-                ))
-            except Exception as e:
-                log.warning(f"[TEK] close edit failed: {e}")
+            await self._close_tek(cb)
 
-        trash = FB_TRASH
         rows.append([
-            self.kernel.inline.make_button(f"← {self._t('back')}", on_back, ttl=600),
-            self.kernel.inline.make_button(f"{trash} {self._t('close')}", on_close, ttl=600),
+            self.kernel.inline.make_button("← back", on_back, ttl=600),
+            self.kernel.inline.make_button(FB_TRASH + " close", on_close, ttl=600),
         ])
 
         if is_cb:
             await self.kernel.inline.edit(event_or_cb, text, rows)
-        else:
-            chat_id = event_or_cb.chat_id
-            try:
-                await event_or_cb.delete()
-            except Exception:
-                pass
-            await bot.send_inline_menu(
-                chat_id=chat_id,
-                key=f"tek_hide_{int(time.time())}",
-                text=text,
-                buttons=rows,
-            )
+            return
+        bot = getattr(self.kernel, "bot_client", None)
+        if bot is None:
+            await event_or_cb.edit(text, parse_mode="html")
+            return
+        chat_id = event_or_cb.chat_id
+        try:
+            await event_or_cb.delete()
+        except Exception:
+            pass
+        await bot.send_inline_menu(
+            chat_id=chat_id,
+            key="tek_hide_" + str(int(time.time())),
+            text=text,
+            buttons=rows,
+        )
 
     @command(
         name="setprefix",
