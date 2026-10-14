@@ -1,6 +1,6 @@
 # TETKO Version History
 
-## 0.0.10.1
+## 0.0.10.0
 - fix inline trust
 - langpacks??
 - docs upd
