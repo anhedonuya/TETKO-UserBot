@@ -435,6 +435,13 @@ async def main():
         except Exception as e:
             log.error(f"inline bot start failed: {e}")
 
+    try:
+        _h = getattr(kernel, "_tg_log", None)
+        if _h is not None:
+            _h.set_loop(asyncio.get_event_loop())
+    except Exception:
+        pass
+
     await kernel.start()
 
     _line = loading_banner(first_run=first_run)

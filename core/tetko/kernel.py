@@ -21,6 +21,7 @@ except Exception as _e:
 from core.tetko.inline import Inline as _TetkoInline
 from core.tetko.loader import ModuleLoader
 from core.tetko.registry import Registry
+from core.tetko.log_handler import TelegramLogHandler
 
 log = logging.getLogger("TETKO.tetko.kernel")
 
@@ -72,6 +73,11 @@ class Kernel:
         self.callback_permissions = _DummyCallbackPermissions()
 
         self.logger = log
+        try:
+            self._tg_log = TelegramLogHandler(self)
+            logging.getLogger().addHandler(self._tg_log)
+        except Exception as _e:
+            log.debug("log handler init failed: " + str(_e))
         self.CONFIG_FILE = "config.json"
         self.API_ID = int(self.config.get("api_id") or 0)
         self.API_HASH = str(self.config.get("api_hash") or "")
