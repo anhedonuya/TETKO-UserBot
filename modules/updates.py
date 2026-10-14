@@ -7,7 +7,7 @@ import os
 import sys
 from pathlib import Path
 
-from core.tetko import Module, command, db_get, db_set, db_del, shell
+from core.tetko import Module, command, loop, db_get, db_set, db_del, shell
 
 log = logging.getLogger("TETKO.module.updates")
 
@@ -41,7 +41,9 @@ class UpdatesModule(Module):
         "branch": "main",
         "auto_pull": False,
         "auto_restart": True,
+        "auto_check": True,
         "check_interval": 3600,
+        "notify_chat": True,
     }
 
     name = "Updates"
@@ -80,6 +82,96 @@ class UpdatesModule(Module):
             os.execv(sys.executable, [sys.executable, str(REPO_ROOT / "main.py")])
         except Exception as e:
             log.exception("restart failed: " + str(e))
+
+    async def _notify_chat(self, text, buttons=None):
+        """Отправить в log_chat_id через бота (или в чат owner'а)."""
+        if not self.cfg.get("notify_chat", True):
+            return None
+        chat_id = None
+        try:
+            chat_id = getattr(self.kernel, "log_chat_id", None)
+            if not chat_id and self.kernel.context is not None:
+                chat_id = self.kernel.context.admin_id
+        except Exception:
+            chat_id = None
+        if not chat_id:
+            return None
+        bot = getattr(self.kernel, "bot_client", None)
+        try:
+            if bot is not None:
+                return await bot.client.send_message(chat_id, text, parse_mode="html")
+            return await self.client.send_message(chat_id, text, parse_mode="html")
+        except Exception as e:
+            log.warning("updates notify failed: " + str(e))
+        return None
+
+    async def _check_remote_version(self):
+        """Вернуть (current, latest) или (None, None) если не удалось."""
+        try:
+            vm = getattr(self.kernel, "version_manager", None)
+            if vm is None:
+                return None, None
+            current = getattr(self.kernel, "VERSION", "0.0.0")
+            latest = await vm.get_latest_kernel_version()
+            return current, latest
+        except Exception as e:
+            log.debug("check remote version failed: " + str(e))
+            return None, None
+
+    @command(name="update_check", aliases=["updchk"], description="Check for new core version")
+    async def cmd_update_check(self, event, args):
+        await event.edit(_shell("git fetch --dry-run"), parse_mode="html")
+        current, latest = await self._check_remote_version()
+        if current is None or latest is None:
+            await event.edit(
+                _bq("update check") + "\n" + _shell("update check failed"),
+                parse_mode="html",
+            )
+            return
+        try:
+            from core.version import VersionManager
+            cmp = VersionManager.compare_versions(latest, current)
+        except Exception:
+            cmp = 0
+        status = "up to date" if cmp <= 0 else "update available"
+        await event.edit(
+            _bq("update check") + "\n" + _shell([
+                "current    " + str(current),
+                "latest     " + str(latest),
+                "status     " + status,
+            ]),
+            parse_mode="html",
+        )
+
+    @loop(interval=3600)
+    async def auto_check_loop(self):
+        if not self.cfg.get("auto_check", True):
+            return
+        current, latest = await self._check_remote_version()
+        if current is None or latest is None:
+            return
+        try:
+            from core.version import VersionManager
+            cmp = VersionManager.compare_versions(latest, current)
+        except Exception:
+            return
+        if cmp <= 0:
+            return
+        seen = db_get("updates", "notified_version")
+        if seen == latest:
+            return
+
+        text = _bq("⬆️ TETKO — доступно обновление") + "\n" + _shell([
+            "current    " + str(current),
+            "latest     " + str(latest),
+            "branch     " + str(self._branch()),
+        ])
+        msg = await self._notify_chat(text)
+        if msg is not None:
+            try:
+                db_set("updates", "notified_version", latest)
+            except Exception:
+                pass
 
     @command(name="update", aliases=["upd"], description="Pull TETKO from git", only_for="owner")
     async def cmd_update(self, event, args):

@@ -11,7 +11,7 @@ import time
 import aiohttp
 
 # version kernel TETKO
-__version__ = "0.0.9.19"
+__version__ = "0.0.10.0"
 VERSION = __version__
 
 
@@ -190,7 +190,7 @@ class VersionManager:
 
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.get(url, timeout=5) as resp:
+                async with session.get(url, timeout=15) as resp:
                     if resp.status == 200:
                         raw = await resp.text()
                         version = _parse_version_md(raw)

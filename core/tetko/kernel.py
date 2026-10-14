@@ -109,6 +109,20 @@ class Kernel:
         self.inline = _TetkoInline(kernel=self)
         from core.tetko.inline_manager import InlineManager as _InlineManager
         self.inline_manager = _InlineManager(self)
+
+        try:
+            from core.version import __version__ as _ver, VersionManager as _VM
+            self.VERSION = _ver
+            self.UPDATE_REPO = (
+                self.config.get("update_repo")
+                or "https://raw.githubusercontent.com/anhedonuya/TETKO-UserBot/main/"
+            )
+            self.version_manager = _VM(self)
+        except Exception as _e:
+            self.VERSION = "0.0.0"
+            self.UPDATE_REPO = ""
+            self.version_manager = None
+            log.debug("version manager init failed: " + str(_e))
         self._mcub_inline_handlers = None
         self._mcub_inline_bot = None
         if not hasattr(self, "inline_callback_map"):
