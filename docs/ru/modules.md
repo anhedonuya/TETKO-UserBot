@@ -1,146 +1,127 @@
-Гайд по написанию модулей для ядра TETKO (tetko-compat 0.0.9.0)
-================================================
+Гайд по модулям TETKO (tetko-compat 0.9.1)
+==========================================
 
-Это стиль модулей для TETKO UserBot. Если хочешь переписать старый модуль
-или написать новый — читай и делай по образцу.
-
+Версия ядра: 0.0.10.0. Стиль модулей: tetko-compat 0.9.1.
 
 1. Как выглядит модуль
 ----------------------
 
-Модуль — один .py файл в папке modules/. Внутри — класс, наследующий Module,
-и методы с декораторами.
+Модуль — один .py файл в modules/ (системный) или modules_custom/
+(пользовательский). Внутри — класс, унаследованный от Module, с методами
+и декораторами.
 
     from core.tetko import Module, command
 
 
-    class MyModule(Module):
-        name = "MyModule"
-        __compat__ = "0.0.9.0"
+    class Hello(Module):
+        name = "Hello"
+        __compat__ = "0.9.1"
         version = "1.0.0"
         author = "@username"
-        description = "Что делает модуль"
+        description = {"ru": "Приветствие", "en": "Greeter"}
 
         @command(name="hello", description="Поприветствовать")
         async def hello_cmd(self, event, args):
             await event.edit("👋 Привет!")
 
-Файл положить в modules/, назвать как угодно (hello.py, mymodule.py).
-Загрузчик сам найдёт класс и зарегистрирует.
-
+Загрузчик найдёт класс автоматически.
 
 2. Атрибуты класса
 ------------------
 
-  name          — обязательно, имя модуля (уникальное)
-  __compat__    — обязательно, версия API. Пиши "0.0.9.0"
-  version       — необязательно, версия модуля ("1.0.0")
-  author        — необязательно, автор
-  description   — необязательно, строка или {"ru": "...", "en": "..."}
-  config        — необязательно, дефолтный JSON-конфиг
-
+    name          имя модуля (уникальное)
+    __compat__    версия API, пиши "0.9.1"
+    version       версия модуля
+    author        автор
+    description   строка или {"ru": "...", "en": "...", "uk": "..."}
+    config        дефолтный JSON-конфиг (dict)
 
 3. Декораторы
 -------------
 
-3.1. @command(...) — команда
+@command(name=..., aliases=[...], description=..., doc=..., only_for=None)
 
-    @command(
-        name="ping",                   # без префикса. ".ping" вызовет
-        aliases=["p"],                 # алиасы
-        description="Измерить пинг",   # для .help
-        only_for="owner",              # "owner" — только владелец, None — всем
-    )
+    @command(name="ping", aliases=["p"], description="Пинг", only_for="owner")
     async def ping_cmd(self, event, args):
         ...
 
 Сигнатуры:
+    async def cmd(self, event)
+    async def cmd(self, event, args)
 
-    async def cmd(self, event):          # без аргументов
-    async def cmd(self, event, args):    # args — список строк после команды
+only_for="owner" — только владелец. None — всем.
 
-Пример с аргументами:
-
-    @command(name="echo")
-    async def echo_cmd(self, event, args):
-        # ".echo hello world"  →  args = ["hello", "world"]
-        await event.edit(" ".join(args) or "(пусто)")
-
-
-3.2. @watcher() — на все сообщения
+@watcher() — все входящие сообщения:
 
     @watcher()
     async def on_message(self, event):
         if "spam" in (event.raw_text or ""):
             await event.delete()
 
-
-3.3. @callback() — на inline-кнопки
+@callback() — inline-кнопки:
 
     @callback()
     async def on_button(self, event):
         data = event.data.decode() if isinstance(event.data, bytes) else event.data
-        if data == "my_button":
-            await event.answer("Нажато!")
+        if data == "btn1":
+            await event.answer("Нажато")
 
-ВНИМАНИЕ: @callback пока регистрируется, но не подключён к событиям
-Telethon. Будет позже.
+@loop(interval=секунды, autostart=True) — периодическая задача:
 
-
-3.4. @loop(interval=секунды) — периодическая задача
-
-    @loop(interval=60)
-    async def background_task(self):
-        self.log.info("Тик!")
-
-Стартует автоматически при запуске, останавливается при остановке.
-
+    @loop(interval=3600, autostart=True)
+    async def every_hour(self):
+        self.log.info("час прошёл")
 
 4. Хуки жизненного цикла
 ------------------------
 
-    class MyModule(Module):
-        async def on_load(self):
-            self.log.info("Модуль загружен!")
+    async def on_load(self):
+        self.log.info("загружен")
 
-        async def on_unload(self):
-            self.log.info("Модуль выгружается...")
-
+    async def on_unload(self):
+        self.log.info("выгружен")
 
 5. Что доступно внутри модуля
 -----------------------------
 
-    self.kernel          # объект Kernel
-    self.client          # TelegramClient
-    self.cfg             # ModuleConfig (JSON-конфиг модуля)
-    self.log             # logging.Logger
+    self.kernel     ядро
+    self.client     TelegramClient
+    self.cfg        ModuleConfig
+    self.log        логгер
+    self.strings    локализованные строки (см. §9)
+    self._t(key, **kwargs)   получить строку с подстановкой
 
 Через self.kernel:
 
-    self.kernel.context          # admin_id, prefix, language, handle_error
-    self.kernel.registry         # реестр модулей и команд
-    self.kernel.loader           # загрузчик
-    self.kernel.dispatcher       # диспетчер
-    self.kernel.config           # сырой config.json (dict)
+    self.kernel.config        config.json (dict)
+    self.kernel.context       admin_id, prefix, language
+    self.kernel.registry      реестр модулей и команд
+    self.kernel.loader        загрузчик
+    self.kernel.dispatcher    диспетчер
+    self.kernel.inline        inline API (см. §8)
+    self.kernel.inline_manager  права на inline
+    self.kernel.bot_client    inline-бот
+    self.kernel.version_manager  проверка версии ядра
+    self.kernel.log_chat_id   лог-чат
 
+6. Конфиг модуля
+----------------
 
-6. Конфиг модуля (сохраняется в JSON автоматически)
----------------------------------------------------
-
-    class MyModule(Module):
-        name = "MyModule"
+    class MyMod(Module):
+        name = "MyMod"
         config = {
             "enabled": True,
             "threshold": 5,
+            "greeting": "привет",
         }
 
         async def on_load(self):
-            enabled = self.cfg.get("enabled", True)     # читать
-            self.cfg.set("threshold", 10)               # писать
-            self.cfg.delete("message")                  # удалить
-            data = self.cfg.all()                       # всё
+            enabled = self.cfg.get("enabled", True)
+            self.cfg.set("threshold", 10)
+            self.cfg.delete("greeting")
+            data = self.cfg.all()
 
-Файл: data/tetko_config/MyModule.json
+Файл: data/tetko_config/<Name>.json
 
 API:
     cfg.get(key, default=None)
@@ -149,38 +130,131 @@ API:
     cfg.all()
     cfg[key], cfg[key] = value, key in cfg
 
+Редактирование в рантайме — команда .cfg (в модуле Tek).
 
 7. База данных
 --------------
 
     from core.tetko import db_get, db_set, db_del, db_list
 
-    db_set("mymodule", "users", [123, 456])          # сохранить
-    users = db_get("mymodule", "users", default=[])  # прочитать
-    db_del("mymodule", "users")                      # удалить
-    data = db_list("mymodule")                       # всё
+    db_set("mymodule", "users", [123, 456])
+    users = db_get("mymodule", "users", default=[])
+    db_del("mymodule", "users")
+    data = db_list("mymodule")
 
 Файл: data/tetko_db/<namespace>.json
-Namespace — обычно имя модуля.
 
+8. Inline-меню
+--------------
 
-8. Права
---------
+    async def _show(self, event):
+        buttons = [[
+            self.kernel.inline.make_button("Кнопка", self._on_click, ttl=600),
+        ]]
+        await self.kernel.inline.edit(event, "Текст", buttons)
 
-    @command(name="eval", only_for="owner")
-    async def eval_cmd(self, event, args):
-        ...
+    async def _on_click(self, event):
+        await self.kernel.inline.edit(event, "Нажато", [])
 
-  only_for="owner" — только владелец бота.
-  only_for=None    — всем.
+API:
+    kernel.inline.make_button(label, callback, ttl=600, style="primary")
+    kernel.inline.form(chat_id, text, buttons)
+    kernel.inline.edit(event_or_cb, text, buttons)
 
-Если не владелец — ответ: "🚫 Эта команда только для владельца."
+Стили кнопок: primary, success, danger.
 
+Кнопка-переключатель inline-запроса в поле ввода:
 
-9. Полный пример
+    {"label": "✏️ изменить", "kind": "switch_current", "query": "ключ "}
+
+9. Локализация
+--------------
+
+Строки модуля берутся из core/langpacks/<locale>.yaml по секции с именем
+модуля в нижнем регистре.
+
+    # core/langpacks/ru.yaml
+    mymodule:
+      greet: "Привет, {name}!"
+
+    # modules/mymodule.py
+    class MyMod(Module):
+        name = "mymodule"
+
+        @command(name="hi")
+        async def hi_cmd(self, event, args):
+            await event.edit(self._t("greet", name="мир"))
+
+Доступные локали: ru, en, uk. Смена языка — .setlang.
+
+10. Права (trusted)
+-------------------
+
+only_for="owner" — только владелец.
+only_for=None — всем.
+
+Проверка trusted в коде:
+
+    from modules.trusted import Trusted
+    users = await trusted._get_trusted_list()
+
+Категории: modules, loader, config, eval, terminal.
+Управление: .trustaccess, .sgroup, .trustcmd.
+
+11. Inline-права
 ----------------
 
-    """MyModule — пример модуля tetko-compat."""
+Кто может пользоваться inline-ботом — kernel.inline_manager (namespace
+inline_perm в БД).
+
+    allowed_users   [user_id, ...]
+    denied_users    [user_id, ...]
+    allowed_cmds    {cmd: [user_id, ...]}
+    denied_cmds     {cmd: [user_id, ...]}
+    everyone_mode   "all" | "groups" | "pm" | None
+
+Владелец (admin_id) всегда имеет доступ.
+
+12. Логи
+--------
+
+Все log.error / log.warning автоматически уходят в лог-чат (если задан
+log_chat_id). Настроить лог-чат — команда .logchat.
+
+    self.log.info("обычное сообщение")
+    self.log.warning("предупреждение → в лог-чат")
+    self.log.error("ошибка → в лог-чат")
+
+13. Pip-стиль вывода
+--------------------
+
+Для единого терминального дизайна используй core.tetko.shell:
+
+    from core.tetko import shell
+
+    text = shell.wrap([
+        "команда --флаг",
+        "",
+        "  параметр   значение",
+        "  статус     ok",
+    ], cmd="mycommand", trailing=True)
+    await event.edit(text, parse_mode="html")
+
+Результат — блок вида:
+
+    user@tetko:~$ mycommand --флаг
+
+      параметр   значение
+      статус     ok
+
+    user@tetko:~$
+
+Для сложных команд (ping, tek, cfg) применяется этот стиль.
+
+14. Полный пример
+-----------------
+
+    """MyModule — пример tetko-compat 0.9.1."""
     from __future__ import annotations
 
     from core.tetko import Module, command, loop, db_get, db_set
@@ -188,14 +262,12 @@ Namespace — обычно имя модуля.
 
     class MyModule(Module):
         name = "MyModule"
-        __compat__ = "0.0.9.0"
+        __compat__ = "0.9.1"
         version = "1.0.0"
         author = "@anhedonuya"
-        description = "Демо-модуль"
+        description = {"ru": "Демо", "en": "Demo"}
 
-        config = {
-            "greeting": "Привет!",
-        }
+        config = {"greeting": "Привет!"}
 
         async def on_load(self):
             self.log.info("MyModule загружен")
@@ -211,7 +283,7 @@ Namespace — обычно имя модуля.
             name = " ".join(args) if args else "мир"
             await event.edit(f"{greeting}, {name}!")
 
-        @command(name="counter", description="Счётчик запусков")
+        @command(name="counter", description="Счётчик")
         async def counter_cmd(self, event):
             count = db_get(self.name, "counter", 0) + 1
             db_set(self.name, "counter", count)
@@ -225,67 +297,38 @@ Namespace — обычно имя модуля.
         async def tick(self):
             self.log.debug("tick")
 
-
-10. Чего НЕ делать
+15. Чего не делать
 ------------------
 
-  - Не писать register(kernel) — это старый стиль.
-  - Не использовать kernel.register.command(...) — старый API.
-  - Не импортировать из core.lib.*, core.kernel.*, core.native.* —
-    их больше нет.
-  - Не использовать core_inline.*, utils.strings.Strings, core.langpacks —
-    не подключены.
-  - Не использовать kernel.db_get — есть db_get(namespace, key).
-  - Не использовать kernel.inline.form(...) — inline-меню пока нет.
-  - Не использовать kernel.ADMIN_ID — есть self.kernel.context.admin_id.
+- Не писать register(kernel) — старый стиль.
+- Не использовать kernel.register.command(...) — старый API.
+- Не использовать kernel.ADMIN_ID — есть self.kernel.context.admin_id.
+- Не использовать kernel.db_get — есть db_get(namespace, key).
+- Не импортировать из core.lib.* — только для MCUB-совместимости.
+- Не использовать core_inline.* напрямую.
 
+16. Минимальная заготовка
+-------------------------
 
-11. Если чего-то не хватает
----------------------------
-
-Если модулю нужна функциональность, которой нет в API (inline-меню,
-локализация, группы, ACL-категории) — скажи разработчику ядра.
-Не тащи из старого кода.
-
-
-12. Что готово в ядре сейчас
-----------------------------
-
-Работает:
-  - @command, @watcher, @callback, @loop
-  - Module, ModuleConfig
-  - Registry, ModuleLoader, EventDispatcher, Kernel
-  - db_get / db_set / db_del / db_list
-  - Context (admin_id, prefix, language, handle_error)
-  - only_for="owner"
-  - проверка __compat__
-  - баннер, console_reader
-
-В работе:
-  - @callback не подключён к events.CallbackQuery
-  - нет локализации
-  - нет inline-меню
-  - нет modules_custom/
-  - нет hot-reload
-  - нет прав кроме only_for="owner"
-
-
-13. Минимальная заготовка — копируй и пиши
-------------------------------------------
-
-    """НазваниеМодуля — краткое описание."""
+    """Название — краткое описание."""
     from __future__ import annotations
 
     from core.tetko import Module, command
 
 
-    class НазваниеМодуля(Module):
-        name = "НазваниеМодуля"
-        __compat__ = "0.0.9.0"
+    class Название(Module):
+        name = "Название"
+        __compat__ = "0.9.1"
         version = "1.0.0"
         author = "@username"
-        description = "Описание модуля"
+        description = {"ru": "Описание", "en": "Description"}
 
         @command(name="команда", description="Что делает")
         async def команда_cmd(self, event, args):
             await event.edit("Результат")
+
+17. Совместимость с MCUB
+------------------------
+
+Ядро поддерживает MCUB-модули через core.tetko.mcub_compat. Они
+загружаются наравне с tetko-compat, но писать новые лучше в tetko-compat.
