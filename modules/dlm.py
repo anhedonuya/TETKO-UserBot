@@ -29,6 +29,31 @@ def _esc(text):
     return str(text).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
+
+def _get_topic(event):
+    try:
+        rt = getattr(event, "reply_to", None)
+        if rt is None:
+            msg = getattr(event, "message", None)
+            if msg is not None:
+                rt = getattr(msg, "reply_to", None)
+        if rt is not None:
+            return getattr(rt, "reply_to_top_id", None) or getattr(rt, "reply_to_msg_id", None)
+        msg = getattr(event, "message", None)
+        if msg is not None:
+            for attr in ("reply_to_top_id", "reply_to_msg_id"):
+                val = getattr(msg, attr, None)
+                if val:
+                    return val
+        for attr in ("reply_to_top_id", "reply_to_msg_id"):
+            val = getattr(event, attr, None)
+            if val:
+                return val
+    except Exception:
+        pass
+    return None
+
+
 def _bq(msg):
     return "<blockquote><b>" + msg + "</b></blockquote>"
 
