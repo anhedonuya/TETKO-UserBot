@@ -355,13 +355,7 @@ class DLMModule(Module):
         bot = getattr(self.kernel, "bot_client", None)
         if bot is None:
             return
-        topic_id = None
-        try:
-            rt = getattr(cb_event, "reply_to", None)
-            if rt is not None:
-                topic_id = (getattr(rt, "reply_to_top_id", None) or getattr(rt, "reply_to_msg_id", None))
-        except Exception:
-            pass
+        topic_id = _get_topic(cb_event)
         peer = getattr(cb_event, "chat_id", None)
         if not peer:
             try:
@@ -490,13 +484,7 @@ class DLMModule(Module):
             await self._close_dlm(cb)
         buttons.append([kernel.inline.make_button("close", on_close_main, ttl=600)])
 
-        topic_id = None
-        try:
-            rt = getattr(event_or_cb, "reply_to", None)
-            if rt is not None:
-                topic_id = (getattr(rt, "reply_to_top_id", None) or getattr(rt, "reply_to_msg_id", None))
-        except Exception:
-            pass
+        topic_id = _get_topic(event_or_cb)
 
         if is_cb:
             await self._send_menu_via_bot(event_or_cb, text, buttons)

@@ -227,8 +227,20 @@ class BotClient:
         from telethon.tl.custom.inlineresult import InlineResult
         inline_results = [InlineResult(userbot, r, results.query_id) for r in results.results]
 
-        if topic_id:
-            reply_to_obj = InputReplyToMessage(reply_to_msg_id=topic_id, top_msg_id=topic_id)
+
+        _real_topic = None
+        try:
+            _tid = int(topic_id) if topic_id is not None else None
+            if _tid and _tid != 1:
+                _real_topic = _tid
+        except Exception:
+            _real_topic = None
+
+        if _real_topic:
+            reply_to_obj = InputReplyToMessage(
+                reply_to_msg_id=_real_topic,
+                top_msg_id=_real_topic,
+            )
             message = await userbot(SendInlineBotResultRequest(
                 peer=peer,
                 query_id=results.query_id,

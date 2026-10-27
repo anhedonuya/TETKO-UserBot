@@ -13,7 +13,11 @@ YELLOW = E + "[93m"
 RED = E + "[91m"
 GRAY = E + "[90m"
 
-if not sys.stdout.isatty():
+import os as _os
+
+_force = _os.environ.get("FORCE_COLOR", "").lower() in ("1", "true", "yes", "on")
+_no = _os.environ.get("NO_COLOR") is not None and _os.environ.get("NO_COLOR") != ""
+if _no or (not _force and not sys.stdout.isatty()):
     RESET = BOLD = DIM = GREEN = CYAN = YELLOW = RED = GRAY = ""
 
 

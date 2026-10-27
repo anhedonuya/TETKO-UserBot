@@ -34,6 +34,31 @@ def _shell(lines, cmd=None):
     return shell.wrap(lines, cmd=cmd, running=False, trailing=True)
 
 
+
+def _get_topic(event):
+    try:
+        rt = getattr(event, "reply_to", None)
+        if rt is None:
+            msg = getattr(event, "message", None)
+            if msg is not None:
+                rt = getattr(msg, "reply_to", None)
+        if rt is not None:
+            return getattr(rt, "reply_to_top_id", None) or getattr(rt, "reply_to_msg_id", None)
+        msg = getattr(event, "message", None)
+        if msg is not None:
+            for attr in ("reply_to_top_id", "reply_to_msg_id"):
+                val = getattr(msg, attr, None)
+                if val:
+                    return val
+        for attr in ("reply_to_top_id", "reply_to_msg_id"):
+            val = getattr(event, attr, None)
+            if val:
+                return val
+    except Exception:
+        pass
+    return None
+
+
 def _bq(msg):
     return "<blockquote><b>" + msg + "</b></blockquote>"
 
@@ -265,6 +290,7 @@ class Tek(Module):
             key="tek_info_" + str(int(time.time())),
             text=text,
             buttons=rows,
+            topic_id=_get_topic(event_or_cb),
         )
 
     async def _show_help(self, event_or_cb, is_cb: bool = False):
@@ -319,6 +345,7 @@ class Tek(Module):
             key="tek_help_" + str(int(time.time())),
             text=text,
             buttons=rows,
+            topic_id=_get_topic(event_or_cb),
         )
 
     async def _close_tek(self, cb):
@@ -534,6 +561,7 @@ class Tek(Module):
             key="tek_hide_" + str(int(time.time())),
             text=text,
             buttons=rows,
+            topic_id=_get_topic(event_or_cb),
         )
 
     @command(
@@ -1515,4 +1543,5 @@ class Tek(Module):
             key=f"cfgmenu_{int(time.time())}",
             text=text,
             buttons=rows,
+            topic_id=_get_topic(event_or_cb),
         )

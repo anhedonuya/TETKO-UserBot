@@ -56,7 +56,9 @@ C_MAG   = E + "95m"
 C_CYAN  = E + "96m"
 C_GRAY  = E + "90m"
 
-if not sys.stdout.isatty():
+_force_color = os.environ.get("FORCE_COLOR", "").lower() in ("1", "true", "yes", "on")
+_no_color = os.environ.get("NO_COLOR") is not None and os.environ.get("NO_COLOR") != ""
+if _no_color or (not _force_color and not sys.stdout.isatty()):
     C_RESET = C_BOLD = C_DIM = C_ITAL = C_UNDER = ""
     C_RED = C_GREEN = C_YELLOW = C_BLUE = C_MAG = C_CYAN = C_GRAY = ""
 
