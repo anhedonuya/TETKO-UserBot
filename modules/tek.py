@@ -1,1547 +1,1548 @@
-"""Tek — модули, инфо о системе."""
+# SPDX-License-Identifier: MIT
+# TETKO-UserBot
+# Authors: @anhedonuya, @flexOwnerAL
+from __future__ import annotations
+
+import asyncio
+import contextlib
+import json
+import os
 import time
-import logging
-import sys
+from html import escape
+from typing import Any
+from urllib.parse import urlparse
 
-from core.tetko import Module, command, db_get, db_set, shell
+from telethon.errors import BadRequestError
+from telethon.tl.types import (
+    DocumentAttributeImageSize,
+    InputMediaWebPage,
+    InputWebDocument,
+)
 
-START_TIME = time.time()
-log = logging.getLogger("TETKO.module.tek")
+from core.tetko import Module, command, shell
 
-EMOJI_SYS = '<tg-emoji emoji-id="6012473147998084083">🙏</tg-emoji>'
-EMOJI_USER = '<tg-emoji emoji-id="5208774197278447727">❤️</tg-emoji>'
-EMOJI_Q = '<tg-emoji emoji-id="6010208325843557447">❔</tg-emoji>'
-EMOJI_TRASH = '<tg-emoji emoji-id="5348118479847333898">🗑</tg-emoji>'
-EMOJI_HEART1 = '<tg-emoji emoji-id="5282797322969852134">❤️</tg-emoji>'
-EMOJI_HEART2 = '<tg-emoji emoji-id="5208814909273445904">❤️</tg-emoji>'
+CUSTOM_EMOJI = {
+    "crystal": '<tg-emoji emoji-id="5332762073388578651">🎮</tg-emoji>',
+    "dna": '<tg-emoji emoji-id="5332762073388578651">❔</tg-emoji>',
+    "alembic": '<tg-emoji emoji-id="5411243692960810848">🤔</tg-emoji>',
+    "snowflake": '<tg-emoji emoji-id="5431895003821513760">❄️</tg-emoji>',
+    "blocked": '<tg-emoji emoji-id="5332439413970469607">🚫</tg-emoji>',
+    "confused": '<tg-emoji emoji-id="5408830797513784663">❓</tg-emoji>',
+    "map": '<tg-emoji emoji-id="5332373172689860602">🚫</tg-emoji>',
+    "tot": '<tg-emoji emoji-id="5404696015318054899">▪️</tg-emoji>',
+    "eye_off": '<tg-emoji emoji-id="5228686859663585439">👁</tg-emoji>',
+    "bot": '<tg-emoji emoji-id="5372981976804366741">🤖</tg-emoji>',
+}
 
-FB_SYS = '🔧'
-FB_USER = '👤'
-FB_Q = '❔'
-FB_TRASH = '🗑'
+CUSTOM_EMOJI.update({
+    "📁": '<tg-emoji emoji-id="5433653135799228968">📁</tg-emoji>',
+    "📝": '<tg-emoji emoji-id="5334882760735598374">📝</tg-emoji>',
+    "📚": '<tg-emoji emoji-id="5373098009640836781">📚</tg-emoji>',
+    "📖": '<tg-emoji emoji-id="5226512880362332956">📖</tg-emoji>',
+    "💼": '<tg-emoji emoji-id="5359785904535774578">💼</tg-emoji>',
+    "☑️": '<tg-emoji emoji-id="5454096630372379732">☑️</tg-emoji>',
+    "➕": '<tg-emoji emoji-id="5226945370684140473">➕</tg-emoji>',
+    "➖": '<tg-emoji emoji-id="5229113891081956317">➖</tg-emoji>',
+    "✏️": '<tg-emoji emoji-id="5334673106202010226">✏️</tg-emoji>',
+    "❄️": '<tg-emoji emoji-id="5431895003821513760">❄️</tg-emoji>',
+    "🗂": '<tg-emoji emoji-id="5431736674147114227">🗂</tg-emoji>',
+    "📋": '<tg-emoji emoji-id="5431736674147114227">📋</tg-emoji>',
+    "⚙️": '<tg-emoji emoji-id="5332654441508119011">⚙️</tg-emoji>',
+    "🔢": '<tg-emoji emoji-id="5465154440287757794">🔢</tg-emoji>',
+    "🔙": '<tg-emoji emoji-id="5332600281970517875">🔙</tg-emoji>',
+    "✅": '<tg-emoji emoji-id="5118861066981344121">✅</tg-emoji>',
+    "❌": '<tg-emoji emoji-id="5370843963559254781">❌</tg-emoji>',
+    "🔄": '<tg-emoji emoji-id="5332600281970517875">🔄</tg-emoji>',
+    "🧩": '<tg-emoji emoji-id="5359785904535774578">🧩</tg-emoji>',
+    "🔧": '<tg-emoji emoji-id="5332654441508119011">🔧</tg-emoji>',
+    "🗳": '<tg-emoji emoji-id="5359741159566484212">🗳</tg-emoji>',
+    "📎": '<tg-emoji emoji-id="5377844313575150051">📎</tg-emoji>',
+    "💬": '<tg-emoji emoji-id="5465300082628763143">💬</tg-emoji>',
+    "🗯": '<tg-emoji emoji-id="5465132703458270101">🗯</tg-emoji>',
+    "📰": '<tg-emoji emoji-id="5433982607035474385">📰</tg-emoji>',
+    "🔍": '<tg-emoji emoji-id="5429283852684124412">🔍</tg-emoji>',
+    "🧊": '<tg-emoji emoji-id="5404728536810398694">🧊</tg-emoji>',
+})
+
+ZERO_WIDTH_CHAR = "\u2060"
+
+TYPE_EMOJIS = {
+    "str": "📝",
+    "int": "🔢",
+    "float": "🔢",
+    "bool": "☑️",
+    "list": "📚",
+    "dict": "🗂",
+    "NoneType": "🗳",
+    "hidden": "🔒",
+}
+LONG_VALUE_BLOCKQUOTE_LIMIT = 300
 
 
-PROMPT = shell.PROMPT
+def _truncate_key(key, max_length=15):
+    if len(key) > max_length:
+        return key[: max_length - 3] + "..."
+    return key
 
 
-def _esc(text):
-    if text is None:
+def _format_key_value(key, value, reveal=False):
+    value_type = type(value).__name__
+    type_emoji = TYPE_EMOJIS.get(value_type, "📎")
+    if isinstance(value, (dict, list)):
+        try:
+            formatted = json.dumps(value, ensure_ascii=False, indent=2)
+        except Exception:
+            formatted = str(value)
+        display = "<pre>%s</pre>" % escape(formatted)
+        if len(formatted) > LONG_VALUE_BLOCKQUOTE_LIMIT:
+            display = "<blockquote expandable>%s</blockquote>" % display
+    elif value is None:
+        display = "<code>null</code>"
+        type_emoji = TYPE_EMOJIS.get("NoneType", "🗳")
+    elif isinstance(value, bool):
+        display = "✔️ <code>true</code>" if value else "✖️ <code>false</code>"
+    elif isinstance(value, str):
+        escaped = escape(value)
+        display = "<code>%s</code>" % escaped
+        if len(value) > LONG_VALUE_BLOCKQUOTE_LIMIT:
+            display = "<blockquote expandable>%s</blockquote>" % display
+    else:
+        raw = str(value)
+        display = "<code>%s</code>" % escape(raw)
+        if len(raw) > LONG_VALUE_BLOCKQUOTE_LIMIT:
+            display = "<blockquote expandable>%s</blockquote>" % display
+    return type_emoji, value_type, display
+
+
+def esc(t):
+    if t is None:
         return "-"
-    return str(text).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    return str(t).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
-def _shell(lines, cmd=None):
-    return shell.wrap(lines, cmd=cmd, running=False, trailing=True)
+def _normalize_http_url(value: Any) -> str:
+    if not isinstance(value, str):
+        return ""
+    url = value.strip()
+    if not url:
+        return ""
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return ""
+    return url
 
 
-
-def _get_topic(event):
-    try:
-        rt = getattr(event, "reply_to", None)
-        if rt is None:
-            msg = getattr(event, "message", None)
-            if msg is not None:
-                rt = getattr(msg, "reply_to", None)
-        if rt is not None:
-            return getattr(rt, "reply_to_top_id", None) or getattr(rt, "reply_to_msg_id", None)
-        msg = getattr(event, "message", None)
-        if msg is not None:
-            for attr in ("reply_to_top_id", "reply_to_msg_id"):
-                val = getattr(msg, attr, None)
-                if val:
-                    return val
-        for attr in ("reply_to_top_id", "reply_to_msg_id"):
-            val = getattr(event, attr, None)
-            if val:
-                return val
-    except Exception:
-        pass
-    return None
-
-
-def _bq(msg):
-    return "<blockquote><b>" + msg + "</b></blockquote>"
-
-
-PAGE_SIZE = 10
-CMD_LIMIT = 3
-
-
-def _premium(kernel) -> bool:
-    try:
-        return bool(getattr(kernel.context, "user_premium", False))
-    except Exception:
+def _is_webpage_url_invalid_error(error: BaseException) -> bool:
+    if not isinstance(error, BadRequestError):
         return False
+    message = getattr(error, "message", "") or str(error)
+    return "WEBPAGE_URL_INVALID" in str(message)
 
+
+def _make_thumb(url: str) -> InputWebDocument:
+    return InputWebDocument(
+        url=url,
+        size=0,
+        mime_type="image/jpeg",
+        attributes=[DocumentAttributeImageSize(w=0, h=0)],
+    )
+
+
+
+def _tl_buttons(rows, kernel):
+    from telethon import Button
+    out = []
+    for row in rows:
+        tl_row = []
+        for b in row:
+            if not isinstance(b, dict) or "token" not in b:
+                continue
+            token = b["token"]
+            if isinstance(token, str):
+                token = token.encode("utf-8")
+            if len(token) > 64:
+                token = token[:64]
+            tl_row.append(Button.inline(b.get("label", "?"), data=token))
+        if tl_row:
+            out.append(tl_row)
+    return out or None
+
+
+CUSTOM_EMOJI.clear()
 
 class Tek(Module):
-    config = {
-        "page_size": 10,
-        "cmd_limit": 3,
-        "cfg_page_size": 6,
-        "cfg_keys_page": 20,
-        "menu_ttl": 600,
-    }
 
+    def _cfg_format_value(self, key, value):
+        value_type = type(value).__name__
+        type_emoji = {
+            "str": "📝", "int": "🔢", "float": "🔢", "bool": "☑️",
+            "list": "📚", "dict": "🗂", "NoneType": "🗳", "hidden": "🔒",
+        }.get(value_type, "📎")
+        if isinstance(value, (dict, list)):
+            try:
+                formatted_value = json.dumps(value, ensure_ascii=False, indent=2)
+            except Exception:
+                formatted_value = str(value)
+            display_value = "<pre>%s</pre>" % esc(formatted_value)
+            if len(formatted_value) > 300:
+                display_value = "<blockquote expandable>%s</blockquote>" % display_value
+        elif value is None:
+            display_value = "<code>null</code>"
+        elif isinstance(value, bool):
+            display_value = "✔️ <code>true</code>" if value else "✖️ <code>false</code>"
+        elif isinstance(value, str):
+            escaped_value = esc(value)
+            display_value = "<code>%s</code>" % escaped_value
+            if len(value) > 300:
+                display_value = "<blockquote expandable>%s</blockquote>" % display_value
+        else:
+            raw_value = str(value)
+            display_value = "<code>%s</code>" % esc(raw_value)
+            if len(raw_value) > 300:
+                display_value = "<blockquote expandable>%s</blockquote>" % display_value
+        return type_emoji, value_type, display_value
+
+    def _cfg_truncate_key(self, key, max_length=15):
+        if len(key) > max_length:
+            return key[: max_length - 3] + "..."
+        return key
+
+    def _cfg_truncate_module(self, name, max_length=12):
+        if len(name) > max_length:
+            return name[: max_length - 3] + "..."
+        return name
     name = "Tek"
-    __compat__ = "0.9.1"
-    version = "2.1.0"
-    author = "@anhedonuya & @flexownerAL"
+    __compat__ = "0.0.9.0"
+    version = "2.2.0"
+    author = "@anhedonuya & @flexOwnerAL"
     description = {
         "ru": "Модули, команды, скрытие, инфо",
         "en": "Modules, commands, hiding, info",
     }
 
-    def _get_hidden(self) -> list:
-        data = db_get("tek", "hidden", [])
-        return list(data) if isinstance(data, list) else []
+    config = {
+        "banner_url": "",
+        "invert_media": True,
+        "quote_media": True,
+        "modules_per_page": 10,
+        "emoji_system": "▫️",
+        "emoji_user": "▪️",
+        "emoji_no_cmd": "❔",
+        "emoji_error": "🚫",
+        "emoji_tot": "▪️",
+    }
 
-    def _set_hidden(self, hidden: list):
-        db_set("tek", "hidden", list(hidden))
+    config_sections = {
+        "View": ["banner_url", "invert_media", "quote_media", "modules_per_page"],
+        "Emoji": ["emoji_system", "emoji_user", "emoji_no_cmd", "emoji_error", "emoji_tot"],
+    }
 
-    def _is_system(self, mod) -> bool:
-        mod_file = getattr(mod, "__module__", "") or ""
+    config_schema = {
+        "banner_url": {"type": "str", "description": "Banner URL"},
+        "invert_media": {"type": "bool", "description": "Invert media"},
+        "quote_media": {"type": "bool", "description": "Send media in quotes"},
+        "modules_per_page": {"type": "int", "description": "Modules per page"},
+        "emoji_system": {"type": "str", "description": "System module emoji"},
+        "emoji_user": {"type": "str", "description": "User module emoji"},
+        "emoji_no_cmd": {"type": "str", "description": "No commands emoji"},
+        "emoji_error": {"type": "str", "description": "Error emoji"},
+        "emoji_tot": {"type": "str", "description": "List bullet emoji"},
+    }
+
+    def _repair_config(self) -> None:
         try:
-            import sys as _sys
-            from pathlib import Path as _Path
-            real_mod = _sys.modules.get(mod_file)
-            if real_mod and hasattr(real_mod, "__file__"):
-                path = _Path(real_mod.__file__).as_posix()
-                parts = path.split("/")
-                if "modules_custom" in parts:
-                    return False
-                if "modules" in parts:
-                    return True
+            cur = self.cfg.get("modules_per_page", 10)
+            cur = int(cur)
+            cur = max(1, min(50, cur))
+            self.cfg.set("modules_per_page", cur)
+        except Exception:
+            try:
+                self.cfg.set("modules_per_page", 10)
+            except Exception:
+                pass
+
+    async def on_load(self) -> None:
+        self._repair_config()
+
+
+    _CAT_EMOJI = {
+        "model": "🧠", "behavior": "🎭", "tools": "🛠", "tool": "🛠",
+        "session": "💬", "style": "🎨", "view": "👁", "emoji": "😀",
+        "hidden": "🙈", "other": "📦", "plugins": "🔌", "android": "📱",
+        "gateway": "🌐", "files": "📂", "interface": "🖼", "core": "⚙",
+        "context": "🧩", "prompt": "📝", "general": "⚙", "chat": "💬",
+        "network": "🌐", "logging": "📋", "memory": "🧠", "security": "🔒",
+    }
+
+    def _cat_emoji(self, name):
+        key = (name or "").strip().lower()
+        return self._CAT_EMOJI.get(key, "📂")
+
+    def _val_emoji(self, v, has_options=False):
+        if has_options:
+            return "🎯"
+        if isinstance(v, bool):
+            return "🟢" if v else "🔴"
+        if isinstance(v, int):
+            return "🔢"
+        if isinstance(v, float):
+            return "🔣"
+        if isinstance(v, list):
+            return "📋"
+        if isinstance(v, dict):
+            return "🗂"
+        if isinstance(v, str):
+            return "✏️"
+        if v is None:
+            return "∅"
+        return "⚙"
+
+    def _tl(self, rows):
+        if not rows:
+            return None
+        try:
+            from telethon.tl.types import (
+                KeyboardButtonCallback, KeyboardButtonStyle, KeyboardButtonRow,
+                ReplyInlineMarkup,
+            )
+            _STYLES = {
+                "primary": KeyboardButtonStyle(bg_primary=True),
+                "success": KeyboardButtonStyle(bg_success=True),
+                "danger": KeyboardButtonStyle(bg_danger=True),
+            }
+            out = []
+            for row in rows:
+                tl_row = []
+                for b in row:
+                    if not isinstance(b, dict) or "token" not in b:
+                        continue
+                    tok = b["token"]
+                    if isinstance(tok, str):
+                        tok = tok.encode("utf-8")
+                    if len(tok) > 64:
+                        tok = tok[:64]
+                    label = b.get("label", "?")
+                    style_name = b.get("style", "")
+                    style = _STYLES.get(style_name)
+                    if style is not None:
+                        tl_row.append(KeyboardButtonCallback(text=label, data=tok, style=style))
+                    else:
+                        tl_row.append(KeyboardButtonCallback(text=label, data=tok))
+                if tl_row:
+                    out.append(KeyboardButtonRow(buttons=tl_row))
+            if not out:
+                return None
+            return ReplyInlineMarkup(rows=out)
+        except Exception:
+            return None
+
+    def _get_bot_command_description(self, docs, lang: str) -> str:
+        if isinstance(docs, str):
+            return docs.strip()
+        if not isinstance(docs, dict) or not docs:
+            return ""
+        for locale in (lang, "ru", "en"):
+            v = docs.get(locale)
+            if isinstance(v, str) and v.strip():
+                return v.strip()
+        for v in docs.values():
+            if isinstance(v, str) and v.strip():
+                return v.strip()
+        return ""
+
+    def _get_bot_commands(self, module_name: str):
+        try:
+            owners = getattr(self.kernel, "bot_command_owners", {}) or {}
+            docs_by = getattr(self.kernel, "bot_command_docs", {}) or {}
+            if not isinstance(owners, dict):
+                return []
+            lang = self._get_lang()
+            wanted = module_name.lower()
+            out = []
+            for cmd, owner in owners.items():
+                owner_name = getattr(owner, "name", owner)
+                if str(owner_name).lower() != wanted:
+                    continue
+                cname = str(cmd).strip().lstrip("/")
+                if not cname:
+                    continue
+                desc = self._get_bot_command_description(docs_by.get(cmd, {}), lang)
+                out.append((cname, desc))
+            return out
+        except Exception:
+            return []
+
+    def _get_module_commands(self, module_name: str):
+        try:
+            reg = self.kernel.registry
+            mod = None
+            for n, m in reg._modules.items():
+                if n.lower() == module_name.lower():
+                    mod = m
+                    break
+            if mod is None:
+                return {}, {}, {}
+            cmds = {}
+            aliases = {}
+            descs = {}
+            for cmd in reg._commands.values():
+                if getattr(cmd, "module", None) is mod:
+                    cmds[cmd.name] = True
+                    if cmd.aliases:
+                        aliases[cmd.name] = list(cmd.aliases)
+                    if cmd.doc:
+                        descs[cmd.name] = str(cmd.doc)
+            return cmds, aliases, descs
+        except Exception:
+            return {}, {}, {}
+
+    async def _load_module_metadata(self, name: str, mod) -> dict:
+        fallback = {
+            "version": getattr(mod, "version", "?.?.?"),
+            "author": getattr(mod, "author", "?"),
+            "description": "-",
+            "description_i18n": {},
+            "banner_url": None,
+        }
+        try:
+            version = getattr(mod, "version", None)
+            if isinstance(version, str) and version.strip():
+                fallback["version"] = version.strip()
+            author = getattr(mod, "author", None)
+            if isinstance(author, str) and author.strip():
+                fallback["author"] = author.strip()
+            desc = getattr(mod, "description", None)
+            if isinstance(desc, dict):
+                fallback["description_i18n"] = desc
+                lang = self._get_lang()
+                fallback["description"] = desc.get(lang) or desc.get("ru") or desc.get("en") or next(iter(desc.values()), "-")
+            elif isinstance(desc, str) and desc.strip():
+                fallback["description"] = desc.strip()
+            for attr in ("banner_url", "banner", "image", "photo"):
+                b = getattr(mod, attr, None)
+                if isinstance(b, str) and b.strip():
+                    fallback["banner_url"] = b.strip()
+                    break
         except Exception:
             pass
-        return False
+        return fallback
+
+    def _get_lang(self) -> str:
+        try:
+            cfg = getattr(self.kernel, "config", None) or {}
+            return cfg.get("language", "ru") or "ru"
+        except Exception:
+            return "ru"
+
+    async def _build_module_detail(self, mod) -> tuple:
+        name = getattr(mod, "name", "?")
+        is_sys = self._is_system(mod)
+        meta = await self._load_module_metadata(name, mod)
+        cmds, aliases, descs = self._get_module_commands(name)
+
+        lang = self._get_lang()
+        i18n = meta.get("description_i18n") or {}
+        desc_text = i18n.get(lang) or i18n.get("ru") or i18n.get("en") or meta.get("description") or "-"
+
+        header_emoji = CUSTOM_EMOJI.get("dna")
+        author_emoji = CUSTOM_EMOJI.get("alembic")
+        tot = CUSTOM_EMOJI.get("tot")
+        confused = CUSTOM_EMOJI.get("confused")
+        no_cmd = CUSTOM_EMOJI.get("snowflake")
+
+        version = meta.get("version", "?")
+        author = meta.get("author", "?")
+        kind = "core" if is_sys else "user"
+
+        parts = []
+        parts.append('<p>%s <b>%s</b> <i>(v%s)</i></p>' % (header_emoji, esc(name), esc(str(version))))
+        if desc_text and desc_text != "-":
+            parts.append('<blockquote expandable>%s <i>%s</i></blockquote>' % (author_emoji, esc(desc_text)))
+        parts.append('<blockquote>%s <i>kind: %s</i></blockquote>' % (tot, esc(kind)))
+
+        if cmds:
+            lines = []
+            _prefix = getattr(self.kernel, "prefix", ".") or "."
+            for cname in cmds:
+                cdesc = descs.get(cname) or "%s no description" % confused
+                line = "%s <code>%s%s</code> - <b>%s</b>" % (tot, esc(_prefix), esc(cname), esc(str(cdesc)))
+                if cname in aliases:
+                    al = aliases[cname]
+                    if isinstance(al, str):
+                        al = [al]
+                    if al:
+                        line += " | aliases: " + ", ".join("<code>%s%s</code>" % (esc(_prefix), esc(a)) for a in al)
+                lines.append(line)
+            parts.append('<blockquote expandable>%s</blockquote>' % chr(10).join(lines))
+        else:
+            parts.append('<blockquote>%s <i>no commands</i></blockquote>' % no_cmd)
+
+        bot_cmds = self._get_bot_commands(name)
+        if bot_cmds:
+            bot_emoji = CUSTOM_EMOJI.get("bot")
+            lines = []
+            for cname, cdesc in bot_cmds:
+                line = "%s <code>/%s</code>" % (bot_emoji, esc(cname))
+                if cdesc:
+                    line += " - <b>%s</b>" % esc(cdesc)
+                lines.append(line)
+            parts.append('<blockquote expandable>%s</blockquote>' % chr(10).join(lines))
+
+        parts.append('<blockquote>%s <b>author:</b> <i>%s</i></blockquote>' % (author_emoji, esc(str(author))))
+
+        text = chr(10).join(parts)
+        banner = _normalize_http_url(meta.get("banner_url") or "")
+        return text, banner
+
+    def _add_banner_preview(self, text: str, banner_url: str) -> str:
+        if not banner_url:
+            return text
+        return '<a href="%s">%s</a>%s' % (escape(banner_url, quote=True), ZERO_WIDTH_CHAR, text)
+
+    async def _edit_with_banner(self, event_or_cb, text: str, banner_url: str):
+        banner_url = _normalize_http_url(banner_url)
+        if not banner_url:
+            try:
+                return await event_or_cb.edit(text, parse_mode="html")
+            except Exception as e:
+                self.log.warning("edit failed: %s", e)
+                return None
+        try:
+            return await event_or_cb.edit(
+                self._add_banner_preview(text, banner_url),
+                parse_mode="html",
+                file=InputMediaWebPage(banner_url, optional=True),
+                invert_media=bool(self.cfg.get("invert_media", True)),
+            )
+        except BadRequestError as e:
+            if _is_webpage_url_invalid_error(e):
+                try:
+                    return await event_or_cb.edit(text, parse_mode="html")
+                except Exception as _e:
+                    self.log.warning("edit no banner failed: %s", _e)
+                    return None
+            self.log.warning("edit banner failed: %s", e)
+            return None
+        except TypeError:
+            try:
+                return await event_or_cb.edit(text, parse_mode="html")
+            except Exception as _e:
+                self.log.warning("edit fallback failed: %s", _e)
+                return None
+        except Exception as e:
+            self.log.warning("edit banner unexpected: %s", e)
+            return None
+
+    def _get_paginated_data(self, page: int, mods_sys, mods_user, page_cb=None, close_cb=None, ttl: int = 900):
+        sys_mods = sorted(mods_sys, key=lambda m: getattr(m, "name", ""))
+        usr_mods = sorted(mods_user, key=lambda m: getattr(m, "name", ""))
+        try:
+            per_page = int(self.cfg.get("modules_per_page", 10))
+        except Exception:
+            per_page = 10
+        per_page = max(1, min(50, per_page))
+
+        usr_chunks = [usr_mods[i: i + per_page] for i in range(0, len(usr_mods), per_page)] or [[]]
+        total_pages = max(1, len(usr_chunks))
+        page = max(0, min(page, total_pages - 1))
+
+        emoji_sys = self.cfg.get("emoji_system") or "▫️"
+        emoji_usr = self.cfg.get("emoji_user") or "▪️"
+        emoji_no = self.cfg.get("emoji_no_cmd") or "❔"
+
+        def line_for(mod) -> str:
+            name = getattr(mod, "name", "?")
+            icon = getattr(mod, "icon", None) or "◼"
+            is_sys = self._is_system(mod)
+            emoji = emoji_sys if is_sys else emoji_usr
+            cmds, _, _ = self._get_module_commands(name)
+            _prefix = getattr(self.kernel, "prefix", ".") or "."
+            if cmds:
+                names = list(cmds.keys())[:3]
+                cmd_text = ", ".join("<code>%s%s</code>" % (esc(_prefix), esc(c)) for c in names)
+                if len(cmds) > 3:
+                    cmd_text += " (+%d)" % (len(cmds) - 3)
+                return "%s %s <code>%s</code>: %s" % (emoji, icon, esc(name), cmd_text)
+            return "%s %s <code>%s</code>: <i>%s</i>" % (emoji_no, icon, esc(name), "no commands")
+
+        if page == 0:
+            parts = ["<p>modules: sys <code>%d</code> | user <code>%d</code></p>" % (len(sys_mods), len(usr_mods))]
+            if sys_mods:
+                parts.append("<blockquote expandable>%s</blockquote>" % chr(10).join(line_for(m) for m in sys_mods))
+            if usr_chunks[0]:
+                parts.append("<blockquote expandable>%s</blockquote>" % chr(10).join(line_for(m) for m in usr_chunks[0]))
+        else:
+            parts = ["<p><b>page %d / %d</b></p>" % (page + 1, total_pages)]
+            parts.append("<blockquote expandable>%s</blockquote>" % chr(10).join(line_for(m) for m in usr_chunks[page]))
+
+        buttons = []
+        page_row = []
+        if page_cb is not None:
+            page_row.append(self.kernel.inline.make_button("<", page_cb, args=[max(0, page - 1)], ttl=ttl))
+            if total_pages <= 7:
+                for i in range(total_pages):
+                    label = "•" if i == page else str(i + 1)
+                    page_row.append(self.kernel.inline.make_button(label, page_cb, args=[i], ttl=ttl))
+            else:
+                page_row.append(self.kernel.inline.make_button(str(page + 1), page_cb, args=[page], ttl=ttl))
+            page_row.append(self.kernel.inline.make_button(">", page_cb, args=[min(total_pages - 1, page + 1)], ttl=ttl))
+            buttons.append(page_row)
+        if close_cb is not None:
+            buttons.append([self.kernel.inline.make_button("❌ close", close_cb, ttl=ttl)])
+
+        return chr(10).join(parts), buttons
+
+    async def _tek_page_cb(self, cb_event, page: int):
+        try:
+            await cb_event.answer()
+        except Exception:
+            pass
+        sys_mods, usr_mods = self._modules_split()
+        text, buttons = self._get_paginated_data(page, sys_mods, usr_mods, page_cb=self._tek_page_cb, close_cb=self._tek_close_cb)
+        banner = _normalize_http_url(self.cfg.get("banner_url") or "")
+        try:
+            if banner:
+                await cb_event.edit(
+                    self._add_banner_preview(text, banner),
+                    buttons=self._tl(buttons),
+                    parse_mode="html",
+                    file=InputMediaWebPage(banner, optional=True),
+                    invert_media=bool(self.cfg.get("invert_media", True)),
+                )
+            else:
+                await cb_event.edit(text, buttons=self._tl(buttons), parse_mode="html")
+        except Exception as e:
+            self.log.warning("page cb edit failed: %s", e)
+
+    async def _tek_close_cb(self, cb_event):
+        try:
+            await cb_event.answer()
+        except Exception:
+            pass
+        try:
+            await cb_event.delete()
+        except Exception as e:
+            self.log.warning("close cb failed: %s", e)
+
+    def _is_system(self, mod) -> bool:
+        name = getattr(mod, "name", "") or ""
+        if not name:
+            return True
+        try:
+            from pathlib import Path
+            if (Path("modules_custom") / (name + ".py")).exists():
+                return False
+        except Exception:
+            pass
+        return True
 
     def _modules_split(self):
-        registry = self.kernel.registry
-        hidden = self._get_hidden()
-        sys_mods, user_mods = [], []
-        for name, mod in registry._modules.items():
-            if name in hidden:
-                continue
-            if self._is_system(mod):
-                sys_mods.append(mod)
-            else:
-                user_mods.append(mod)
-        return sys_mods, user_mods
+        sys_mods = []
+        usr_mods = []
+        hidden = set(self._get_hidden())
+        try:
+            reg = self.kernel.registry
+            all_mods = getattr(reg, "_modules", {}) or {}
+            for name, mod in all_mods.items():
+                if name in hidden:
+                    continue
+                try:
+                    is_sys = self._is_system(mod)
+                except Exception:
+                    is_sys = False
+                if is_sys:
+                    sys_mods.append(mod)
+                else:
+                    usr_mods.append(mod)
+        except Exception as e:
+            self.log.warning("modules_split failed: %s", e)
+        return sys_mods, usr_mods
 
-    def _cmds_for_module(self, mod) -> list:
-        registry = self.kernel.registry
-        _mod_name = getattr(mod, "name", None) or type(mod).__name__
+    def _modules_split_all(self):
+        sys_mods, usr_mods = self._modules_split()
+        return {"core": sys_mods, "user": usr_mods, "all": sys_mods + usr_mods}
 
-        result = []
-        for cmd in registry._commands.values():
-            cmd_mod = getattr(cmd, "module", None)
-            if cmd_mod is mod:
-                result.append(cmd)
-                continue
-            _cmd_mod_name = getattr(cmd_mod, "name", None) or (
-                type(cmd_mod).__name__ if cmd_mod is not None else None
-            )
-            if _cmd_mod_name == _mod_name:
-                result.append(cmd)
+    def _cmds_for_module(self, mod):
+        try:
+            reg = self.kernel.registry
+            return [c for c in reg._commands.values() if getattr(c, "module", None) is mod]
+        except Exception:
+            return []
 
-        result.sort(key=lambda c: c.name)
-        return result
-
-    def _module_line(self, mod, lang: str) -> str:
-        cmds = self._cmds_for_module(mod)
-        if not cmds:
-            return f"▫️ <b>{mod.name}</b>: <i>{self._t('no_cmds')}</i>"
-
-        _prefix = getattr(self.kernel, "prefix", ".") or "."
-        parts = []
-        for i, cmd in enumerate(cmds):
-            if i >= CMD_LIMIT:
-                parts.append(f"(+{len(cmds) - CMD_LIMIT})")
-                break
-            s = f"<code>{_prefix}{self._esc(cmd.name)}</code>"
-            if cmd.aliases:
-                aliases = ", ".join(f"{_prefix}{self._esc(a)}" for a in cmd.aliases)
-                s += f" [<i>{aliases}</i>]"
-            parts.append(s)
-        return f"▫️ <b>{mod.name}</b>: " + ", ".join(parts)
-
-    def _find_module(self, name: str):
-        registry = self.kernel.registry
-        if name in registry._modules:
-            return registry._modules[name]
-        low = name.lower()
-        for n, m in registry._modules.items():
-            if n.lower() == low:
-                return m
-        return None
-
-    def _esc(self, t) -> str:
-        if t is None:
-            return "—"
-        return str(t).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-
-    @command(name="tek", description="Модули и команды")
+    @command(name="tek", description="Modules and commands list")
     async def cmd_tek(self, event, args):
         if args:
-            await self._show_module_info(event, args[0])
+            await self._show_module(event, args[0])
             return
         await self._show_help(event)
 
-    async def _show_module_info(self, event, name: str):
-        mod = self._find_module(name)
-        if mod is None:
-            await event.edit(_shell([
-                "tek " + str(name),
-                "",
-                "module not found",
-            ]), parse_mode="html")
-            return
-        await self._render_module_info(event, mod, is_cb=False)
-
-    async def _render_module_info(self, event_or_cb, mod, is_cb: bool):
-        lang_code = self._get_lang()
-        if hasattr(mod, "get_description"):
+    async def _show_help(self, event):
+        sys_mods, usr_mods = self._modules_split()
+        text, _ = self._get_paginated_data(0, sys_mods, usr_mods)
+        banner = _normalize_http_url(self.cfg.get("banner_url") or "")
+        if banner:
             try:
-                desc = mod.get_description(lang_code)
-            except Exception:
-                desc = "-"
-        else:
-            _d = getattr(mod, "description", "-")
-            if isinstance(_d, dict):
-                desc = _d.get(lang_code) or _d.get("ru") or _d.get("en") or next(iter(_d.values()), "-")
-            else:
-                desc = _d or "-"
-        if not isinstance(desc, str):
-            desc = str(desc)
-        ver = getattr(mod, "version", "-")
-        author = getattr(mod, "author", "-")
-        compat = getattr(mod, "__compat__", None)
-        if not compat:
-            try:
-                mro = type(mod).__mro__
-                _is_mcub = any("MCUBModuleBase" in c.__name__ for c in mro)
-            except Exception:
-                _is_mcub = False
-            compat = "mcub" if _is_mcub else "-"
-        is_sys = self._is_system(mod)
-        kind = "system" if is_sys else "user"
-
-        lines = [
-            "tek " + str(mod.name),
-            "",
-            "  version    " + str(ver),
-            "  kind       " + kind,
-            "  compat     " + str(compat),
-            "  author     " + str(author),
-        ]
-        if desc:
-            lines.append("")
-            lines.append("  desc       " + desc)
-
-        cmds = self._cmds_for_module(mod)
-        if cmds:
-            lines.append("")
-            lines.append("  commands (" + str(len(cmds)) + ")")
-            _prefix = getattr(self.kernel, "prefix", ".") or "."
-            for c in cmds:
-                line = "    " + _prefix + str(c.name)
-                if c.aliases:
-                    line += "  (" + ", ".join(_prefix + str(a) for a in c.aliases) + ")"
-                if c.only_for:
-                    line += "  [" + str(c.only_for) + "]"
-                if c.doc:
-                    d = c.doc if isinstance(c.doc, str) else (
-                        c.doc.get(lang_code) or c.doc.get("ru") or c.doc.get("en") or ""
-                    )
-                    if d:
-                        line += "  - " + str(d)
-                lines.append(line)
-
-        text = _shell(lines)
-
-        async def on_back(cb):
-            await self._show_help(cb, is_cb=True)
-
-        async def on_close(cb):
-            await self._close_tek(cb)
-
-        rows = [
-            [
-                self.kernel.inline.make_button("← back", on_back, ttl=600),
-                self.kernel.inline.make_button(FB_TRASH + " close", on_close, ttl=600),
-            ],
-        ]
-
-        if is_cb:
-            await self.kernel.inline.edit(event_or_cb, text, rows)
-            return
-        bot = getattr(self.kernel, "bot_client", None)
-        if bot is None:
-            await event_or_cb.edit(text, parse_mode="html")
-            return
-        chat_id = event_or_cb.chat_id
-        try:
-            await event_or_cb.delete()
-        except Exception:
-            pass
-        await bot.send_inline_menu(
-            chat_id=chat_id,
-            key="tek_info_" + str(int(time.time())),
-            text=text,
-            buttons=rows,
-            topic_id=_get_topic(event_or_cb),
-        )
-
-    async def _show_help(self, event_or_cb, is_cb: bool = False):
-        sys_mods, user_mods = self._modules_split()
-        total_cmds = len(self.kernel.registry._commands)
-
-        lines = [
-            "tek",
-            "",
-            "modules    sys: " + str(len(sys_mods)) + "  user: " + str(len(user_mods)),
-            "commands   " + str(total_cmds),
-        ]
-        text = _shell(lines)
-
-        async def on_sys(cb):
-            await self._show_list(cb, "system", 0)
-
-        async def on_user(cb):
-            await self._show_list(cb, "user", 0)
-
-        async def on_hide(cb):
-            await self._show_hide(cb, is_cb=True, page=0)
-
-        async def on_close(cb):
-            await self._close_tek(cb)
-
-        rows = [
-            [
-                self.kernel.inline.make_button(FB_SYS + " sys", on_sys, ttl=600),
-                self.kernel.inline.make_button(FB_USER + " user", on_user, ttl=600),
-            ],
-            [
-                self.kernel.inline.make_button("👁 hide", on_hide, ttl=600),
-                self.kernel.inline.make_button(FB_TRASH + " close", on_close, ttl=600),
-            ],
-        ]
-
-        if is_cb:
-            await self.kernel.inline.edit(event_or_cb, text, rows)
-            return
-        bot = getattr(self.kernel, "bot_client", None)
-        if bot is None:
-            await event_or_cb.edit(text, parse_mode="html")
-            return
-        chat_id = event_or_cb.chat_id
-        try:
-            await event_or_cb.delete()
-        except Exception:
-            pass
-        await bot.send_inline_menu(
-            chat_id=chat_id,
-            key="tek_help_" + str(int(time.time())),
-            text=text,
-            buttons=rows,
-            topic_id=_get_topic(event_or_cb),
-        )
-
-    async def _close_tek(self, cb):
-        try:
-            await cb.answer()
-        except Exception:
-            pass
-        text = _shell(["tek close", "", "status     menu closed"])
-        bot = getattr(self.kernel, "bot_client", None)
-        if bot is not None:
-            data = getattr(cb, "data", b"")
-            if isinstance(data, bytes):
-                data = data.decode("utf-8", errors="replace")
-            imid = getattr(cb, "inline_message_id", None) or bot.get_inline_message_id(data)
-            if imid:
-                try:
-                    from telethon.tl.functions.messages import EditInlineBotMessageRequest
-                    parsed, entities = await bot.client._parse_message_text(text, "html")
-                    kwargs = {"id": imid, "message": parsed}
-                    if entities:
-                        kwargs["entities"] = entities
-                    await bot.client(EditInlineBotMessageRequest(**kwargs))
-                    return
-                except Exception as e:
-                    log.warning("[TEK] close failed: " + str(e))
-        try:
-            await cb.edit(text, parse_mode="html", buttons=None)
-        except Exception:
-            pass
-
-    async def _show_list(self, cb_event, kind: str, page: int):
-        sys_mods, user_mods = self._modules_split()
-        mods = sys_mods if kind == "system" else user_mods
-
-        total_pages = max(1, (len(mods) + PAGE_SIZE - 1) // PAGE_SIZE)
-        page = max(0, min(page, total_pages - 1))
-        page_mods = mods[page * PAGE_SIZE:(page + 1) * PAGE_SIZE]
-
-        lines = ["tek " + kind, ""]
-        if not page_mods:
-            lines.append("(no modules)")
-        else:
-            for mod in page_mods:
-                cmds = self._cmds_for_module(mod)
-                _prefix = getattr(self.kernel, "prefix", ".") or "."
-                name = str(mod.name)
-                if not cmds:
-                    lines.append("  " + name.ljust(16) + "(no commands)")
-                    continue
-                parts = []
-                for i, c in enumerate(cmds):
-                    if i >= CMD_LIMIT:
-                        parts.append("(+" + str(len(cmds) - CMD_LIMIT) + ")")
-                        break
-                    parts.append(_prefix + str(c.name))
-                lines.append("  " + name.ljust(16) + " ".join(parts))
-        if total_pages > 1:
-            lines.append("")
-            lines.append("page " + str(page + 1) + "/" + str(total_pages))
-
-        text = _shell(lines)
-
-        rows = []
-        chunk = []
-        for mod in page_mods:
-            async def on_mod(cb, name=mod.name):
-                await self._show_module_info_cb(cb, name)
-            chunk.append(self.kernel.inline.make_button(str(mod.name), on_mod, ttl=600))
-            if len(chunk) == 3:
-                rows.append(chunk)
-                chunk = []
-        if chunk:
-            rows.append(chunk)
-
-        nav = []
-        if page > 0:
-            async def on_prev(cb, k=kind, p=page - 1):
-                await self._show_list(cb, k, p)
-            nav.append(self.kernel.inline.make_button("<", on_prev, ttl=600))
-
-        if total_pages > 1:
-            async def on_noop(cb):
-                try:
-                    await cb.answer()
-                except Exception:
-                    pass
-            nav.append(self.kernel.inline.make_button(
-                str(page + 1) + "/" + str(total_pages), on_noop, ttl=600))
-
-        if page < total_pages - 1:
-            async def on_next(cb, k=kind, p=page + 1):
-                await self._show_list(cb, k, p)
-            nav.append(self.kernel.inline.make_button(">", on_next, ttl=600))
-        if nav:
-            rows.append(nav)
-
-        async def on_back(cb):
-            await self._show_help(cb, is_cb=True)
-
-        async def on_close(cb):
-            await self._close_tek(cb)
-
-        rows.append([
-            self.kernel.inline.make_button("← back", on_back, ttl=600),
-            self.kernel.inline.make_button(FB_TRASH + " close", on_close, ttl=600),
-        ])
-
-        await self.kernel.inline.edit(cb_event, text, rows)
-
-    async def _show_module_info_cb(self, cb_event, name):
-        mod = self._find_module(name)
-        if mod is None:
-            await cb_event.answer("not found")
-            return
-        await self._render_module_info(cb_event, mod, is_cb=True)
-
-    @command(name="tekhide", description="Скрыть/показать модуль")
-    async def cmd_tekhide(self, event, args):
-        await self._show_hide(event)
-
-    async def _show_hide(self, event_or_cb, is_cb: bool = False, page: int = 0):
-        hidden = self._get_hidden()
-        registry = self.kernel.registry
-        all_mods = sorted(registry._modules.keys())
-
-        total_pages = max(1, (len(all_mods) + PAGE_SIZE - 1) // PAGE_SIZE)
-        page = max(0, min(page, total_pages - 1))
-        page_mods = all_mods[page * PAGE_SIZE:(page + 1) * PAGE_SIZE]
-
-        lines = ["tekhide", ""]
-        for name in page_mods:
-            mark = "[x]" if name in hidden else "[ ]"
-            lines.append("  " + mark + " " + str(name))
-        if total_pages > 1:
-            lines.append("")
-            lines.append("page " + str(page + 1) + "/" + str(total_pages))
-
-        text = _shell(lines)
-
-        rows = []
-        chunk = []
-        for name in page_mods:
-            is_hidden = name in hidden
-            label = ("✅ " if is_hidden else "▫️ ") + str(name)
-
-            async def on_toggle(cb, n=name, cur=is_hidden, p=page):
-                h = self._get_hidden()
-                if cur:
-                    if n in h:
-                        h.remove(n)
-                else:
-                    if n not in h:
-                        h.append(n)
-                self._set_hidden(h)
-                try:
-                    await cb.answer("updated")
-                except Exception:
-                    pass
-                await self._show_hide(cb, is_cb=True, page=p)
-
-            chunk.append(self.kernel.inline.make_button(label, on_toggle, ttl=600))
-            if len(chunk) == 3:
-                rows.append(chunk)
-                chunk = []
-        if chunk:
-            rows.append(chunk)
-
-        nav = []
-        if page > 0:
-            async def on_prev(cb, p=page - 1):
-                await self._show_hide(cb, is_cb=True, page=p)
-            nav.append(self.kernel.inline.make_button("<", on_prev, ttl=600))
-        if total_pages > 1:
-            async def on_noop(cb):
-                try:
-                    await cb.answer()
-                except Exception:
-                    pass
-            nav.append(self.kernel.inline.make_button(
-                str(page + 1) + "/" + str(total_pages), on_noop, ttl=600))
-        if page < total_pages - 1:
-            async def on_next(cb, p=page + 1):
-                await self._show_hide(cb, is_cb=True, page=p)
-            nav.append(self.kernel.inline.make_button(">", on_next, ttl=600))
-        if nav:
-            rows.append(nav)
-
-        async def on_back(cb):
-            await self._show_help(cb, is_cb=True)
-
-        async def on_close(cb):
-            await self._close_tek(cb)
-
-        rows.append([
-            self.kernel.inline.make_button("← back", on_back, ttl=600),
-            self.kernel.inline.make_button(FB_TRASH + " close", on_close, ttl=600),
-        ])
-
-        if is_cb:
-            await self.kernel.inline.edit(event_or_cb, text, rows)
-            return
-        bot = getattr(self.kernel, "bot_client", None)
-        if bot is None:
-            await event_or_cb.edit(text, parse_mode="html")
-            return
-        chat_id = event_or_cb.chat_id
-        try:
-            await event_or_cb.delete()
-        except Exception:
-            pass
-        await bot.send_inline_menu(
-            chat_id=chat_id,
-            key="tek_hide_" + str(int(time.time())),
-            text=text,
-            buttons=rows,
-            topic_id=_get_topic(event_or_cb),
-        )
-
-    @command(
-        name="setprefix",
-        aliases=["prefix"],
-        description="Сменить префикс команд",
-        only_for="owner",
-    )
-    async def cmd_setprefix(self, event, args):
-        if not args:
-            cur = self.kernel.prefix
-            await event.edit(
-                self._t("prefix_current", prefix=self._esc(cur))
-                + "\n"
-                + self._t("prefix_usage"),
-                parse_mode="html",
-            )
-            return
-
-        new_prefix = args[0].strip()
-
-        if not new_prefix:
-            await event.edit(self._t("prefix_empty"), parse_mode="html")
-            return
-        if len(new_prefix) > 3:
-            await event.edit(self._t("prefix_too_long"), parse_mode="html")
-            return
-        if new_prefix.isspace():
-            await event.edit(self._t("prefix_space"), parse_mode="html")
-            return
-
-        old_prefix = self.kernel.prefix
-
-        self.kernel.prefix = new_prefix
-        if hasattr(self.kernel, "context") and self.kernel.context is not None:
-            self.kernel.context.prefix = new_prefix
-        if hasattr(self.kernel, "dispatcher") and self.kernel.dispatcher is not None:
-            self.kernel.dispatcher.prefix = new_prefix
-        kk = getattr(self.kernel, "_k", None)
-        if kk is not None and hasattr(kk, "_custom_prefix"):
-            kk._custom_prefix = new_prefix
-
-        try:
-            import json
-            from pathlib import Path as _Path
-            cfg_path = _Path("config.json")
-            if cfg_path.exists():
-                cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
-                cfg["command_prefix"] = new_prefix
-                cfg_path.write_text(
-                    json.dumps(cfg, ensure_ascii=False, indent=2),
-                    encoding="utf-8",
+                await event.edit(
+                    self._add_banner_preview(text, banner),
+                    parse_mode="html",
+                    file=InputMediaWebPage(banner, optional=True),
+                    invert_media=bool(self.cfg.get("invert_media", True)),
                 )
+                return
+            except Exception as e:
+                self.log.warning("show_help banner failed: %s", e)
+        try:
+            await event.edit(text, parse_mode="html")
         except Exception as e:
-            log.warning(f"setprefix: save failed: {e}")
+            self.log.warning("show_help failed: %s", e)
 
-        await event.edit(
-            self._t("prefix_changed", old=self._esc(old_prefix), new=self._esc(new_prefix)),
-            parse_mode="html",
-        )
-
-    @command(
-        name="ftekcfg",
-        aliases=["fkcfg"],
-        description="Force set/delete module config key",
-        only_for="owner",
-    )
-    async def cmd_ftekcfg(self, event, args):
-        from core.tetko import shell as _sh
-
-        def _out(lines, cmd=None, running=False):
-            return _sh.wrap(lines, cmd=cmd or "ftekcfg", running=running, trailing=True)
-
-        if not args:
-            await event.edit(_out([
-                "usage : ftekcfg set [-f] <Module> <key> <value>",
-                "        ftekcfg del <Module> <key>",
-                "        ftekcfg list <Module>",
-                "",
-                "flag  : -f — force create key if it does not exist",
-            ]), parse_mode="html")
-            return
-
-        sub = args[0].lower()
-
-        if sub == "set":
-            rest = list(args[1:])
-            force = False
-            if rest and rest[0] == "-f":
-                force = True
-                rest = rest[1:]
-            if len(rest) < 3:
-                await event.edit(_out([
-                    "usage : ftekcfg set [-f] <Module> <key> <value>",
-                    "error : not enough arguments",
-                ]), parse_mode="html")
-                return
-            module = rest[0]
-            key = rest[1]
-            value = " ".join(rest[2:])
-            data = self._cfg_read(module)
-            if data is None:
-                await event.edit(_out([
-                    "error : config not found",
-                    "        module: " + module,
-                ]), parse_mode="html")
-                return
-            if not force and key not in data:
-                await event.edit(_out([
-                    "error : key does not exist: " + key,
-                    "        use -f to force create",
-                ]), parse_mode="html")
-                return
-            parsed = self._parse_cfg_value(value)
-            data[key] = parsed
-            self._cfg_write(module, data)
-            await event.edit(_out([
-                "saved",
-                "  module : " + module,
-                "  key    : " + key,
-                "  value  : " + str(parsed),
-                "  force  : " + str(force).lower(),
-            ]), parse_mode="html")
-            return
-
-        if sub == "del":
-            rest = list(args[1:])
-            if len(rest) < 2:
-                await event.edit(_out([
-                    "usage : ftekcfg del <Module> <key>",
-                ]), parse_mode="html")
-                return
-            module, key = rest[0], rest[1]
-            data = self._cfg_read(module)
-            if data is None:
-                await event.edit(_out([
-                    "error : config not found: " + module,
-                ]), parse_mode="html")
-                return
-            if key not in data:
-                await event.edit(_out([
-                    "error : key not found: " + key,
-                ]), parse_mode="html")
-                return
-            data.pop(key, None)
-            self._cfg_write(module, data)
-            await event.edit(_out([
-                "removed",
-                "  module : " + module,
-                "  key    : " + key,
-            ]), parse_mode="html")
-            return
-
-        if sub == "list":
-            if len(args) < 2:
-                await event.edit(_out([
-                    "usage : ftekcfg list <Module>",
-                ]), parse_mode="html")
-                return
-            module = args[1]
-            data = self._cfg_read(module)
-            if data is None:
-                await event.edit(_out([
-                    "error : config not found: " + module,
-                ]), parse_mode="html")
-                return
-            lines = ["module : " + module, "keys   : " + str(len(data)), ""]
-            for k, v in data.items():
-                val = str(v)
-                if len(val) > 60:
-                    val = val[:60] + "..."
-                lines.append("  " + k + " = " + val)
-            await event.edit(_sh.wrap(lines, cmd="ftekcfg list " + module, trailing=True), parse_mode="html")
-            return
-
-        await event.edit(_out([
-            "error : unknown subcommand: " + sub,
-            "        try: set, del, list",
-        ]), parse_mode="html")
-
-    @command(name="tekcfg", description="System state")
-    async def cmd_tekcfg(self, event, args):
-        try:
-            from core.tetko import shell as _sh
-            from core.tetko import __compat__ as _compat
-        except Exception:
-            _sh = None
-            _compat = "?"
-
-        uptime = round(time.time() - START_TIME)
-        hours, remainder = divmod(uptime, 3600)
-        minutes, seconds = divmod(remainder, 60)
-
-        registry = self.kernel.registry
-        total_mods = len(registry._modules)
-        total_cmds = len(registry._commands)
-        premium = _premium(self.kernel)
-
-        try:
-            py = sys.version.split()[0]
-        except Exception:
-            py = "?"
-
-        lines = [
-            "uptime    : " + str(hours) + "h " + str(minutes) + "m " + str(seconds) + "s",
-            "modules   : " + str(total_mods),
-            "commands  : " + str(total_cmds),
-            "python    : " + py,
-            "style     : tetko-compat " + str(_compat),
-            "premium   : " + str(premium).lower(),
-            "authors   : @anhedonuya, @flexownerAL",
-        ]
-        if _sh is not None:
-            text = _sh.wrap(lines, cmd="tekcfg", trailing=True)
-        else:
-            body = "flexOwnerAL@xhost:~% tekcfg\n\n" + "\n".join(lines) + "\n\nflexOwnerAL@xhost:~% "
-            esc = body.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-            text = "<pre>" + esc + "</pre>"
-        await event.edit(text, parse_mode="html")
-
-
-    def _cfg_dir(self):
-        from pathlib import Path
-        return Path("data/tetko_config")
-
-    def _cfg_list(self):
-        d = self._cfg_dir()
-        if not d.exists():
-            return []
-        return sorted(p.stem for p in d.glob("*.json"))
-
-    def _cfg_read(self, module: str):
-        import json
-        from pathlib import Path
-        p = self._cfg_dir() / f"{module}.json"
-        if not p.exists():
-            return None
-        try:
-            return json.loads(p.read_text(encoding="utf-8"))
-        except Exception:
-            return None
-
-    def _cfg_write(self, module: str, data: dict):
-        import json
-        from pathlib import Path
-        d = self._cfg_dir()
-        d.mkdir(parents=True, exist_ok=True)
-        p = d / f"{module}.json"
-        p.write_text(json.dumps(data, ensure_ascii=False, indent=4), encoding="utf-8")
-
-        # refresh живого ModuleConfig (без рестарта)
-        try:
-            for _name, _mod in self.kernel.registry._modules.items():
-                if _name == module or getattr(_mod, "name", "") == module:
-                    mc = getattr(_mod, "_config", None)
-                    if mc is not None and hasattr(mc, "_load"):
-                        mc._load()
-                        self.log.info("[cfg] refreshed ModuleConfig: %s", module)
-                    break
-        except Exception as _e:
-            self.log.warning("[cfg] refresh failed: %s", _e)
-
-    @command(name="cfg", aliases=["mcfg", "moduleconfig"], description="Конфиги модулей")
-    async def cmd_cfg(self, event, args):
-        self.log.debug(f"[cfg] вызвана, args={args!r}")
-        if not args:
-            await self._cfg_show_menu(event)
-            return
-
-        sub = args[0].lower()
-
-        if sub in ("system", "sys", "системные"):
-            await self._cfg_show_list(event, kind="system", page=0)
-            return
-        if sub in ("user", "custom", "пользовательские"):
-            await self._cfg_show_list(event, kind="user", page=0)
-            return
-
-        if sub == "set":
-            if len(args) < 4:
-                await event.edit(self._t("cfg_set_usage"), parse_mode="html")
-                return
-            mod, key = args[1], args[2]
-            value = " ".join(args[3:])
-            data = self._cfg_read(mod)
-            if data is None:
-                await event.edit(self._t("cfg_not_found", module=self._esc(mod)), parse_mode="html")
-                return
-            parsed = self._parse_cfg_value(value)
-            data[key] = parsed
-            self._cfg_write(mod, data)
-            await event.edit(self._t("cfg_set_done", key=self._esc(key), value=self._esc(str(parsed))), parse_mode="html")
-            return
-
-        if sub == "del":
-            if len(args) < 3:
-                await event.edit(self._t("cfg_del_usage"), parse_mode="html")
-                return
-            mod, key = args[1], args[2]
-            data = self._cfg_read(mod)
-            if data is None:
-                await event.edit(self._t("cfg_not_found", module=self._esc(mod)), parse_mode="html")
-                return
-            if key not in data:
-                await event.edit(self._t("cfg_key_not_found", key=self._esc(key)), parse_mode="html")
-                return
-            data.pop(key, None)
-            self._cfg_write(mod, data)
-            await event.edit(self._t("cfg_del_done", key=self._esc(key)), parse_mode="html")
-            return
-
-        await self._cfg_show_module(event, args[0])
-
-    @staticmethod
-    def _parse_cfg_value(s: str):
-        low = s.lower()
-        if low in ("true", "yes", "on"):
-            return True
-        if low in ("false", "no", "off"):
-            return False
-        if low == "null" or low == "none":
-            return None
-        try:
-            return int(s)
-        except ValueError:
-            pass
-        try:
-            return float(s)
-        except ValueError:
-            pass
-        if (s.startswith("[") and s.endswith("]")) or (s.startswith("{") and s.endswith("}")):
+    async def _show_module(self, event, query: str):
+        mod = self._find_module(query)
+        if mod is None:
+            err = self.cfg.get("emoji_error") or "🚫"
             try:
-                import json
-                return json.loads(s)
+                await event.edit("%s <b>module not found:</b> <code>%s</code>" % (err, esc(query)), parse_mode="html")
             except Exception:
                 pass
-        return s
+            return
+        text, banner = await self._build_module_detail(mod)
+        if banner:
+            try:
+                await event.edit(
+                    self._add_banner_preview(text, banner),
+                    parse_mode="html",
+                    file=InputMediaWebPage(banner, optional=True),
+                    invert_media=bool(self.cfg.get("invert_media", True)),
+                )
+                return
+            except Exception as e:
+                self.log.warning("show_module banner failed: %s", e)
+        try:
+            await event.edit(text, parse_mode="html")
+        except Exception as e:
+            self.log.warning("show_module failed: %s", e)
 
-    def _cfg_kind(self, name: str) -> str:
-        reg = getattr(self.kernel, "registry", None)
-        if reg is not None:
-            for mod_name, mod in reg._modules.items():
-                if mod_name.lower() == name.lower():
-                    return "system" if self._is_system(mod) else "user"
-        from pathlib import Path as _P
-        for p_name, kind in (("modules", "system"), ("modules_custom", "user")):
-            d = _P(p_name)
-            if d.exists():
-                for f in d.glob("*.py"):
-                    if f.stem.lower() == name.lower():
-                        return kind
-        return "orphan"
+    def _find_module(self, name: str):
+        try:
+            reg = self.kernel.registry
+            for n, m in reg._modules.items():
+                if n.lower() == name.lower():
+                    return m
+            return None
+        except Exception:
+            return None
 
-    async def _cfg_show_menu(self, event_or_cb, is_cb: bool = False):
-        text = self._t("cfg_choose_section")
-        rows = []
+    def _get_hidden(self) -> list:
+        try:
+            raw = self.cfg.get("hidden_modules") or []
+            if isinstance(raw, str):
+                return json.loads(raw)
+            if isinstance(raw, list):
+                return list(raw)
+        except Exception:
+            pass
+        return []
 
-        async def on_sys(cb):
-            await self._cfg_show_list(cb, is_cb=True, kind="system", page=0)
+    def _save_hidden(self, hidden: list) -> None:
+        try:
+            self.cfg.set("hidden_modules", hidden)
+        except Exception:
+            pass
 
-        async def on_user(cb):
-            await self._cfg_show_list(cb, is_cb=True, kind="user", page=0)
+    @command(name="tekhide", description="Hide module from tek list")
+    async def cmd_tekhide(self, event, args):
+        if not args:
+            try:
+                await event.edit("<b>tekhide</b>\n<blockquote>usage: <code>?tekhide &lt;module&gt;</code></blockquote>", parse_mode="html")
+            except Exception:
+                pass
+            return
+        target = args[0].strip()
+        mod = self._find_module(target)
+        if mod is None:
+            err = self.cfg.get("emoji_error") or "🚫"
+            try:
+                await event.edit("%s <b>module not found:</b> <code>%s</code>" % (err, esc(target)), parse_mode="html")
+            except Exception:
+                pass
+            return
+        name = getattr(mod, "name", target)
+        hidden = self._get_hidden()
+        if name in hidden:
+            try:
+                await event.edit("<b>tekhide</b>\n<blockquote>already hidden: <code>%s</code></blockquote>" % esc(name), parse_mode="html")
+            except Exception:
+                pass
+            return
+        hidden.append(name)
+        self._save_hidden(hidden)
+        try:
+            await event.edit("<b>tekhide</b>\n<blockquote>hidden: <code>%s</code></blockquote>" % esc(name), parse_mode="html")
+        except Exception:
+            pass
 
-        async def on_close(cb):
-            await self._close_cfg(cb)
+    @command(name="tekunhide", description="Unhide module from tek list")
+    async def cmd_tekunhide(self, event, args):
+        if not args:
+            try:
+                await event.edit("<b>tekunhide</b>\n<blockquote>usage: <code>?tekunhide &lt;module&gt;</code></blockquote>", parse_mode="html")
+            except Exception:
+                pass
+            return
+        target = args[0].strip()
+        hidden = self._get_hidden()
+        match = None
+        for n in hidden:
+            if n.lower() == target.lower():
+                match = n
+                break
+        if match is None:
+            try:
+                await event.edit("<b>tekunhide</b>\n<blockquote>not hidden: <code>%s</code></blockquote>" % esc(target), parse_mode="html")
+            except Exception:
+                pass
+            return
+        hidden.remove(match)
+        self._save_hidden(hidden)
+        try:
+            await event.edit("<b>tekunhide</b>\n<blockquote>unhidden: <code>%s</code></blockquote>" % esc(match), parse_mode="html")
+        except Exception:
+            pass
 
-        rows.append([
-            self.kernel.inline.make_button(self._t("cfg_btn_sys"), on_sys, ttl=600),
-            self.kernel.inline.make_button(self._t("cfg_btn_user"), on_user, ttl=600),
-        ])
-        rows.append([
-            self.kernel.inline.make_button(self._t("cfg_close"), on_close, ttl=600),
-        ])
+    @command(name="tekhide_list", aliases=["tekhidden"], description="List hidden modules")
+    async def cmd_tekhide_list(self, event, args):
+        hidden = self._get_hidden()
+        if not hidden:
+            try:
+                await event.edit("<b>tekhide</b>\n<blockquote>no hidden modules</blockquote>", parse_mode="html")
+            except Exception:
+                pass
+            return
+        lines = ["<b>hidden modules (%d)</b>" % len(hidden), "<blockquote expandable>"]
+        for n in hidden:
+            lines.append("<code>%s</code>" % esc(n))
+        lines.append("</blockquote>")
+        try:
+            await event.edit(chr(10).join(lines), parse_mode="html")
+        except Exception:
+            pass
 
-        await self._reply_cfg(event_or_cb, is_cb, text, rows)
-
-    async def _cfg_show_list(self, event_or_cb, is_cb: bool = False, kind: str = "system", page: int = 0):
-        all_mods = self._cfg_list()
-        filtered = [
-            m for m in all_mods
-            if self._cfg_kind(m) == kind and self._cfg_read(m)
-        ]
-
-        per_page = 6
-        total_pages = max(1, (len(filtered) + per_page - 1) // per_page)
-        page = max(0, min(page, total_pages - 1))
-        page_mods = filtered[page * per_page:(page + 1) * per_page]
-
-        title_key = "cfg_modules_title_sys" if kind == "system" else "cfg_modules_title_user"
-        text = self._t(title_key) + "\n\n"
-        if not page_mods:
-            text += self._t("cfg_no_modules")
-        else:
-            text += "<blockquote expandable>"
-            for m in page_mods:
-                text += f"• <code>{self._esc(m)}</code>\n"
-            text += "</blockquote>"
-
-        rows = []
-
-        chunk = []
-        for m in page_mods:
-            async def on_mod(cb, name=m):
-                await self._cfg_show_module(cb, name, is_cb=True)
-            chunk.append(self.kernel.inline.make_button(m, on_mod, ttl=600))
-            if len(chunk) == 3:
-                rows.append(chunk)
-                chunk = []
-        if chunk:
-            rows.append(chunk)
-
-        nav = []
-        if page > 0:
-            async def on_prev(cb, k=kind, pg=page - 1):
-                await self._cfg_show_list(cb, is_cb=True, kind=k, page=pg)
-            nav.append(self.kernel.inline.make_button("<", on_prev, ttl=600))
-
-        if total_pages > 1:
-            async def on_noop(cb):
-                try:
-                    await cb.answer()
-                except Exception:
-                    pass
-            nav.append(self.kernel.inline.make_button(
-                self._t("cfg_page", page=page + 1, total=total_pages),
-                on_noop, ttl=600,
-            ))
-
-        if page < total_pages - 1:
-            async def on_next(cb, k=kind, pg=page + 1):
-                await self._cfg_show_list(cb, is_cb=True, kind=k, page=pg)
-            nav.append(self.kernel.inline.make_button(">", on_next, ttl=600))
-
-        if nav:
-            rows.append(nav)
-
-        async def on_back(cb):
-            await self._cfg_show_menu(cb, is_cb=True)
-
-        async def on_close(cb):
-            await self._close_cfg(cb)
-
-        rows.append([
-            self.kernel.inline.make_button(self._t("cfg_back"), on_back, ttl=600),
-            self.kernel.inline.make_button(self._t("cfg_close"), on_close, ttl=600),
-        ])
-
-        await self._reply_cfg(event_or_cb, is_cb, text, rows)
-
-    # ---------- cfg schema helpers ----------
-    _TYPE_EMOJI = {
-        "bool": "\u2611\ufe0f",
-        "int": "\U0001F522",
-        "float": "\U0001F522",
-        "str": "\U0001F4DD",
-        "list": "\U0001F4CB",
-        "dict": "\U0001F4E6",
-        "none": "\u2753",
-        "?": "\u2753",
-    }
-
-    @staticmethod
-    def _type_of(v):
-        if isinstance(v, bool): return "bool"
-        if isinstance(v, int): return "int"
-        if isinstance(v, float): return "float"
-        if isinstance(v, str): return "str"
-        if isinstance(v, list): return "list"
-        if isinstance(v, dict): return "dict"
-        if v is None: return "none"
-        return "?"
-
-    def _get_module_schema(self, module_name):
-        reg = getattr(self.kernel, "registry", None)
-        if reg is None:
-            return {}
-        for name, mod in reg._modules.items():
-            if name.lower() == module_name.lower() or \
-               getattr(mod, "name", "").lower() == module_name.lower():
-                schema = getattr(mod, "config_schema", None)
-                if isinstance(schema, dict):
-                    return schema
+    def _cfg_data(self, module_name: str) -> dict:
+        try:
+            from pathlib import Path
+            p = Path("data/tetko_config") / (module_name + ".json")
+            if p.exists():
+                return json.loads(p.read_text(encoding="utf-8")) or {}
+        except Exception:
+            pass
         return {}
 
-    def _new_cfg_token(self, cb, module, key):
-        import secrets as _sec
-        t = _sec.token_hex(3)
-        if not hasattr(self.kernel, "_cfg_pending"):
-            self.kernel._cfg_pending = {}
+    def _cfg_save(self, module_name: str, data: dict) -> None:
         try:
-            _data = getattr(cb, "data", b"")
-            if isinstance(_data, bytes):
-                _data = _data.decode("utf-8", errors="replace")
-            _bot = getattr(self.kernel, "bot_client", None)
-            _imid = (getattr(cb, "inline_message_id", None) or
-                     (_bot.get_inline_message_id(_data) if _bot else None))
+            from pathlib import Path
+            p = Path("data/tetko_config") / (module_name + ".json")
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(json.dumps(data, ensure_ascii=False, indent=4), encoding="utf-8")
+            reg = self.kernel.registry
+            for name, mod in reg._modules.items():
+                if name == module_name:
+                    mc = getattr(mod, "_config", None)
+                    if mc is not None and hasattr(mc, "_load"):
+                        mc._load()
+                    break
         except Exception:
-            _imid = None
-        self.kernel._cfg_pending[t] = {
-            "module": module, "key": key, "ts": time.time(),
-            "inline_message_id": _imid,
-        }
-        return t
+            pass
 
-
-    async def _cfg_show_module(self, event_or_cb, module: str, is_cb: bool = False, page: int = 0):
-        data = self._cfg_read(module)
-        if data is None:
-            txt = self._t("cfg_not_found", module=self._esc(module))
-            if is_cb:
-                try:
-                    await self.kernel.inline.edit(event_or_cb, txt)
-                except Exception:
-                    pass
-            else:
-                await event_or_cb.edit(txt, parse_mode="html")
-            return
-
-        schema = self._get_module_schema(module)
-
-        keys_all = list(data.items())
-        per_page = int(self.cfg.get("cfg_page_size", 6)) if hasattr(self, "cfg") else 6
-        if per_page <= 0:
-            per_page = 6
-        per_page = min(per_page, 24)
-
-        total_pages = max(1, (len(keys_all) + per_page - 1) // per_page)
-        page = max(0, min(page, total_pages - 1))
-
-        if not hasattr(self.kernel, "_cfg_current_page"):
-            self.kernel._cfg_current_page = {}
-        self.kernel._cfg_current_page[module] = page
-
-        start_i = page * per_page
-        end_i = start_i + per_page
-        keys_page = keys_all[start_i:end_i]
-
-        lines = []
-        for k, v in keys_page:
-            t = self._type_of(v)
-            emoji = self._TYPE_EMOJI.get(t, "\u2753")
-            lines.append(f"{emoji} <b>{self._esc(k)}</b> <i>({t})</i>")
-        if not lines:
-            lines.append("<i>" + self._t("cfg_no_keys") + "</i>")
-
-        title = self._t("cfg_module_title", name=self._esc(module))
-        page_info = ""
-        if total_pages > 1:
-            page_info = " <i>[%d/%d]</i>" % (page + 1, total_pages)
-
-        _p = getattr(self.kernel, "prefix", ".") or "."
-        hint_html = (
-            "\U0001F4A1 <code>" + self._esc(_p)
-            + "ftekcfg set -f &lt;Module&gt; &lt;key&gt; &lt;value&gt;</code>"
-        )
-
-        text = (
-            title + page_info + "\n\n"
-            + "<blockquote expandable>" + "\n".join(lines) + "</blockquote>\n"
-            + hint_html
-        )
-
-        rows = []
-        chunk = []
-        for k, v in keys_page:
-            t = self._type_of(v)
-            emoji = self._TYPE_EMOJI.get(t, "\u2753")
-            async def on_edit(cb, m=module, key=k):
-                await self._cfg_edit_key(cb, m, key)
-            label = f"{emoji} {k}"
-            if len(label) > 40:
-                label = label[:40]
-            chunk.append(self.kernel.inline.make_button(label, on_edit, ttl=600))
-            if len(chunk) == 3:
-                rows.append(chunk)
-                chunk = []
-        if chunk:
-            rows.append(chunk)
-
-        if total_pages > 1:
-            nav = []
-            if page > 0:
-                async def on_prev(cb, m=module, p=page - 1):
-                    await self._cfg_show_module(cb, m, is_cb=True, page=p)
-                nav.append(self.kernel.inline.make_button("<", on_prev, ttl=600))
-
-            async def on_noop(cb):
-                try:
-                    await cb.answer()
-                except Exception:
-                    pass
-            nav.append(self.kernel.inline.make_button(
-                "%d/%d" % (page + 1, total_pages), on_noop, ttl=600))
-
-            if page < total_pages - 1:
-                async def on_next(cb, m=module, p=page + 1):
-                    await self._cfg_show_module(cb, m, is_cb=True, page=p)
-                nav.append(self.kernel.inline.make_button(">", on_next, ttl=600))
-            rows.append(nav)
-
-        async def on_back(cb):
-            _k = self._cfg_kind(module)
-            if _k == "orphan":
-                _k = "system"
-            await self._cfg_show_list(cb, is_cb=True, kind=_k)
-
-        async def on_close(cb):
-            await self._close_cfg(cb)
-
-        rows.append([
-            self.kernel.inline.make_button(self._t("cfg_back"), on_back, ttl=600),
-            self.kernel.inline.make_button(self._t("cfg_close"), on_close, ttl=600),
-        ])
-
-        await self._reply_cfg(event_or_cb, is_cb, text, rows)
-
-
-    def _defaults_for(self, module: str, key: str):
+    def _cfg_schema(self, module_name: str) -> dict:
         try:
-            from pathlib import Path as _P
-            import importlib.util
-            mod_path = _P("modules") / f"{module}.py"
-            if not mod_path.exists():
-                mod_path = _P("modules_custom") / f"{module}.py"
-            if not mod_path.exists():
-                return None
-            spec = importlib.util.spec_from_file_location(f"_cfg_def_{module}", mod_path)
-            if spec is None or spec.loader is None:
-                return None
-            m = importlib.util.module_from_spec(spec)
-            try:
-                spec.loader.exec_module(m)
-            except Exception:
-                return None
-
-            for name in dir(m):
-                cls = getattr(m, name)
-                if not isinstance(cls, type):
-                    continue
-                cfg = getattr(cls, "config", None)
-
-                if isinstance(cfg, dict):
-                    if key in cfg:
-                        return cfg[key]
-                    continue
-
-                values = getattr(cfg, "_values", None)
-                if isinstance(values, dict) and key in values:
-                    cv = values[key]
-                    try:
-                        d = cv.default
-                        if callable(d):
-                            d = d()
-                        return d
-                    except Exception:
-                        pass
+            reg = self.kernel.registry
+            for name, mod in reg._modules.items():
+                if name == module_name:
+                    sc = getattr(mod, "config_schema", None)
+                    if isinstance(sc, dict):
+                        return sc
+                    break
         except Exception:
-            return None
+            pass
+        return {}
+
+    def _cfg_sections(self, module_name: str) -> dict:
+        try:
+            reg = self.kernel.registry
+            for name, mod in reg._modules.items():
+                if name == module_name:
+                    sc = getattr(mod, "config_sections", None)
+                    if isinstance(sc, dict):
+                        return sc
+                    break
+        except Exception:
+            pass
+        return {}
+
+    def _cfg_default(self, module_name: str, key: str):
+        try:
+            reg = self.kernel.registry
+            for name, mod in reg._modules.items():
+                if name == module_name:
+                    defaults = getattr(mod, "config", None)
+                    if isinstance(defaults, dict) and key in defaults:
+                        return defaults[key]
+                    break
+        except Exception:
+            pass
         return None
 
-    @staticmethod
-    def _fmt_val_inline(v):
-        """Форматирование значения для карточки edit-view."""
+    def _cfg_get(self, module_name: str):
+        cfg = self._cfg_data(module_name)
+        if not cfg:
+            return None, None
+        sections = self._cfg_sections(module_name)
+        if sections:
+            used = set()
+            cats = []
+            for sec, keys in sections.items():
+                present = [k for k in keys if k in cfg and k not in used]
+                if present:
+                    cats.append((sec, present))
+                    used.update(present)
+            rest = [k for k in cfg.keys() if k not in used]
+            if rest:
+                cats.append(("Other", rest))
+            return cfg, cats
+        buckets = {"Flags": [], "Values": [], "Collections": [], "Other": []}
+        for k, v in cfg.items():
+            if isinstance(v, bool):
+                buckets["Flags"].append(k)
+            elif isinstance(v, (list, dict)):
+                buckets["Collections"].append(k)
+            elif isinstance(v, (str, int, float)):
+                buckets["Values"].append(k)
+            else:
+                buckets["Other"].append(k)
+        cats = [(sec, keys) for sec, keys in buckets.items() if keys]
+        return cfg, cats
+
+    def _cfg_val(self, v, limit=80):
         if isinstance(v, bool):
-            return "true" if v else "false"
+            return "on" if v else "off"
         if v is None:
             return "null"
-        if isinstance(v, str):
-            if v == "":
-                return "(пусто)"
-            return v if len(v) <= 120 else v[:120] + "..."
-        if isinstance(v, (dict, list)):
+        if isinstance(v, (list, dict)):
             try:
-                import json as _json
-                js = _json.dumps(v, ensure_ascii=False, separators=(", ", ": "))
-                if len(js) > 120:
-                    js = js[:120] + "..."
-                return js
+                js = json.dumps(v, ensure_ascii=False)
+            except Exception:
+                js = str(v)
+            return js[:limit] + ("..." if len(js) > limit else "")
+        s = str(v)
+        return s[:limit] + ("..." if len(s) > limit else "")
+
+    def _cfg_parse(self, raw):
+        low = str(raw).strip().lower()
+        if low in ("true", "yes", "on", "1"):
+            return True
+        if low in ("false", "no", "off", "0"):
+            return False
+        if low in ("null", "none"):
+            return None
+        try:
+            return int(raw)
+        except Exception:
+            pass
+        try:
+            return float(raw)
+        except Exception:
+            pass
+        if str(raw).startswith("[") or str(raw).startswith("{"):
+            try:
+                return json.loads(raw)
             except Exception:
                 pass
-        txt = str(v)
-        return txt if len(txt) <= 120 else txt[:120] + "..."
+        return raw
 
-    async def _cfg_edit_key(self, cb, module: str, key: str):
-        data = self._cfg_read(module)
-        if data is None or key not in data:
-            await cb.answer(self._t("cfg_key_not_found", key=key))
-            return
-
-        value = data[key]
-        try:
-            await cb.answer()
-        except Exception:
-            pass
-
-        schema = self._get_module_schema(module)
-        key_schema = schema.get(key, {}) if isinstance(schema, dict) else {}
-        description = key_schema.get("description", "") or ""
-        options = key_schema.get("options") or []
-
-        t = self._type_of(value)
-        emoji = self._TYPE_EMOJI.get(t, "\u2753")
-
-        title = self._t("cfg_edit_title", module=self._esc(module), key=self._esc(key))
-        cur = self._t("cfg_key_line", key=self._esc(key), value=self._esc(repr(value)))
-
-        # текущее значение
-        _val_display = self._fmt_val_inline(value)
-        body_lines = [f"{emoji} <code>{self._esc(key)}</code> <i>({t})</i> = <code>{self._esc(_val_display)}</code>"]
-        if description:
-            body_lines.append("📖 <i>" + self._esc(description) + "</i>")
-        if options:
-            opts_html = ", ".join(f"<code>{self._esc(str(o))}</code>" for o in options)
-            body_lines.append("📋 Доступные варианты: " + opts_html)
-        if not description and not options:
-            body_lines.append(self._esc(self._t("cfg_inline_hint")))
-
+    async def _cfg_menu(self, event_or_cb, is_cb: bool = False):
+        sys_mods_all, usr_mods_all = self._modules_split()
+        sys_mods = [m for m in sys_mods_all if self._cfg_data(getattr(m, "name", ""))]
+        usr_mods = [m for m in usr_mods_all if self._cfg_data(getattr(m, "name", ""))]
         text = (
-            title + "\n\n"
-            + "<blockquote expandable>" + "\n".join(body_lines) + "</blockquote>"
-        )
+            "<p>%s <b>Config Menu</b></p>"
+            "<blockquote>sys <code>%d</code> · user <code>%d</code></blockquote>"
+        ) % (CUSTOM_EMOJI.get("📋", "📋"), len(sys_mods), len(usr_mods))
 
-        rows = []
-
-        async def on_back(c, m=module):
-            _pg = getattr(self.kernel, "_cfg_current_page", {}).get(m, 0)
-            await self._cfg_show_module(c, m, is_cb=True, page=_pg)
-
+        async def on_sys(c):
+            await self._cfg_list(c, "core", 0)
+        async def on_usr(c):
+            await self._cfg_list(c, "user", 0)
+        async def on_all(c):
+            await self._cfg_list(c, "all", 0)
         async def on_close(c):
-            await self._close_cfg(c)
+            await self._tek_close_cb(c)
 
-        async def on_reset(c, m=module, k=key, v=value):
-            d = self._cfg_read(m) or {}
-            default = self._defaults_for(m, k)
-            if default is not None:
-                d[k] = default
-            else:
-                if isinstance(v, bool): d[k] = False
-                elif isinstance(v, int): d[k] = 0
-                elif isinstance(v, float): d[k] = 0.0
-                elif isinstance(v, str): d[k] = ""
-                elif isinstance(v, list): d[k] = []
-                elif isinstance(v, dict): d[k] = {}
-            self._cfg_write(m, d)
-            await self._cfg_edit_key(c, m, k)
+        buttons = [
+            [
+                self.kernel.inline.make_button("%s system (%d)" % (CUSTOM_EMOJI.get("📦", "📦"), len(sys_mods)), on_sys, ttl=900, style="primary"),
+                self.kernel.inline.make_button("%s user (%d)" % (CUSTOM_EMOJI.get("🔧", "🔧"), len(usr_mods)), on_usr, ttl=900, style="success"),
+            ],
+            [
+                self.kernel.inline.make_button("%s all" % CUSTOM_EMOJI.get("🧩", "🧩"), on_all, ttl=900, style="primary"),
+            ],
+            [self.kernel.inline.make_button("Close", on_close, ttl=900, style="danger")],
+        ]
 
-        # ---------- BOOL ----------
-        if isinstance(value, bool):
-            target = not value
-            if target:
-                label = "\u2705 to true"
-                style = "success"
-            else:
-                label = "\U0001F6AB to false"
-                style = "danger"
-
-            async def on_toggle_bool(c, m=module, k=key, tt=target):
-                d = self._cfg_read(m) or {}
-                d[k] = bool(tt)
-                self._cfg_write(m, d)
-                try:
-                    await c.answer("\u2192 " + str(tt).lower())
-                except Exception:
-                    pass
-                await self._cfg_edit_key(c, m, k)
-
-            rows.append([
-                self.kernel.inline.make_button(label, on_toggle_bool, ttl=600, style=style),
-            ])
-
-        # ---------- INT / FLOAT ----------
-        elif isinstance(value, (int, float)):
-            step = 1 if isinstance(value, int) else 0.5
-            step_emoji = "\U0001F522"
-
-            async def on_bump(c, m=module, k=key, delta=0):
-                d2 = self._cfg_read(m) or {}
-                if k not in d2:
-                    return
-                cur_v = d2[k]
-                try:
-                    nv = cur_v + delta
-                    if isinstance(cur_v, int):
-                        nv = int(nv)
-                    else:
-                        nv = round(float(nv), 4)
-                except Exception:
-                    return
-                d2[k] = nv
-                self._cfg_write(m, d2)
-                try:
-                    await c.answer("\u2192 " + str(nv))
-                except Exception:
-                    pass
-                await self._cfg_edit_key(c, m, k)
-
-            async def on_minus(c, m=module, k=key, st=step):
-                await on_bump(c, m, k, -st)
-
-            async def on_plus(c, m=module, k=key, st=step):
-                await on_bump(c, m, k, +st)
-
-            token = self._new_cfg_token(cb, module, key)
-            rows.append([
-                self.kernel.inline.make_button(f"\u2796 {step}", on_minus, ttl=600, style="danger"),
-                {"label": step_emoji + " edit", "kind": "switch_current", "query": f"cfg_{token} "},
-                self.kernel.inline.make_button(f"\u2795 {step}", on_plus, ttl=600, style="success"),
-            ])
-
-        # ---------- STR ----------
-        elif isinstance(value, str):
-            token = self._new_cfg_token(cb, module, key)
-
-            if options:
-                opt_row = []
-                for opt in options:
-                    ov = str(opt)
-                    async def on_pick(c, m=module, k=key, v=ov):
-                        d = self._cfg_read(m) or {}
-                        d[k] = v
-                        self._cfg_write(m, d)
-                        try:
-                            await c.answer("\u2192 " + repr(v))
-                        except Exception:
-                            pass
-                        await self._cfg_edit_key(c, m, k)
-                    is_current = (str(value) == ov)
-                    mark = "\u2705 " if is_current else ""
-                    opt_row.append(self.kernel.inline.make_button(
-                        mark + ov, on_pick, ttl=600,
-                        style=("success" if is_current else "primary"),
-                    ))
-                    if len(opt_row) == 3:
-                        rows.append(opt_row)
-                        opt_row = []
-                if opt_row:
-                    rows.append(opt_row)
-                rows.append([
-                    {"label": "\u270f\ufe0f edit other", "kind": "switch_current",
-                     "query": f"cfg_{token} "},
-                ])
-            else:
-                kl = (key or "").lower()
-                presets = []
-                if kl in ("shell_prompt", "prompt"):
-                    presets = [("\u2192 %", "%"), ("\u2192 $", "$"), ("\u2192 #", "#"), ("\u2192 \u276f", "\u276f")]
-                elif kl == "branch":
-                    presets = [("main", "main"), ("dev", "dev"), ("beta", "beta")]
-                elif kl in ("language", "lang"):
-                    presets = [("ru", "ru"), ("en", "en"), ("uk", "uk")]
-
-                preset_row = []
-                for plabel, pval in presets:
-                    if pval == value:
-                        continue
-                    async def on_preset(c, m=module, k=key, v=pval):
-                        d = self._cfg_read(m) or {}
-                        d[k] = v
-                        self._cfg_write(m, d)
-                        try:
-                            await c.answer("\u2192 " + repr(v))
-                        except Exception:
-                            pass
-                        await self._cfg_edit_key(c, m, k)
-                    preset_row.append(self.kernel.inline.make_button(
-                        plabel, on_preset, ttl=600, style="primary"))
-                if preset_row:
-                    rows.append(preset_row)
-
-                rows.append([
-                    {"label": "\u270f\ufe0f edit", "kind": "switch_current", "query": f"cfg_{token} "},
-                ])
-
-        # ---------- LIST / DICT ----------
-        elif isinstance(value, (list, dict)):
-            token = self._new_cfg_token(cb, module, key)
-            rows.append([
-                {"label": "\u270f\ufe0f edit JSON", "kind": "switch_current", "query": f"cfg_{token} "},
-            ])
-
-        rows.append([
-            self.kernel.inline.make_button(self._t("cfg_btn_reset"), on_reset, ttl=600),
-        ])
-        rows.append([
-            self.kernel.inline.make_button(self._t("cfg_back"), on_back, ttl=600),
-            self.kernel.inline.make_button(self._t("cfg_close"), on_close, ttl=600),
-        ])
-
-        await self.kernel.inline.edit(cb, text, rows)
-
-
-    async def _cfg_set_key(self, cb, module: str, key: str, value):
-        data = self._cfg_read(module) or {}
-        data[key] = value
-        self._cfg_write(module, data)
-        await self._cfg_edit_key(cb, module, key)
-
-    async def _cfg_bump(self, cb, module: str, key: str, delta):
-        data = self._cfg_read(module) or {}
-        if key not in data:
+        if is_cb:
+            try:
+                await event_or_cb.edit(text, buttons=self._tl(buttons), parse_mode="html")
+            except Exception as e:
+                self.log.warning("cfg menu edit: %s", e)
             return
-        cur = data[key]
-        try:
-            if isinstance(cur, bool):
-                new = not cur
-            elif isinstance(cur, int):
-                new = int(cur) + int(delta)
-            elif isinstance(cur, float):
-                new = round(float(cur) + float(delta), 4)
-            else:
-                return
-        except Exception:
-            return
-        data[key] = new
-        self._cfg_write(module, data)
-        await self._cfg_edit_key(cb, module, key)
 
-    async def _close_cfg(self, cb):
-        """Закрыть inline-меню: сначала пробуем edit через bot_client, потом event.edit."""
-        try:
-            await cb.answer()
-        except Exception:
-            pass
-
-        text = self._t("menu_closed")
-
-        # 1. Пробуем через bot_client (правильный путь — inline_message_id)
         bot = getattr(self.kernel, "bot_client", None)
         if bot is not None:
-            data = getattr(cb, "data", b"")
-            if isinstance(data, bytes):
-                data = data.decode("utf-8", errors="replace")
-            imid = getattr(cb, "inline_message_id", None) or bot.get_inline_message_id(data)
-            if imid:
+            try:
+                await bot.send_inline_menu(event_or_cb.chat_id, "tek_cfg_" + str(int(time.time())), text, buttons)
                 try:
-                    from telethon.tl.functions.messages import EditInlineBotMessageRequest
-                    parsed, entities = await bot.client._parse_message_text(text, "html")
-                    await bot.client(EditInlineBotMessageRequest(
-                        id=imid,
-                        message=parsed,
-                        entities=entities,
-                        reply_markup=None,
-                    ))
-                    log.info("[TEK] close cfg via bot_client OK")
-                    return
-                except Exception as e:
-                    log.warning(f"[TEK] close via bot_client failed: {e}")
-
-        # 2. Fallback: обычный event.edit с пустой клавиатурой
+                    await event_or_cb.delete()
+                except Exception:
+                    pass
+                return
+            except Exception as e:
+                self.log.warning("cfg menu send: %s", e)
         try:
-            await cb.edit(text, parse_mode="html", buttons=None)
-            log.info("[TEK] close cfg via event.edit OK")
-            return
-        except Exception as e:
-            log.warning(f"[TEK] close via event.edit failed: {e}")
-
-        # 3. Last resort: удалить сообщение
-        try:
-            await cb.delete()
-            log.info("[TEK] close cfg via delete OK")
-        except Exception as e:
-            log.warning(f"[TEK] close via delete failed: {e}")
-
-    async def _reply_cfg(self, event_or_cb, is_cb: bool, text: str, rows: list):
-        if is_cb:
-            await self.kernel.inline.edit(event_or_cb, text, rows)
-            return
-        bot = getattr(self.kernel, "bot_client", None)
-        if bot is None:
             await event_or_cb.edit(text, parse_mode="html")
-            return
-        chat_id = event_or_cb.chat_id
-        try:
-            await event_or_cb.delete()
         except Exception:
             pass
-        await bot.send_inline_menu(
-            chat_id=chat_id,
-            key=f"cfgmenu_{int(time.time())}",
-            text=text,
-            buttons=rows,
-            topic_id=_get_topic(event_or_cb),
-        )
+
+    async def _cfg_list(self, cb, kind: str = "all", page: int = 0):
+        sys_mods, usr_mods = self._modules_split()
+        if kind == "core":
+            mods = sys_mods
+        elif kind == "user":
+            mods = usr_mods
+        else:
+            mods = sys_mods + usr_mods
+        mods = [m for m in mods if self._cfg_data(getattr(m, "name", ""))]
+        mods = sorted(mods, key=lambda m: getattr(m, "name", ""))
+        per_page = 12
+        total = max(1, (len(mods) + per_page - 1) // per_page)
+        page = max(0, min(page, total - 1))
+        chunk = mods[page * per_page:(page + 1) * per_page]
+        lines = ["<p>%s <b>Modules Config</b> · <i>%d/%d</i></p>" % (CUSTOM_EMOJI.get("🧩", "🧩"), page + 1, total)]
+        lines.append("<blockquote>filter: <code>%s</code></blockquote>" % kind)
+        text = chr(10).join(lines)
+        buttons = []
+        filter_row = []
+        emoji_map = {"all": "🧩", "core": "📦", "user": "🔧"}
+        for f_val in ("all", "core", "user"):
+            label = "%s %s" % (emoji_map.get(f_val, "▪️"), f_val)
+            if f_val == kind:
+                label = "✅ " + label
+            async def on_filter(c, f=f_val):
+                await self._cfg_list(c, f, 0)
+            filter_row.append(self.kernel.inline.make_button(label, on_filter, ttl=900, style="primary"))
+        buttons.append(filter_row)
+        row = []
+        for m in chunk:
+            name = getattr(m, "name", "?")
+            async def on_pick(c, n=name):
+                await self._cfg_cats(c, n)
+            style = "success" if kind == "user" else "primary"
+            row.append(self.kernel.inline.make_button(name[:12], on_pick, ttl=900, style=style))
+            if len(row) == 4:
+                buttons.append(row)
+                row = []
+        if row:
+            buttons.append(row)
+        nav = []
+        if page > 0:
+            async def on_prev(c, k=kind, p=page - 1):
+                await self._cfg_list(c, k, p)
+            nav.append(self.kernel.inline.make_button("🔙", on_prev, ttl=900, style="primary"))
+        if total > 1:
+            async def on_noop(c):
+                try:
+                    await c.answer()
+                except Exception:
+                    pass
+            nav.append(self.kernel.inline.make_button("📰 %d/%d" % (page + 1, total), on_noop, ttl=900))
+        if page < total - 1:
+            async def on_next(c, k=kind, p=page + 1):
+                await self._cfg_list(c, k, p)
+            nav.append(self.kernel.inline.make_button("➡️", on_next, ttl=900, style="primary"))
+        if nav:
+            buttons.append(nav)
+        async def on_back(c):
+            await self._cfg_menu(c, is_cb=True)
+        async def on_close(c):
+            await self._tek_close_cb(c)
+        buttons.append([
+            self.kernel.inline.make_button("← back", on_back, ttl=900),
+            self.kernel.inline.make_button("❌ Close", on_close, ttl=900, style="danger"),
+        ])
+        try:
+            await cb.edit(text, buttons=self._tl(buttons), parse_mode="html")
+        except Exception as e:
+            self.log.warning("cfg list edit: %s", e)
+
+    async def _cfg_cats(self, cb, module_name: str):
+        cfg, cats = self._cfg_get(module_name)
+        if cfg is None:
+            try:
+                await cb.edit(
+                    "<blockquote>❌ <code>%s</code> · config not found</blockquote>" % esc(module_name),
+                    buttons=self._tl([[self.kernel.inline.make_button("↩️ back", self._cfg_menu, args=[], ttl=900)]]),
+                    parse_mode="html",
+                )
+            except Exception:
+                pass
+            return
+
+        if not cats:
+            await self._cfg_flat(cb, module_name, cfg)
+            return
+
+        lines = [
+            "<p>⚙️ <b>%s</b> · <i>%d keys · %d categories</i></p>" % (
+                esc(module_name), len(cfg), len(cats)
+            ),
+            "<blockquote>pick a category</blockquote>",
+        ]
+        text = chr(10).join(lines)
+
+        buttons = []
+        row = []
+        for sec, keys in cats:
+            em = self._cat_emoji(sec)
+            async def on_sec(c, s=sec, m=module_name):
+                await self._cfg_sec(c, m, s, 0)
+            label = "%s %s (%d)" % (em, sec, len(keys))
+            row.append(self.kernel.inline.make_button(label[:28], on_sec, ttl=900, style="primary"))
+            if len(row) == 2:
+                buttons.append(row)
+                row = []
+        if row:
+            buttons.append(row)
+
+        async def on_back(c):
+            await self._cfg_menu(c, is_cb=True)
+        async def on_close(c):
+            await self._tek_close_cb(c)
+        buttons.append([
+            self.kernel.inline.make_button("↩️ back", on_back, ttl=900),
+            self.kernel.inline.make_button("❌ close", on_close, ttl=900, style="danger"),
+        ])
+
+        try:
+            await cb.edit(text, buttons=self._tl(buttons), parse_mode="html")
+        except Exception as e:
+            self.log.warning("cfg cats edit: %s", e)
+
+    async def _cfg_flat(self, cb, module_name: str, cfg: dict, page: int = 0):
+        keys = list(cfg.keys())
+        per_page = 16
+        total = max(1, (len(keys) + per_page - 1) // per_page)
+        page = max(0, min(page, total - 1))
+        chunk = keys[page * per_page:(page + 1) * per_page]
+        lines = ["<p>%s <b>%s</b> · <i>%d keys · %d/%d</i></p>" % (
+            CUSTOM_EMOJI.get("🧩", "🧩"), esc(module_name), len(keys), page + 1, total)]
+        lines.append("<blockquote>pick a key</blockquote>")
+        text = chr(10).join(lines)
+        buttons = []
+        row = []
+        for k in chunk:
+            v = cfg.get(k)
+            icon = {"str": "📝", "int": "🔢", "float": "🔢", "bool": "☑️",
+                    "list": "📚", "dict": "🗂", "NoneType": "🗳"}.get(type(v).__name__, "📎")
+            async def on_key(c, m=module_name, key=k):
+                await self._cfg_key(c, m, key)
+            style = "primary"
+            row.append(self.kernel.inline.make_button("%s %s" % (icon, self._cfg_truncate_key(k)[:22]), on_key, ttl=900, style=style))
+            if len(row) == 4:
+                buttons.append(row)
+                row = []
+        if row:
+            buttons.append(row)
+        nav = []
+        if page > 0:
+            async def on_prev(c, m=module_name, p=page - 1):
+                await self._cfg_flat(c, m, cfg, p)
+            nav.append(self.kernel.inline.make_button(CUSTOM_EMOJI.get("🔙", "🔙"), on_prev, ttl=900, style="primary"))
+        if total > 1:
+            async def on_noop(c):
+                try:
+                    await c.answer()
+                except Exception:
+                    pass
+            nav.append(self.kernel.inline.make_button("📰 %d/%d" % (page + 1, total), on_noop, ttl=900))
+        if page < total - 1:
+            async def on_next(c, m=module_name, p=page + 1):
+                await self._cfg_flat(c, m, cfg, p)
+            nav.append(self.kernel.inline.make_button("➡️", on_next, ttl=900, style="primary"))
+        if nav:
+            buttons.append(nav)
+        async def on_back(c):
+            await self._cfg_menu(c, is_cb=True)
+        async def on_close(c):
+            await self._tek_close_cb(c)
+        buttons.append([
+            self.kernel.inline.make_button("← back", on_back, ttl=900),
+            self.kernel.inline.make_button("Close", on_close, ttl=900, style="danger"),
+        ])
+        try:
+            await cb.edit(text, buttons=self._tl(buttons), parse_mode="html")
+        except Exception as e:
+            self.log.warning("cfg flat edit: %s", e)
+
+    async def _cfg_sec(self, cb, module_name: str, section: str, page: int = 0):
+        cfg, cats = self._cfg_get(module_name)
+        if cfg is None:
+            return
+        keys = []
+        for sec, ks in cats:
+            if sec == section:
+                keys = ks
+                break
+        per_page = 16
+        total = max(1, (len(keys) + per_page - 1) // per_page)
+        page = max(0, min(page, total - 1))
+        chunk = keys[page * per_page:(page + 1) * per_page]
+        cat_em = self._cat_emoji(section)
+        lines = ["<p>%s <b>%s</b> › <b>%s</b> · <i>%d/%d</i></p>" % (
+            cat_em, esc(module_name), esc(section), page + 1, total)]
+        lines.append("<blockquote>pick a key</blockquote>")
+        text = chr(10).join(lines)
+        buttons = []
+        row = []
+        for k in chunk:
+            v = cfg.get(k)
+            icon = {"str": "📝", "int": "🔢", "float": "🔢", "bool": "☑️",
+                    "list": "📚", "dict": "🗂", "NoneType": "🗳"}.get(type(v).__name__, "📎")
+            async def on_key(c, m=module_name, key=k):
+                await self._cfg_key(c, m, key)
+            style = "primary"
+            row.append(self.kernel.inline.make_button("%s %s" % (icon, self._cfg_truncate_key(k)[:22]), on_key, ttl=900, style=style))
+            if len(row) == 4:
+                buttons.append(row)
+                row = []
+        if row:
+            buttons.append(row)
+        nav = []
+        if page > 0:
+            async def on_prev(c, m=module_name, s=section, p=page - 1):
+                await self._cfg_sec(c, m, s, p)
+            nav.append(self.kernel.inline.make_button(CUSTOM_EMOJI.get("🔙", "🔙"), on_prev, ttl=900, style="primary"))
+        if total > 1:
+            async def on_noop(c):
+                try:
+                    await c.answer()
+                except Exception:
+                    pass
+            nav.append(self.kernel.inline.make_button("📰 %d/%d" % (page + 1, total), on_noop, ttl=900))
+        if page < total - 1:
+            async def on_next(c, m=module_name, s=section, p=page + 1):
+                await self._cfg_sec(c, m, s, p)
+            nav.append(self.kernel.inline.make_button("➡️", on_next, ttl=900, style="primary"))
+        if nav:
+            buttons.append(nav)
+        async def on_back(c, m=module_name):
+            await self._cfg_cats(c, m)
+        async def on_close(c):
+            await self._tek_close_cb(c)
+        buttons.append([
+            self.kernel.inline.make_button("← back", on_back, ttl=900),
+            self.kernel.inline.make_button("Close", on_close, ttl=900, style="danger"),
+        ])
+        try:
+            await cb.edit(text, buttons=self._tl(buttons), parse_mode="html")
+        except Exception as e:
+            self.log.warning("cfg sec edit: %s", e)
+
+    async def _cfg_key(self, cb, module_name: str, key: str):
+        cfg = self._cfg_data(module_name)
+        if key not in cfg:
+            try:
+                await cb.answer("not found")
+            except Exception:
+                pass
+            return
+        v = cfg.get(key)
+        schema = self._cfg_schema(module_name)
+        sc = schema.get(key) or {}
+        desc = sc.get("description") or ""
+        opts = sc.get("options") or []
+        type_emoji, value_type, display_value = self._cfg_format_value(key, v)
+        lines = ["<p>%s <b>%s</b> › <code>%s</code></p>" % (type_emoji, esc(module_name), esc(key))]
+        if isinstance(v, bool):
+            lines.append("<blockquote>📐 bool</blockquote>")
+        else:
+            lines.append("<blockquote>📐 <code>%s</code></blockquote>" % esc(value_type))
+        if desc:
+            lines.append("<blockquote>📖 <i>%s</i></blockquote>" % esc(desc))
+        if not isinstance(v, bool):
+            lines.append("<blockquote>💾 value %s</blockquote>" % display_value)
+        if opts:
+            lines.append("<blockquote>🎯 options: %s</blockquote>" % ", ".join("<code>%s</code>" % esc(str(o)) for o in opts))
+        text = chr(10).join(lines)
+
+        buttons = []
+        row = []
+        if isinstance(v, bool):
+            async def on_toggle(c, m=module_name, k=key, cur=v):
+                d = self._cfg_data(m)
+                d[k] = not bool(cur)
+                self._cfg_save(m, d)
+                try:
+                    await c.answer("→ " + ("on" if d[k] else "off"))
+                except Exception:
+                    pass
+                await self._cfg_key(c, m, k)
+            label = "🟢 ON" if v else "🔴 OFF"
+            style = "primary"
+            row.append(self.kernel.inline.make_button(label + " · toggle", on_toggle, ttl=900, style=style))
+        elif isinstance(v, (int, float)):
+            step = 1 if isinstance(v, int) else 0.5
+            async def on_bump(c, m=module_name, k=key, delta=0):
+                d = self._cfg_data(m)
+                cur = d.get(k, 0)
+                try:
+                    nv = cur + delta
+                    nv = int(nv) if isinstance(cur, int) else round(float(nv), 4)
+                except Exception:
+                    return
+                d[k] = nv
+                self._cfg_save(m, d)
+                try:
+                    await c.answer("→ " + str(nv))
+                except Exception:
+                    pass
+                await self._cfg_key(c, m, k)
+            row.append(self.kernel.inline.make_button("➖ %s" % step, on_bump, args=[-step], ttl=900, style="danger"))
+            row.append(self.kernel.inline.make_button("➕ %s" % step, on_bump, args=[step], ttl=900, style="success"))
+        elif isinstance(v, str) and opts:
+            for o in opts:
+                ov = str(o)
+                async def on_pick(c, m=module_name, k=key, val=ov):
+                    d = self._cfg_data(m)
+                    d[k] = val
+                    self._cfg_save(m, d)
+                    try:
+                        await c.answer("→ " + val)
+                    except Exception:
+                        pass
+                    await self._cfg_key(c, m, k)
+                style = "success" if ov == v else "primary"
+                mark = "✅ " if ov == v else "🎯 "
+                row.append(self.kernel.inline.make_button((mark + ov)[:24], on_pick, ttl=900, style=style))
+                if len(row) == 2:
+                    buttons.append(row)
+                    row = []
+        if row:
+            buttons.append(row)
+
+        async def on_edit(c, m=module_name, k=key):
+            await c.answer()
+            try:
+                _tl_btns = self._tl([[
+                    self.kernel.inline.make_button("← back", self._cfg_key_cb_back, args=[m, k], ttl=900),
+                    self.kernel.inline.make_button("Close", self._tek_close_cb, ttl=900, style="danger"),
+                ]])
+                await c.edit(
+                    "<blockquote>✏️ <b>edit</b> <code>%s.%s</code></blockquote>"
+                    "<blockquote>📨 send: <code>?cfg set %s %s &lt;value&gt;</code></blockquote>" % (
+                        esc(m), esc(k), esc(m), esc(k)),
+                    buttons=_tl_btns,
+                    parse_mode="html",
+                )
+            except Exception:
+                pass
+        buttons.append([self.kernel.inline.make_button("✏️ edit", on_edit, ttl=900, style="primary")])
+
+        async def on_delete(c, m=module_name, k=key):
+            d = self._cfg_data(m)
+            if k in d:
+                d.pop(k, None)
+                self._cfg_save(m, d)
+            try:
+                await c.answer("deleted")
+            except Exception:
+                pass
+            await self._cfg_cats(c, m)
+        buttons.append([self.kernel.inline.make_button("🗑 delete", on_delete, ttl=900, style="danger")])
+
+        if isinstance(v, (list, dict)):
+            vt = "list" if isinstance(v, list) else "dict"
+            async def on_add(c, m=module_name, k=key):
+                await c.answer("?cfg set %s %s <json>" % (m, k), alert=True)
+            async def on_del(c, m=module_name, k=key):
+                await c.answer("?cfg set %s %s <json>" % (m, k), alert=True)
+            async def on_set(c, m=module_name, k=key):
+                await c.answer("?cfg set %s %s <json>" % (m, k), alert=True)
+            buttons.append([
+                self.kernel.inline.make_button("➕ add", on_add, ttl=900, style="success"),
+                self.kernel.inline.make_button("➖ del", on_del, ttl=900, style="danger"),
+                self.kernel.inline.make_button("🎯 set", on_set, ttl=900, style="primary"),
+            ])
+
+        default_v = self._cfg_default(module_name, key)
+        if default_v is not None and default_v != v:
+            async def on_reset(c, m=module_name, k=key, dv=default_v):
+                d = self._cfg_data(m)
+                d[k] = dv
+                self._cfg_save(m, d)
+                try:
+                    await c.answer("reset")
+                except Exception:
+                    pass
+                await self._cfg_key(c, m, k)
+            buttons.append([self.kernel.inline.make_button("🔄 reset to default", on_reset, ttl=900)])
+
+        async def on_back(c, m=module_name, k=key):
+            _, cats = self._cfg_get(m)
+            sec = "Other"
+            for sc_name, ks in (cats or []):
+                if k in ks:
+                    sec = sc_name
+                    break
+            await self._cfg_sec(c, m, sec, 0)
+        async def on_close(c):
+            await self._tek_close_cb(c)
+        buttons.append([
+            self.kernel.inline.make_button("← back", on_back, ttl=900),
+            self.kernel.inline.make_button("Close", on_close, ttl=900, style="danger"),
+        ])
+
+        try:
+            await cb.edit(text, buttons=self._tl(buttons), parse_mode="html")
+        except Exception as e:
+            self.log.warning("cfg key edit: %s", e)
+
+    async def _cfg_key_cb_back(self, cb, module_name: str, key: str):
+        try:
+            await cb.answer()
+        except Exception:
+            pass
+        await self._cfg_key(cb, module_name, key)
+
+    @command(name="cfg", aliases=["mcfg"], description="Module config")
+    async def cmd_cfg(self, event, args):
+        if not args:
+            await self._cfg_menu(event)
+            return
+        sub = args[0].lower()
+        if sub in ("core", "core"):
+            await self._cfg_cmd_list(event, "core")
+            return
+        if sub in ("user", "custom"):
+            await self._cfg_cmd_list(event, "user")
+            return
+        if sub == "set":
+            await self._cfg_cmd_set(event, args)
+            return
+        if sub == "reset":
+            await self._cfg_cmd_reset(event, args)
+            return
+        if sub in ("find", "search"):
+            await self._cfg_cmd_find(event, args)
+            return
+        await self._cfg_menu(event)
+
+    async def _cfg_cmd_list(self, event, kind: str):
+        sys_mods, usr_mods = self._modules_split()
+        mods = sys_mods if kind == "core" else usr_mods
+        mods = sorted(mods, key=lambda m: getattr(m, "name", ""))
+        lines = ["<blockquote><b>cfg › %s</b> <code>(%d)</code></blockquote>" % (kind, len(mods))]
+        for m in mods:
+            icon = getattr(m, "icon", None) or "◼"
+            lines.append("<blockquote>%s <code>%s</code></blockquote>" % (esc(icon), esc(getattr(m, "name", "?"))))
+        try:
+            await event.edit(chr(10).join(lines), parse_mode="html")
+        except Exception:
+            pass
+
+    async def _cfg_cmd_set(self, event, args):
+        parts = " ".join(args[1:]).strip()
+        tokens = parts.split(None, 2)
+        if len(tokens) < 3:
+            try:
+                await event.edit("<blockquote>usage: <code>?cfg set &lt;module&gt; &lt;key&gt; &lt;value&gt;</code></blockquote>", parse_mode="html")
+            except Exception:
+                pass
+            return
+        m, k, raw = tokens
+        cfg = self._cfg_data(m)
+        if not cfg or k not in cfg:
+            try:
+                await event.edit("<blockquote>key not found: <code>%s.%s</code></blockquote>" % (esc(m), esc(k)), parse_mode="html")
+            except Exception:
+                pass
+            return
+        value = self._cfg_parse(raw)
+        cfg[k] = value
+        self._cfg_save(m, cfg)
+        try:
+            await event.edit("<blockquote>✓ <code>%s.%s</code> = <code>%s</code></blockquote>" % (esc(m), esc(k), esc(self._cfg_val(value, 200))), parse_mode="html")
+        except Exception:
+            pass
+
+    async def _cfg_cmd_reset(self, event, args):
+        if len(args) < 3:
+            try:
+                await event.edit("<blockquote>usage: <code>?cfg reset &lt;module&gt; &lt;key&gt;</code></blockquote>", parse_mode="html")
+            except Exception:
+                pass
+            return
+        m, k = args[1], args[2]
+        dv = self._cfg_default(m, k)
+        if dv is None:
+            try:
+                await event.edit("<blockquote>no default for <code>%s.%s</code></blockquote>" % (esc(m), esc(k)), parse_mode="html")
+            except Exception:
+                pass
+            return
+        cfg = self._cfg_data(m)
+        if not cfg:
+            return
+        cfg[k] = dv
+        self._cfg_save(m, cfg)
+        try:
+            await event.edit("<blockquote>↺ reset <code>%s.%s</code></blockquote>" % (esc(m), esc(k)), parse_mode="html")
+        except Exception:
+            pass
+
+    async def _cfg_cmd_find(self, event, args):
+        if len(args) < 2:
+            try:
+                await event.edit("<blockquote>usage: <code>?cfg find &lt;query&gt;</code></blockquote>", parse_mode="html")
+            except Exception:
+                pass
+            return
+        q = " ".join(args[1:]).strip().lower()
+        hits = []
+        try:
+            from pathlib import Path
+            d = Path("data/tetko_config")
+            for f in d.glob("*.json"):
+                try:
+                    data = json.loads(f.read_text(encoding="utf-8")) or {}
+                except Exception:
+                    continue
+                for k in data:
+                    if q in k.lower():
+                        hits.append((f.stem, k, data[k]))
+                        if len(hits) >= 30:
+                            break
+                if len(hits) >= 30:
+                    break
+        except Exception:
+            pass
+        if not hits:
+            try:
+                await event.edit("<blockquote>nothing for <code>%s</code></blockquote>" % esc(q), parse_mode="html")
+            except Exception:
+                pass
+            return
+        lines = ["<blockquote><b>cfg find:</b> <code>%s</code></blockquote>" % esc(q)]
+        for m, k, v in hits:
+            lines.append("<blockquote><code>%s.%s</code> = %s</blockquote>" % (esc(m), esc(k), esc(self._cfg_val(v, 60))))
+        try:
+            await event.edit(chr(10).join(lines), parse_mode="html")
+        except Exception:
+            pass
